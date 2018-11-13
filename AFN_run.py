@@ -51,3 +51,4 @@ if __name__ == '__main__':
     mnist_data, train_xs, val_xs, test_xs = get_data(FLAGS.n_tasks)
     model = AFN.AFN(FLAGS)
     model.train_den(FLAGS, mnist_data, train_xs, val_xs, test_xs)
+    model.predict_only_after_training(FLAGS, mnist_data, test_xs)
