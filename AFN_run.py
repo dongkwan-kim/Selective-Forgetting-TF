@@ -24,7 +24,7 @@ flags.DEFINE_float('loss_thr', 0.1, "Threshold of dynamic expansion")
 flags.DEFINE_float('spl_thr', 0.1, "Threshold of split and duplication")
 
 # New hyper-parameters
-flags.DEFINE_integer("n_tasks", 3, 'The number of tasks')
+flags.DEFINE_integer("n_tasks", 2, 'The number of tasks')
 FLAGS = flags.FLAGS
 
 
@@ -51,4 +51,4 @@ if __name__ == '__main__':
     mnist_data, train_xs, val_xs, test_xs = get_data(FLAGS.n_tasks)
     model = AFN.AFN(FLAGS)
     model.train_den(FLAGS, mnist_data, train_xs, val_xs, test_xs)
-    model.predict_only_after_training(FLAGS, mnist_data, test_xs)
+    model.get_importance_vector_with_training(1, mnist_data, train_xs, val_xs, test_xs)
