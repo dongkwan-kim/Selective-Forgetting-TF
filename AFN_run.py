@@ -7,7 +7,7 @@ from MatplotlibUtill import *
 
 np.random.seed(1004)
 flags = tf.app.flags
-flags.DEFINE_integer("max_iter", 200, "Epoch to train")
+flags.DEFINE_integer("max_iter", 300, "Epoch to train")
 flags.DEFINE_float("lr", 0.001, "Learing rate(init) for train")
 flags.DEFINE_integer("batch_size", 256, "The size of batch for 1 iteration")
 flags.DEFINE_string("checkpoint_dir", "checkpoints", "Directory path to save the checkpoints")
@@ -25,7 +25,7 @@ flags.DEFINE_float('loss_thr', 0.1, "Threshold of dynamic expansion")
 flags.DEFINE_float('spl_thr', 0.1, "Threshold of split and duplication")
 
 # New hyper-parameters
-flags.DEFINE_integer("n_tasks", 2, 'The number of tasks')
+flags.DEFINE_integer("n_tasks", 9, 'The number of tasks')
 FLAGS = flags.FLAGS
 
 
@@ -49,7 +49,22 @@ def get_data(n_tasks: int, mnist_dir: str = "DEN/MNIST_data"):
 
 
 if __name__ == '__main__':
+
     mnist_data, train_xs, val_xs, test_xs = get_data(FLAGS.n_tasks)
     model = AFN.AFN(FLAGS)
     model.add_dataset(mnist_data, train_xs, val_xs, test_xs)
     model.train_den(FLAGS)
+    model.get_importance_matrix()
+
+    model.predict_only_after_training()
+
+    task_to_forget = 5
+    number_of_neurons_to_remove = 75
+
+    model.adaptive_forget(task_to_forget, number_of_neurons_to_remove, policy="LIN")
+    model.predict_only_after_training()
+
+    model.recover_recent_params()
+
+    model.adaptive_forget(task_to_forget, number_of_neurons_to_remove, policy="EIN")
+    model.predict_only_after_training()
