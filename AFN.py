@@ -13,6 +13,7 @@ class AFN(DEN):
         self.afn_params = {}
         self.batch_idx = 0
         self.mnist, self.trainXs, self.valXs, self.testXs = None, None, None, None
+        self.importance_matrix_tuple = None
 
     def add_dataset(self, mnist, trainXs, valXs, testXs):
         self.mnist, self.trainXs, self.valXs, self.testXs = mnist, trainXs, valXs, testXs
@@ -181,3 +182,30 @@ class AFN(DEN):
             return importance_vector_1, importance_vector_2  # shape = (|h|,)
         else:
             return np.concatenate((importance_vector_1, importance_vector_2))  # (|h1|,), (|h2|,)
+
+    # shape = (T, |h|) or (T, |h1|), (T, |h2|)
+    def get_importance_matrix(self, layer_separate=False):
+
+        importance_matrix_1, importance_matrix_2 = None, None
+
+        for t in reversed(range(1, self.T + 1)):
+            iv_1, iv_2 = self.get_importance_vector(task_id=t, layer_separate=True)
+
+            if t == self.T:
+                importance_matrix_1 = np.zeros(shape=(0, iv_1.shape[0]))
+                importance_matrix_2 = np.zeros(shape=(0, iv_2.shape[0]))
+
+            importance_matrix_1 = np.vstack((
+                np.pad(iv_1, (0, importance_matrix_1.shape[-1] - iv_1.shape[0]), 'constant', constant_values=(0, 0)),
+                importance_matrix_1,
+            ))
+            importance_matrix_2 = np.vstack((
+                np.pad(iv_2, (0, importance_matrix_2.shape[-1] - iv_2.shape[0]), 'constant', constant_values=(0, 0)),
+                importance_matrix_2,
+            ))
+
+        self.importance_matrix_tuple = importance_matrix_1, importance_matrix_2
+        if layer_separate:
+            return self.importance_matrix_tuple  # shape = (T, |h|)
+        else:
+            return np.concatenate(self.importance_matrix_tuple, axis=1)  # (T, |h1|), (T, |h2|)
