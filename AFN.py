@@ -12,6 +12,10 @@ class AFN(DEN):
         super().__init__(den_config)
         self.afn_params = {}
         self.batch_idx = 0
+        self.mnist, self.trainXs, self.valXs, self.testXs = None, None, None, None
+
+    def add_dataset(self, mnist, trainXs, valXs, testXs):
+        self.mnist, self.trainXs, self.valXs, self.testXs = mnist, trainXs, valXs, testXs
 
     def afn_create_variable(self, scope, name, shape=None, trainable=True, initializer=None):
         with tf.variable_scope(scope):
@@ -30,14 +34,14 @@ class AFN(DEN):
         self.destroy_graph()
         self.sess.close()
 
-    def train_den(self, flags, mnist, trainXs, valXs, testXs):
+    def train_den(self, flags):
         params = dict()
         avg_perf = []
 
         for t in range(flags.n_tasks):
-            data = (trainXs[t], mnist.train.labels,
-                    valXs[t], mnist.validation.labels,
-                    testXs[t], mnist.test.labels)
+            data = (self.trainXs[t], self.mnist.train.labels,
+                    self.valXs[t], self.mnist.validation.labels,
+                    self.testXs[t], self.mnist.test.labels)
 
             self.sess = tf.Session()
 
@@ -53,7 +57,7 @@ class AFN(DEN):
             self.load_params(params)
             temp_perfs = []
             for j in range(t + 1):
-                temp_perf = self.predict_perform(j + 1, testXs[j], mnist.test.labels)
+                temp_perf = self.predict_perform(j + 1, self.testXs[j], self.mnist.test.labels)
                 temp_perfs.append(temp_perf)
             avg_perf.append(sum(temp_perfs) / float(t + 1))
             print("   [*] avg_perf: %.4f" % avg_perf[t])
@@ -97,7 +101,7 @@ class AFN(DEN):
         return w, b
 
     # shape = (|h|,)
-    def get_importance_vector(self, task_id, mnist, trainXs, valXs, testXs):
+    def get_importance_vector(self, task_id):
         print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)
 
         X = tf.placeholder(tf.float32, [None, self.dims[0]])
@@ -136,14 +140,10 @@ class AFN(DEN):
 
         self.sess.run(tf.global_variables_initializer())
 
-        data = (trainXs[task_id - 1], mnist.train.labels,
-                valXs[task_id - 1], mnist.validation.labels,
-                testXs[task_id - 1], mnist.test.labels)
-
         h_length = sum([h.get_shape().as_list()[-1] for h in hidden_layer_list])
         importance_vector = np.zeros(shape=(0, h_length))
         while True:
-            batch_x, batch_y = self.get_next_batch(data[0], data[1])
+            batch_x, batch_y = self.get_next_batch(self.trainXs[task_id - 1], self.mnist.train.labels)
             if len(batch_x) == 0:
                 break
 

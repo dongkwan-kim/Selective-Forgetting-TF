@@ -51,6 +51,5 @@ def get_data(n_tasks: int, mnist_dir: str = "DEN/MNIST_data"):
 if __name__ == '__main__':
     mnist_data, train_xs, val_xs, test_xs = get_data(FLAGS.n_tasks)
     model = AFN.AFN(FLAGS)
-    model.train_den(FLAGS, mnist_data, train_xs, val_xs, test_xs)
-    iv = model.get_importance_vector_with_training(2, mnist_data, train_xs, val_xs, test_xs)
-    draw_importance_bar_chart(iv, 64, 74, 32, task_id=2)
+    model.add_dataset(mnist_data, train_xs, val_xs, test_xs)
+    model.train_den(FLAGS)
