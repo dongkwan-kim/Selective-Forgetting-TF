@@ -3,6 +3,7 @@ import numpy as np
 import AFN
 from tensorflow.examples.tutorials.mnist import input_data
 from pprint import pprint
+from MatplotlibUtill import *
 
 np.random.seed(1004)
 flags = tf.app.flags
@@ -51,4 +52,5 @@ if __name__ == '__main__':
     mnist_data, train_xs, val_xs, test_xs = get_data(FLAGS.n_tasks)
     model = AFN.AFN(FLAGS)
     model.train_den(FLAGS, mnist_data, train_xs, val_xs, test_xs)
-    model.get_importance_vector_with_training(1, mnist_data, train_xs, val_xs, test_xs)
+    iv = model.get_importance_vector_with_training(2, mnist_data, train_xs, val_xs, test_xs)
+    draw_importance_bar_chart(iv, 64, 74, 32, task_id=2)
