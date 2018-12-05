@@ -30,6 +30,13 @@ class AFN(DEN):
             self.afn_params[w.name] = w
         return w
 
+    def afn_create_or_get_variable(self, scope, name, shape=None, trainable=True, initializer=None):
+        try:
+            w = self.afn_create_variable(scope, name, shape, trainable, initializer)
+        except ValueError:
+            w = self.afn_get_variable(scope, name, trainable)
+        return w
+
     def clear(self):
         self.destroy_graph()
         self.sess.close()
@@ -74,6 +81,9 @@ class AFN(DEN):
             temp_perfs.append(temp_perf)
         return temp_perfs
 
+    def initialize_batch(self):
+        self.batch_idx = 0
+
     def get_next_batch(self, x, y, batch_size=None):
         batch_size = batch_size if batch_size else self.batch_size
         next_idx = self.batch_idx + batch_size
@@ -116,8 +126,10 @@ class AFN(DEN):
             w = w[:stamp[i - 1], :stamp[i]]
             b = b[:stamp[i]]
 
-            afn_w = self.afn_create_variable("afn_layer%d" % i, "weight", trainable=True, initializer=w)
-            afn_b = self.afn_create_variable("afn_layer%d" % i, "biases", trainable=True, initializer=b)
+            afn_w = self.afn_create_or_get_variable("afn_t%d_layer%d" % (task_id, i), "weight",
+                                                    trainable=True, initializer=w)
+            afn_b = self.afn_create_or_get_variable("afn_t%d_layer%d" % (task_id, i), "biases",
+                                                    trainable=True, initializer=b)
             bottom = tf.nn.relu(tf.matmul(bottom, afn_w) + afn_b)
             hidden_layer_list.append(bottom)
             print(' [*] task %d, shape of layer %d : %s' % (task_id, i, afn_w.get_shape().as_list()))
@@ -126,10 +138,10 @@ class AFN(DEN):
         b = self.get_variable('layer%d' % self.n_layers, 'biases_%d' % task_id, True)
         w = w[:stamp[self.n_layers - 1], :stamp[self.n_layers]]
         b = b[:stamp[self.n_layers]]
-        afn_w = self.afn_create_variable("afn_layer%d" % self.n_layers, "weight_%d" % task_id,
-                                         trainable=True, initializer=w)
-        afn_b = self.afn_create_variable("afn_layer%d" % self.n_layers, "biases_%d" % task_id,
-                                         trainable=True, initializer=b)
+        afn_w = self.afn_create_or_get_variable("afn_t%d_layer%d" % (task_id, self.n_layers), "weight_%d" % task_id,
+                                                trainable=True, initializer=w)
+        afn_b = self.afn_create_or_get_variable("afn_t%d_layer%d" % (task_id, self.n_layers), "biases_%d" % task_id,
+                                                trainable=True, initializer=b)
 
         y = tf.matmul(bottom, afn_w) + afn_b
         yhat = tf.nn.sigmoid(y)
@@ -143,6 +155,8 @@ class AFN(DEN):
         h_length_list = [h.get_shape().as_list()[-1] for h in hidden_layer_list]
         importance_vector_1 = np.zeros(shape=(0, h_length_list[0]))
         importance_vector_2 = np.zeros(shape=(0, h_length_list[1]))
+
+        self.initialize_batch()
         while True:
             batch_x, batch_y = self.get_next_batch(self.trainXs[task_id - 1], self.mnist.train.labels)
             if len(batch_x) == 0:
