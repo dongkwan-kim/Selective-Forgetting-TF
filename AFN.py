@@ -100,8 +100,8 @@ class AFN(DEN):
 
         return w, b
 
-    # shape = (|h|,)
-    def get_importance_vector(self, task_id):
+    # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
+    def get_importance_vector(self, task_id, layer_separate=False):
         print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)
 
         X = tf.placeholder(tf.float32, [None, self.dims[0]])
@@ -140,8 +140,9 @@ class AFN(DEN):
 
         self.sess.run(tf.global_variables_initializer())
 
-        h_length = sum([h.get_shape().as_list()[-1] for h in hidden_layer_list])
-        importance_vector = np.zeros(shape=(0, h_length))
+        h_length_list = [h.get_shape().as_list()[-1] for h in hidden_layer_list]
+        importance_vector_1 = np.zeros(shape=(0, h_length_list[0]))
+        importance_vector_2 = np.zeros(shape=(0, h_length_list[1]))
         while True:
             batch_x, batch_y = self.get_next_batch(self.trainXs[task_id - 1], self.mnist.train.labels)
             if len(batch_x) == 0:
@@ -154,10 +155,15 @@ class AFN(DEN):
 
             # shape = batch_size * |h|
             batch_importance_vector_1 = np.absolute(hidden_1 * gradient_1)[0]
+            importance_vector_1 = np.vstack((importance_vector_1, batch_importance_vector_1))
+
             batch_importance_vector_2 = np.absolute(hidden_2 * gradient_2)[0]
-            batch_importance_vector = np.concatenate((batch_importance_vector_1, batch_importance_vector_2), axis=1)
-            importance_vector = np.vstack((importance_vector, batch_importance_vector))
+            importance_vector_2 = np.vstack((importance_vector_2, batch_importance_vector_2))
 
-        importance_vector = importance_vector.sum(axis=0)
+        importance_vector_1 = importance_vector_1.sum(axis=0)
+        importance_vector_2 = importance_vector_2.sum(axis=0)
 
-        return importance_vector
+        if layer_separate:
+            return importance_vector_1, importance_vector_2  # shape = (|h|,)
+        else:
+            return np.concatenate((importance_vector_1, importance_vector_2))  # (|h1|,), (|h2|,)
