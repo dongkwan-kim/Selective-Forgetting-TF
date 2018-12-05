@@ -93,12 +93,22 @@ class AFN(DEN):
         self.batch_idx = next_idx
         return r
 
+    def recover_recent_params(self):
+        print("\n RECOVER RECENT PARAMS")
+        self.params = self.old_params_list[-1]
+        self.clear()
+        self.sess = tf.Session()
+        self.load_params(self.params)
+        self.sess.run(tf.global_variables_initializer())
+
     def adaptive_forget(self, task_to_forget, number_of_neurons, policy):
         assert policy == "EIN" or policy == "LIN"
 
-        print("\n ADAPTIVE FORGET {} task-{}, neurons-{}".format(policy, task_to_forget, number_of_neurons))
+        print("\n ADAPTIVE FORGET {} task-{} from {}, neurons-{}".format(
+            policy, task_to_forget, self.T, number_of_neurons))
 
-        self.old_params_list.append(self.get_params())
+        if not self.old_params_list:
+            self.old_params_list.append(self.get_params())
 
         ni_1, ni_2 = [], []
         if policy == "EIN":
