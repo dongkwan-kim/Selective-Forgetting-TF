@@ -96,7 +96,8 @@ class AFN(DEN):
 
         return w, b
 
-    def get_importance_vector_with_training(self, task_id, mnist, trainXs, valXs, testXs):
+    # shape = (|h|,)
+    def get_importance_vector(self, task_id, mnist, trainXs, valXs, testXs):
         print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)
 
         X = tf.placeholder(tf.float32, [None, self.dims[0]])
@@ -151,7 +152,7 @@ class AFN(DEN):
                 feed_dict={X: batch_x, Y: batch_y}
             )
 
-            # Shape = Batch * |h|
+            # shape = batch_size * |h|
             batch_importance_vector_1 = np.absolute(hidden_1 * gradient_1)[0]
             batch_importance_vector_2 = np.absolute(hidden_2 * gradient_2)[0]
             batch_importance_vector = np.concatenate((batch_importance_vector_1, batch_importance_vector_2), axis=1)
