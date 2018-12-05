@@ -11,6 +11,7 @@ class AFN(DEN):
     def __init__(self, den_config):
         super().__init__(den_config)
         self.afn_params = {}
+        self.batch_idx = 0
 
     def afn_create_variable(self, scope, name, shape=None, trainable=True, initializer=None):
         with tf.variable_scope(scope):
@@ -69,6 +70,13 @@ class AFN(DEN):
             temp_perfs.append(temp_perf)
         return temp_perfs
 
+    def get_next_batch(self, x, y, batch_size=None):
+        batch_size = batch_size if batch_size else self.batch_size
+        next_idx = self.batch_idx + batch_size
+        r = x[self.batch_idx:next_idx], y[self.batch_idx:next_idx]
+        self.batch_idx = next_idx
+        return r
+
     def remove_neurons(self, scope, indexes):
         w: tf.Variable = self.afn_get_variable(scope, "weight", True)
         b: tf.Variable = self.afn_get_variable(scope, "biases", True)
@@ -94,6 +102,7 @@ class AFN(DEN):
         X = tf.placeholder(tf.float32, [None, self.dims[0]])
         Y = tf.placeholder(tf.float32, [None, self.n_classes])
 
+        hidden_layer_list = []
         bottom = X
         stamp = self.time_stamp['task%d' % task_id]
         for i in range(1, self.n_layers):
@@ -105,6 +114,7 @@ class AFN(DEN):
             afn_w = self.afn_create_variable("afn_layer%d" % i, "weight", trainable=True, initializer=w)
             afn_b = self.afn_create_variable("afn_layer%d" % i, "biases", trainable=True, initializer=b)
             bottom = tf.nn.relu(tf.matmul(bottom, afn_w) + afn_b)
+            hidden_layer_list.append(bottom)
             print(' [*] task %d, shape of layer %d : %s' % (task_id, i, afn_w.get_shape().as_list()))
 
         w = self.get_variable('layer%d' % self.n_layers, 'weight_%d' % task_id, True)
@@ -121,7 +131,7 @@ class AFN(DEN):
         loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y))
 
         train_step = tf.train.GradientDescentOptimizer(self.init_lr).minimize(loss)
-        local_gradient = tf.gradients(loss, bottom)
+        gradient_list = [tf.gradients(loss, h) for h in hidden_layer_list]
 
         self.sess.run(tf.global_variables_initializer())
 
@@ -129,11 +139,24 @@ class AFN(DEN):
                 valXs[task_id], mnist.validation.labels,
                 testXs[task_id], mnist.test.labels)
 
-        batch_x, batch_y = self.data_iteration(data[0], data[1], "Train")
+        h_length = sum([h.get_shape().as_list()[-1] for h in hidden_layer_list])
+        importance_vector = np.zeros(shape=(0, h_length))
+        while True:
+            batch_x, batch_y = self.get_next_batch(data[0], data[1])
+            if len(batch_x) == 0:
+                break
 
-        _, loss, hidden, gradient = self.sess.run([train_step, loss, bottom, local_gradient],
-                                                  feed_dict={X: batch_x, Y: batch_y})
+            hidden_1, hidden_2, gradient_1, gradient_2 = self.sess.run(
+                hidden_layer_list + gradient_list,
+                feed_dict={X: batch_x, Y: batch_y}
+            )
 
-        importance_vector = np.absolute(gradient * hidden)
+            # Shape = Batch * |h|
+            batch_importance_vector_1 = np.absolute(hidden_1 * gradient_1)[0]
+            batch_importance_vector_2 = np.absolute(hidden_2 * gradient_2)[0]
+            batch_importance_vector = np.concatenate((batch_importance_vector_1, batch_importance_vector_2), axis=1)
+            importance_vector = np.vstack((importance_vector, batch_importance_vector))
+
+        importance_vector = importance_vector.sum(axis=0)
 
         return importance_vector
