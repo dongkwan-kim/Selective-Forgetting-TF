@@ -209,3 +209,25 @@ class AFN(DEN):
             return self.importance_matrix_tuple  # shape = (T, |h|)
         else:
             return np.concatenate(self.importance_matrix_tuple, axis=1)  # (T, |h1|), (T, |h2|)
+
+    # Inappropriate for T=2
+    def get_exceptionally_important_neurons(self, task_id, number_to_select):
+
+        if not self.importance_matrix_tuple:
+            self.get_importance_matrix()
+
+        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
+        num_neurons = i_mat.shape[-1]
+
+        mean_dot_j = np.mean(i_mat, axis=0)
+        stdev_dot_j = np.std(i_mat, axis=0)
+
+        ei = np.zeros(shape=(num_neurons,))
+        for j in range(num_neurons):
+            if stdev_dot_j[j] != 0:
+                ei[j] = (i_mat[task_id - 1][j] - mean_dot_j[j])/stdev_dot_j[j]
+            else:
+                ei[j] = - np.inf
+
+        ei_desc_sorted_idx = np.argsort(ei)[::-1]
+        return ei_desc_sorted_idx[:number_to_select]
