@@ -14,6 +14,7 @@ class AFN(DEN):
         self.batch_idx = 0
         self.mnist, self.trainXs, self.valXs, self.testXs = None, None, None, None
         self.importance_matrix_tuple = None
+        self.old_params_list = []
 
     def add_dataset(self, mnist, trainXs, valXs, testXs):
         self.mnist, self.trainXs, self.valXs, self.testXs = mnist, trainXs, valXs, testXs
@@ -92,7 +93,28 @@ class AFN(DEN):
         self.batch_idx = next_idx
         return r
 
-    def remove_neurons(self, scope, indexes):
+    def adaptive_forget(self, task_to_forget, number_of_neurons, policy):
+        assert policy == "EIN" or policy == "LIN"
+
+        print("\n ADAPTIVE FORGET {} task-{}, neurons-{}".format(policy, task_to_forget, number_of_neurons))
+
+        self.old_params_list.append(self.get_params())
+
+        ni_1, ni_2 = [], []
+        if policy == "EIN":
+            ni_1, ni_2 = self.get_exceptionally_important_neurons_for_t(task_to_forget, number_of_neurons)
+        elif policy == "LIN":
+            ni_1, ni_2 = self.get_least_important_neurons_for_others(task_to_forget, number_of_neurons)
+
+        self._remove_neurons("layer1", ni_1)
+        self._remove_neurons("layer2", ni_2)
+
+        params = self.get_params()
+        self.clear()
+        self.sess = tf.Session()
+        self.load_params(params)
+
+    def _remove_neurons(self, scope, indexes):
         print("\n REMOVE NEURONS {} - {}".format(scope, indexes))
 
         w: tf.Variable = self.get_variable(scope, "weight", False)
@@ -110,11 +132,6 @@ class AFN(DEN):
 
         self.params[w.name] = w
         self.params[b.name] = b
-
-        params = self.get_params()
-        self.clear()
-        self.sess = tf.Session()
-        self.load_params(params)
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
     def get_importance_vector(self, task_id, layer_separate=False):
@@ -184,9 +201,9 @@ class AFN(DEN):
         importance_vector_2 = importance_vector_2.sum(axis=0)
 
         if layer_separate:
-            return importance_vector_1, importance_vector_2  # shape = (|h|,)
+            return importance_vector_1, importance_vector_2  # (|h1|,), (|h2|,)
         else:
-            return np.concatenate((importance_vector_1, importance_vector_2))  # (|h1|,), (|h2|,)
+            return np.concatenate((importance_vector_1, importance_vector_2))  # shape = (|h|,)
 
     # shape = (T, |h|) or (T, |h1|), (T, |h2|)
     def get_importance_matrix(self, layer_separate=False):
@@ -211,9 +228,9 @@ class AFN(DEN):
 
         self.importance_matrix_tuple = importance_matrix_1, importance_matrix_2
         if layer_separate:
-            return self.importance_matrix_tuple  # shape = (T, |h|)
+            return self.importance_matrix_tuple  # (T, |h1|), (T, |h2|)
         else:
-            return np.concatenate(self.importance_matrix_tuple, axis=1)  # (T, |h1|), (T, |h2|)
+            return np.concatenate(self.importance_matrix_tuple, axis=1)  # shape = (T, |h|)
 
     # Inappropriate for T=2
     def get_exceptionally_important_neurons_for_t(self, task_id, number_to_select):
@@ -235,7 +252,10 @@ class AFN(DEN):
                 ei[j] = - np.inf
 
         ei_desc_sorted_idx = np.argsort(ei)[::-1]
-        return ei_desc_sorted_idx[:number_to_select]
+        selected = ei_desc_sorted_idx[:number_to_select]
+
+        divider = self.importance_matrix_tuple[0].shape[-1]
+        return selected[selected < divider], (selected[selected >= divider] - divider)
 
     def get_least_important_neurons_for_others(self, task_id, number_to_select):
 
@@ -248,4 +268,7 @@ class AFN(DEN):
         mean_dot_j = np.mean(i_mat, axis=0)
 
         mean_asc_sorted_idx = np.argsort(mean_dot_j)
-        return mean_asc_sorted_idx[:number_to_select]
+        selected = mean_asc_sorted_idx[:number_to_select]
+
+        divider = self.importance_matrix_tuple[0].shape[-1]
+        return selected[selected < divider], (selected[selected >= divider] - divider)
