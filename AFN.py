@@ -135,9 +135,9 @@ class AFN(DEN):
 
         self.sess.run(tf.global_variables_initializer())
 
-        data = (trainXs[task_id], mnist.train.labels,
-                valXs[task_id], mnist.validation.labels,
-                testXs[task_id], mnist.test.labels)
+        data = (trainXs[task_id - 1], mnist.train.labels,
+                valXs[task_id - 1], mnist.validation.labels,
+                testXs[task_id - 1], mnist.test.labels)
 
         h_length = sum([h.get_shape().as_list()[-1] for h in hidden_layer_list])
         importance_vector = np.zeros(shape=(0, h_length))
