@@ -211,7 +211,7 @@ class AFN(DEN):
             return np.concatenate(self.importance_matrix_tuple, axis=1)  # (T, |h1|), (T, |h2|)
 
     # Inappropriate for T=2
-    def get_exceptionally_important_neurons(self, task_id, number_to_select):
+    def get_exceptionally_important_neurons_for_t(self, task_id, number_to_select):
 
         if not self.importance_matrix_tuple:
             self.get_importance_matrix()
@@ -232,7 +232,7 @@ class AFN(DEN):
         ei_desc_sorted_idx = np.argsort(ei)[::-1]
         return ei_desc_sorted_idx[:number_to_select]
 
-    def get_least_important_neurons(self, task_id, number_to_select):
+    def get_least_important_neurons_for_others(self, task_id, number_to_select):
 
         if not self.importance_matrix_tuple:
             self.get_importance_matrix()
