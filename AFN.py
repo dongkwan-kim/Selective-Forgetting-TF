@@ -73,12 +73,12 @@ class AFN(DEN):
             if t != flags.n_tasks - 1:
                 self.clear()
 
-    def predict_only_after_training(self, flags, mnist, testXs):
+    def predict_only_after_training(self):
         print("\n PREDICT ONLY AFTER TRAINING")
         self.sess = tf.Session()
         temp_perfs = []
-        for t in range(flags.n_tasks):
-            temp_perf = self.predict_perform(t + 1, testXs[t], mnist.test.labels)
+        for t in range(self.T):
+            temp_perf = self.predict_perform(t + 1, self.testXs[t], self.mnist.test.labels)
             temp_perfs.append(temp_perf)
         return temp_perfs
 
@@ -93,8 +93,10 @@ class AFN(DEN):
         return r
 
     def remove_neurons(self, scope, indexes):
-        w: tf.Variable = self.afn_get_variable(scope, "weight", True)
-        b: tf.Variable = self.afn_get_variable(scope, "biases", True)
+        print("\n REMOVE NEURONS {} - {}".format(scope, indexes))
+
+        w: tf.Variable = self.get_variable(scope, "weight", False)
+        b: tf.Variable = self.get_variable(scope, "biases", False)
 
         val_w = w.eval(session=self.sess)
         val_b = b.eval(session=self.sess)
@@ -103,13 +105,16 @@ class AFN(DEN):
             val_w[:, i] = 0
             val_b[i] = 0
 
-        w = w.assign(val_w)
-        b = b.assign(val_b)
+        self.sess.run(tf.assign(w, val_w))
+        self.sess.run(tf.assign(b, val_b))
 
-        self.afn_params[w.name] = w
-        self.afn_params[b.name] = b
+        self.params[w.name] = w
+        self.params[b.name] = b
 
-        return w, b
+        params = self.get_params()
+        self.clear()
+        self.sess = tf.Session()
+        self.load_params(params)
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
     def get_importance_vector(self, task_id, layer_separate=False):
