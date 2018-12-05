@@ -231,3 +231,16 @@ class AFN(DEN):
 
         ei_desc_sorted_idx = np.argsort(ei)[::-1]
         return ei_desc_sorted_idx[:number_to_select]
+
+    def get_least_important_neurons(self, task_id, number_to_select):
+
+        if not self.importance_matrix_tuple:
+            self.get_importance_matrix()
+
+        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
+        i_mat = np.delete(i_mat, task_id - 1, axis=0)
+
+        mean_dot_j = np.mean(i_mat, axis=0)
+
+        mean_asc_sorted_idx = np.argsort(mean_dot_j)
+        return mean_asc_sorted_idx[:number_to_select]
