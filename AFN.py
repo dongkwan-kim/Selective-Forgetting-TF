@@ -1,6 +1,8 @@
 import tensorflow as tf
 import numpy as np
 
+from pprint import pprint
+
 from DEN import DEN
 
 
@@ -67,6 +69,25 @@ class AFN(DEN):
             temp_perfs.append(temp_perf)
         return temp_perfs
 
+    def remove_neurons(self, scope, indexes):
+        w: tf.Variable = self.afn_get_variable(scope, "weight", True)
+        b: tf.Variable = self.afn_get_variable(scope, "biases", True)
+
+        val_w = w.eval(session=self.sess)
+        val_b = b.eval(session=self.sess)
+
+        for i in indexes:
+            val_w[:, i] = 0
+            val_b[i] = 0
+
+        w = w.assign(val_w)
+        b = b.assign(val_b)
+
+        self.afn_params[w.name] = w
+        self.afn_params[b.name] = b
+
+        return w, b
+
     def get_importance_vector_with_training(self, task_id, mnist, trainXs, valXs, testXs):
         print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)
 
@@ -114,5 +135,5 @@ class AFN(DEN):
                                                   feed_dict={X: batch_x, Y: batch_y})
 
         importance_vector = np.absolute(gradient * hidden)
-        
+
         return importance_vector
