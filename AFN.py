@@ -6,6 +6,7 @@ import numpy as np
 from pprint import pprint
 
 from DEN import DEN
+from MatplotlibUtill import build_line_of_list
 
 
 class AFN(DEN):
@@ -115,7 +116,7 @@ class AFN(DEN):
         for policy, history in self.prediction_history.items():
             print("\t".join([policy] + [str(x) for x in range(1, len(history[0])+1)]))
             for i, acc in enumerate(history):
-                print("\t".join([str((i+1)*one_step_neuron)] + [str(x) for x in acc]))
+                print("\t".join([str(i*one_step_neuron)] + [str(x) for x in acc]))
 
     def print_summary(self, task_id, one_step_neuron=1):
         for policy, history in self.prediction_history.items():
@@ -123,7 +124,38 @@ class AFN(DEN):
             for i, acc in enumerate(history):
                 acc_except_t = np.delete(acc, task_id - 1)
                 mean_acc = np.mean(acc_except_t)
-                print("\t".join([str((i+1)*one_step_neuron)] + [str(x) for x in acc] + [str(mean_acc)]))
+                print("\t".join([str(i*one_step_neuron)] + [str(x) for x in acc] + [str(mean_acc)]))
+
+    def draw_chart_summary(self, task_id, one_step_neuron=1, file_postfix=None):
+
+        mean_acc_except_t = None
+        x_removed_neurons = None
+
+        for policy, history in self.prediction_history.items():
+
+            x_removed_neurons = [i*one_step_neuron for i, acc in enumerate(history)]
+            history_txn = np.transpose(history)
+            tasks = [x for x in range(1, self.T+1)]
+
+            build_line_of_list(x=x_removed_neurons, y_list=history_txn, label_y_list=tasks,
+                               xlabel="Removed Neurons", ylabel="Accuracy", ylim=[0, 1],
+                               title="Accuracy by {} Neuron Deletion".format(policy),
+                               file_name="{}_{}".format(policy, file_postfix),
+                               highlight_yi=task_id-1)
+
+            history_txn_except_t = np.delete(history_txn, task_id - 1, axis=0)
+            history_n_mean_except_t = np.mean(history_txn_except_t, axis=0)
+
+            if mean_acc_except_t is None:
+                mean_acc_except_t = history_n_mean_except_t
+            else:
+                mean_acc_except_t = np.vstack((mean_acc_except_t, history_n_mean_except_t))
+
+        build_line_of_list(x=x_removed_neurons, y_list=mean_acc_except_t,
+                           label_y_list=[policy for policy in self.prediction_history.keys()],
+                           xlabel="Removed Neurons", ylabel="Mean Accuracy", ylim=[0, 1],
+                           title="Mean Accuracy Except Forgetting Task-{}".format(task_id),
+                           file_name="MeanAcc_{}".format(file_postfix))
 
     def adaptive_forget(self, task_to_forget, number_of_neurons, policy):
         assert policy in ["EIN", "LIN", "RANDOM"]
