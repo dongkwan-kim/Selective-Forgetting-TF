@@ -328,7 +328,7 @@ class AFN(DEN):
             if stdev_dot_j[j] != 0:
                 ei[j] = (i_mat[task_id - 1][j] - mean_dot_j[j])/stdev_dot_j[j]
             else:
-                ei[j] = - np.inf
+                ei[j] = np.inf
 
         ei_desc_sorted_idx = np.argsort(ei)[::-1]
         selected = ei_desc_sorted_idx[:number_to_select]
