@@ -7,7 +7,7 @@ from MatplotlibUtill import *
 
 np.random.seed(1004)
 flags = tf.app.flags
-flags.DEFINE_integer("max_iter", 300, "Epoch to train")
+flags.DEFINE_integer("max_iter", 400, "Epoch to train")
 flags.DEFINE_float("lr", 0.001, "Learing rate(init) for train")
 flags.DEFINE_integer("batch_size", 256, "The size of batch for 1 iteration")
 flags.DEFINE_string("checkpoint_dir", "checkpoints", "Directory path to save the checkpoints")
@@ -25,7 +25,7 @@ flags.DEFINE_float('loss_thr', 0.1, "Threshold of dynamic expansion")
 flags.DEFINE_float('spl_thr', 0.1, "Threshold of split and duplication")
 
 # New hyper-parameters
-flags.DEFINE_integer("n_tasks", 9, 'The number of tasks')
+flags.DEFINE_integer("n_tasks", 10, 'The number of tasks')
 FLAGS = flags.FLAGS
 
 
@@ -56,15 +56,18 @@ if __name__ == '__main__':
     model.train_den(FLAGS)
     model.get_importance_matrix()
 
-    model.predict_only_after_training()
+    print(model.predict_only_after_training())
 
-    task_to_forget = 5
-    number_of_neurons_to_remove = 75
+    task_to_forget = 6
+    one_step_neurons = 5
+    steps = 25
 
-    model.adaptive_forget(task_to_forget, number_of_neurons_to_remove, policy="LIN")
-    model.predict_only_after_training()
-
-    model.recover_recent_params()
-
-    model.adaptive_forget(task_to_forget, number_of_neurons_to_remove, policy="EIN")
-    model.predict_only_after_training()
+    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps, policy="RANDOM")
+    model.recover_old_params()
+    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps, policy="LIN")
+    model.recover_old_params()
+    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps, policy="EIN")
+    model.recover_old_params()
+    model.print_summary(task_to_forget, one_step_neurons)
+    model.draw_chart_summary(task_to_forget, one_step_neurons,
+                             file_postfix="task{}_step{}.png".format(task_to_forget, one_step_neurons))
