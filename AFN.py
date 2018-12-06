@@ -126,7 +126,7 @@ class AFN(DEN):
                 mean_acc = np.mean(acc_except_t)
                 print("\t".join([str(i*one_step_neuron)] + [str(x) for x in acc] + [str(mean_acc)]))
 
-    def draw_chart_summary(self, task_id, one_step_neuron=1, file_postfix=None):
+    def draw_chart_summary(self, task_id, one_step_neuron=1, file_prefix=None, file_extension=".png"):
 
         mean_acc_except_t = None
         x_removed_neurons = None
@@ -140,7 +140,7 @@ class AFN(DEN):
             build_line_of_list(x=x_removed_neurons, y_list=history_txn, label_y_list=tasks,
                                xlabel="Removed Neurons", ylabel="Accuracy", ylim=[0, 1],
                                title="Accuracy by {} Neuron Deletion".format(policy),
-                               file_name="{}_{}".format(policy, file_postfix),
+                               file_name="{}_{}{}".format(file_prefix, policy, file_extension),
                                highlight_yi=task_id-1)
 
             history_txn_except_t = np.delete(history_txn, task_id - 1, axis=0)
@@ -155,7 +155,7 @@ class AFN(DEN):
                            label_y_list=[policy for policy in self.prediction_history.keys()],
                            xlabel="Removed Neurons", ylabel="Mean Accuracy", ylim=[0, 1],
                            title="Mean Accuracy Except Forgetting Task-{}".format(task_id),
-                           file_name="MeanAcc_{}".format(file_postfix))
+                           file_name="{}_MeanAcc{}".format(file_prefix, file_extension))
 
     def adaptive_forget(self, task_to_forget, number_of_neurons, policy):
         assert policy in ["EIN", "LIN", "RANDOM"]

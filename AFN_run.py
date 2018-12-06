@@ -70,4 +70,4 @@ if __name__ == '__main__':
     model.recover_old_params()
     model.print_summary(task_to_forget, one_step_neurons)
     model.draw_chart_summary(task_to_forget, one_step_neurons,
-                             file_postfix="task{}_step{}.png".format(task_to_forget, one_step_neurons))
+                             file_prefix="task{}_step{}".format(task_to_forget, one_step_neurons))
