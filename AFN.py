@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import tensorflow as tf
 import numpy as np
 
@@ -15,6 +17,7 @@ class AFN(DEN):
         self.mnist, self.trainXs, self.valXs, self.testXs = None, None, None, None
         self.importance_matrix_tuple = None
         self.old_params_list = []
+        self.prediction_history = defaultdict(list)
 
     def add_dataset(self, mnist, trainXs, valXs, testXs):
         self.mnist, self.trainXs, self.valXs, self.testXs = mnist, trainXs, valXs, testXs
@@ -95,20 +98,32 @@ class AFN(DEN):
 
     def recover_recent_params(self):
         print("\n RECOVER RECENT PARAMS")
-        self.params = self.old_params_list[-1]
+        self.recover_params(-1)
+
+    def recover_old_params(self):
+        print("\n RECOVER RECENT PARAMS")
+        self.recover_params(0)
+
+    def recover_params(self, idx):
+        self.params = self.old_params_list[idx]
         self.clear()
         self.sess = tf.Session()
         self.load_params(self.params)
         self.sess.run(tf.global_variables_initializer())
 
+    def print_history(self, one_step_neuron=1):
+        for policy, history in self.prediction_history.items():
+            print(policy)
+            for i, acc in enumerate(history):
+                print("\t".join([str((i+1)*one_step_neuron)] + [str(x) for x in acc]))
+
     def adaptive_forget(self, task_to_forget, number_of_neurons, policy):
-        assert policy == "EIN" or policy == "LIN"
+        assert policy in ["EIN", "LIN", "RANDOM"]
 
         print("\n ADAPTIVE FORGET {} task-{} from {}, neurons-{}".format(
             policy, task_to_forget, self.T, number_of_neurons))
 
-        if not self.old_params_list:
-            self.old_params_list.append(self.get_params())
+        self.old_params_list.append(self.get_params())
 
         ni_1, ni_2 = [], []
         if policy == "EIN":
@@ -123,6 +138,17 @@ class AFN(DEN):
         self.clear()
         self.sess = tf.Session()
         self.load_params(params)
+
+    def sequentially_adaptive_forget_and_predict(self, task_to_forget, one_step_neurons, steps, policy):
+
+        print("\n SEQUENTIALLY ADAPTIVE FORGET {} task-{} from {}, neurons-{}".format(
+            policy, task_to_forget, self.T, one_step_neurons * steps))
+
+        for i in range(steps+1):
+            self.adaptive_forget(task_to_forget, i * one_step_neurons, policy)
+            pred = self.predict_only_after_training()
+            self.prediction_history[policy].append(pred)
+            self.recover_recent_params()
 
     def _remove_neurons(self, scope, indexes):
         print("\n REMOVE NEURONS {} - {}".format(scope, indexes))
