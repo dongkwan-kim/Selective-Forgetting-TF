@@ -125,11 +125,14 @@ class AFN(DEN):
 
         self.old_params_list.append(self.get_params())
 
-        ni_1, ni_2 = [], []
         if policy == "EIN":
             ni_1, ni_2 = self.get_exceptionally_important_neurons_for_t(task_to_forget, number_of_neurons)
         elif policy == "LIN":
             ni_1, ni_2 = self.get_least_important_neurons_for_others(task_to_forget, number_of_neurons)
+        elif policy == "RANDOM":
+            ni_1, ni_2 = self.get_random_neurons(number_of_neurons)
+        else:
+            raise NotImplementedError
 
         self._remove_neurons("layer1", ni_1)
         self._remove_neurons("layer2", ni_2)
@@ -305,6 +308,20 @@ class AFN(DEN):
 
         mean_asc_sorted_idx = np.argsort(mean_dot_j)
         selected = mean_asc_sorted_idx[:number_to_select]
+
+        divider = self.importance_matrix_tuple[0].shape[-1]
+        return selected[selected < divider], (selected[selected >= divider] - divider)
+
+    def get_random_neurons(self, number_to_select):
+
+        if not self.importance_matrix_tuple:
+            self.get_importance_matrix()
+
+        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
+
+        indexes = np.asarray(range(i_mat.shape[-1]))
+        np.random.shuffle(indexes)
+        selected = indexes[:number_to_select]
 
         divider = self.importance_matrix_tuple[0].shape[-1]
         return selected[selected < divider], (selected[selected >= divider] - divider)
