@@ -101,7 +101,7 @@ class AFN(DEN):
         self.recover_params(-1)
 
     def recover_old_params(self):
-        print("\n RECOVER RECENT PARAMS")
+        print("\n RECOVER OLD PARAMS")
         self.recover_params(0)
 
     def recover_params(self, idx):
@@ -113,9 +113,17 @@ class AFN(DEN):
 
     def print_history(self, one_step_neuron=1):
         for policy, history in self.prediction_history.items():
-            print(policy)
+            print("\t".join([policy] + [str(x) for x in range(1, len(history[0])+1)]))
             for i, acc in enumerate(history):
                 print("\t".join([str((i+1)*one_step_neuron)] + [str(x) for x in acc]))
+
+    def print_summary(self, task_id, one_step_neuron=1):
+        for policy, history in self.prediction_history.items():
+            print("\t".join([policy] + [str(x) for x in range(1, len(history[0])+1)] + ["Acc-{}".format(policy)]))
+            for i, acc in enumerate(history):
+                acc_except_t = np.delete(acc, task_id - 1)
+                mean_acc = np.mean(acc_except_t)
+                print("\t".join([str((i+1)*one_step_neuron)] + [str(x) for x in acc] + [str(mean_acc)]))
 
     def adaptive_forget(self, task_to_forget, number_of_neurons, policy):
         assert policy in ["EIN", "LIN", "RANDOM"]
@@ -320,6 +328,7 @@ class AFN(DEN):
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
 
         indexes = np.asarray(range(i_mat.shape[-1]))
+        np.random.seed(i_mat.shape[-1])
         np.random.shuffle(indexes)
         selected = indexes[:number_to_select]
 
