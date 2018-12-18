@@ -7,6 +7,7 @@ from pprint import pprint
 
 from DEN import DEN
 from MatplotlibUtill import build_line_of_list
+from importanceUtil import *
 
 
 class AFN(DEN):
@@ -213,7 +214,7 @@ class AFN(DEN):
         self.params[b.name] = b
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
-    def get_importance_vector(self, task_id, layer_separate=False):
+    def get_importance_vector(self, task_id, importance_criteria: str, layer_separate=False):
         print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)
 
         X = tf.placeholder(tf.float32, [None, self.dims[0]])
@@ -270,10 +271,13 @@ class AFN(DEN):
             )
 
             # shape = batch_size * |h|
-            batch_importance_vector_1 = np.absolute(hidden_1 * gradient_1)[0]
-            importance_vector_1 = np.vstack((importance_vector_1, batch_importance_vector_1))
+            if importance_criteria == "first_Taylor_approximation":
+                batch_importance_vector_1 = np.absolute(hidden_1 * gradient_1)[0]
+                batch_importance_vector_2 = np.absolute(hidden_2 * gradient_2)[0]
+            else:
+                raise NotImplementedError
 
-            batch_importance_vector_2 = np.absolute(hidden_2 * gradient_2)[0]
+            importance_vector_1 = np.vstack((importance_vector_1, batch_importance_vector_1))
             importance_vector_2 = np.vstack((importance_vector_2, batch_importance_vector_2))
 
         importance_vector_1 = importance_vector_1.sum(axis=0)
@@ -290,7 +294,11 @@ class AFN(DEN):
         importance_matrix_1, importance_matrix_2 = None, None
 
         for t in reversed(range(1, self.T + 1)):
-            iv_1, iv_2 = self.get_importance_vector(task_id=t, layer_separate=True)
+            iv_1, iv_2 = self.get_importance_vector(
+                task_id=t,
+                layer_separate=True,
+                importance_criteria="first_Taylor_approximation"
+            )
 
             if t == self.T:
                 importance_matrix_1 = np.zeros(shape=(0, iv_1.shape[0]))
