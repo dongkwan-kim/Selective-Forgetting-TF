@@ -6,7 +6,7 @@ import numpy as np
 from pprint import pprint
 
 from DEN import DEN
-from MatplotlibUtill import build_line_of_list
+from MatplotlibUtil import build_line_of_list
 from importanceUtil import *
 
 

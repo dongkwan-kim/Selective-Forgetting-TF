@@ -3,7 +3,7 @@ import numpy as np
 import AFN
 from tensorflow.examples.tutorials.mnist import input_data
 from pprint import pprint
-from MatplotlibUtill import *
+from MatplotlibUtil import *
 
 np.random.seed(1004)
 flags = tf.app.flags
