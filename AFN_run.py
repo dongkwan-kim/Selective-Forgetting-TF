@@ -10,7 +10,7 @@ flags = tf.app.flags
 flags.DEFINE_integer("max_iter", 400, "Epoch to train")
 flags.DEFINE_float("lr", 0.001, "Learing rate(init) for train")
 flags.DEFINE_integer("batch_size", 256, "The size of batch for 1 iteration")
-flags.DEFINE_string("checkpoint_dir", "checkpoints", "Directory path to save the checkpoints")
+flags.DEFINE_string("checkpoint_dir", "./checkpoints", "Directory path to save the checkpoints")
 flags.DEFINE_integer("dims0", 784, "Dimensions about input layer")
 flags.DEFINE_integer("dims1", 64, "Dimensions about 1st layer")
 flags.DEFINE_integer("dims2", 32, "Dimensions about 2nd layer")
@@ -29,7 +29,7 @@ flags.DEFINE_integer("n_tasks", 10, 'The number of tasks')
 FLAGS = flags.FLAGS
 
 
-def get_data(n_tasks: int, mnist_dir: str = "DEN/MNIST_data"):
+def get_data(n_tasks: int, mnist_dir: str = "./MNIST_data"):
     mnist = input_data.read_data_sets(mnist_dir, one_hot=True)
     train_x = mnist.train.images
     val_x = mnist.validation.images
