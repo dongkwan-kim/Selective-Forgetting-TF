@@ -68,6 +68,8 @@ if __name__ == '__main__':
     model.recover_old_params()
     model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps, policy="EIN")
     model.recover_old_params()
+    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps, policy="ALL")
+    model.recover_old_params()
     model.print_summary(task_to_forget, one_step_neurons)
     model.draw_chart_summary(task_to_forget, one_step_neurons,
                              file_prefix="task{}_step{}".format(task_to_forget, one_step_neurons))

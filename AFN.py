@@ -1,4 +1,5 @@
 from collections import defaultdict
+from typing import Dict, List
 
 import tensorflow as tf
 import numpy as np
@@ -19,7 +20,7 @@ class AFN(DEN):
         self.mnist, self.trainXs, self.valXs, self.testXs = None, None, None, None
         self.importance_matrix_tuple = None
         self.old_params_list = []
-        self.prediction_history = defaultdict(list)
+        self.prediction_history: Dict[str, List] = defaultdict(list)
 
     def add_dataset(self, mnist, trainXs, valXs, testXs):
         self.mnist, self.trainXs, self.valXs, self.testXs = mnist, trainXs, valXs, testXs
@@ -159,7 +160,7 @@ class AFN(DEN):
                            file_name="{}_MeanAcc{}".format(file_prefix, file_extension))
 
     def adaptive_forget(self, task_to_forget, number_of_neurons, policy):
-        assert policy in ["EIN", "LIN", "RANDOM"]
+        assert policy in ["EIN", "LIN", "RANDOM", "ALL"]
 
         print("\n ADAPTIVE FORGET {} task-{} from {}, neurons-{}".format(
             policy, task_to_forget, self.T, number_of_neurons))
@@ -172,6 +173,8 @@ class AFN(DEN):
             ni_1, ni_2 = self.get_least_important_neurons_for_others(task_to_forget, number_of_neurons)
         elif policy == "RANDOM":
             ni_1, ni_2 = self.get_random_neurons(number_of_neurons)
+        elif policy == "ALL":
+            ni_1, ni_2 = self.get_least_important_neurons_for_others([], number_of_neurons)
         else:
             raise NotImplementedError
 
@@ -344,13 +347,18 @@ class AFN(DEN):
         divider = self.importance_matrix_tuple[0].shape[-1]
         return selected[selected < divider], (selected[selected >= divider] - divider)
 
-    def get_least_important_neurons_for_others(self, task_id, number_to_select):
+    def get_least_important_neurons_for_others(self, task_id_or_ids: int or list, number_to_select):
 
         if not self.importance_matrix_tuple:
             self.get_importance_matrix()
 
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
-        i_mat = np.delete(i_mat, task_id - 1, axis=0)
+        if isinstance(task_id_or_ids, int):
+            i_mat = np.delete(i_mat, task_id_or_ids - 1, axis=0)
+        elif isinstance(task_id_or_ids, list):
+            i_mat = np.delete(i_mat, [tid - 1 for tid in task_id_or_ids], axis=0)
+        else:
+            raise TypeError
 
         mean_dot_j = np.mean(i_mat, axis=0)
 
