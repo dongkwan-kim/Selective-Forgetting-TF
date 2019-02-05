@@ -26,6 +26,22 @@ flags.DEFINE_float('spl_thr', 0.1, "Threshold of split and duplication")
 
 # New hyper-parameters
 flags.DEFINE_integer("n_tasks", 10, 'The number of tasks')
+flags.DEFINE_integer("task_to_forget", 6, 'Task to forget')
+flags.DEFINE_integer("one_step_neurons", 5, 'Number of neurons to forget in one step')
+flags.DEFINE_integer("steps_to_forget", 25, 'Total number of steps in forgetting')
+
+MODE = "TEST"
+if MODE == "TEST":
+    flags.FLAGS.max_iter = 80
+    flags.FLAGS.n_tasks = 2
+    flags.FLAGS.task_to_forget = 1
+    flags.FLAGS.steps_to_forget = 2
+elif MODE == "SMALL":
+    flags.FLAGS.max_iter = 200
+    flags.FLAGS.n_tasks = 3
+    flags.FLAGS.task_to_forget = 2
+    flags.FLAGS.steps_to_forget = 10
+
 FLAGS = flags.FLAGS
 
 
@@ -58,17 +74,17 @@ if __name__ == '__main__':
 
     print(model.predict_only_after_training())
 
-    task_to_forget = 6
-    one_step_neurons = 5
-    steps = 25
+    task_to_forget = FLAGS.task_to_forget
+    one_step_neurons = FLAGS.one_step_neurons
+    steps_to_forget = FLAGS.steps_to_forget
 
-    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps, policy="RANDOM")
+    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps_to_forget, policy="RANDOM")
     model.recover_old_params()
-    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps, policy="LIN")
+    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps_to_forget, policy="LIN")
     model.recover_old_params()
-    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps, policy="EIN")
+    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps_to_forget, policy="EIN")
     model.recover_old_params()
-    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps, policy="ALL")
+    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps_to_forget, policy="ALL")
     model.recover_old_params()
     model.print_summary(task_to_forget, one_step_neurons)
     model.draw_chart_summary(task_to_forget, one_step_neurons,
