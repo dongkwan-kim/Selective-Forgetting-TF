@@ -21,6 +21,7 @@ class AFN(DEN):
         self.importance_matrix_tuple = None
         self.old_params_list = []
         self.prediction_history: Dict[str, List] = defaultdict(list)
+        self.layer_to_removed_neuron_set: Dict[str, set] = defaultdict(set)
 
     def add_dataset(self, mnist, trainXs, valXs, testXs):
         self.mnist, self.trainXs, self.valXs, self.testXs = mnist, trainXs, valXs, testXs
@@ -197,8 +198,14 @@ class AFN(DEN):
             self.prediction_history[policy].append(pred)
             self.recover_recent_params()
 
-    def _remove_neurons(self, scope, indexes):
+    def _remove_neurons(self, scope, indexes: np.ndarray):
+        """Zeroing columns of target indexes"""
+
+        if len(indexes) == 0:
+            return
+
         print("\n REMOVE NEURONS {} - {}".format(scope, indexes))
+        self.layer_to_removed_neuron_set[scope].update(set(indexes))
 
         w: tf.Variable = self.get_variable(scope, "weight", False)
         b: tf.Variable = self.get_variable(scope, "biases", False)
