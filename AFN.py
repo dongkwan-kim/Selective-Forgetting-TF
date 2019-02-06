@@ -46,6 +46,21 @@ class AFN(DEN):
             w = self.afn_get_variable(scope, name, trainable)
         return w
 
+    def afn_get_weight_and_bias_at_task(self, layer_id: int, stamp, task_id: int, var_prefix: str, is_bottom=False):
+
+        w_key, b_key = ("weight", "biases") if not is_bottom else ("weight_%d" % task_id, "biases_%d" % task_id)
+
+        w = self.get_variable('layer%d' % layer_id, w_key, True)
+        b = self.get_variable('layer%d' % layer_id, b_key, True)
+        w = w[:stamp[layer_id - 1], :stamp[layer_id]]
+        b = b[:stamp[layer_id]]
+
+        afn_w = self.afn_create_or_get_variable("%s_t%d_layer%d" % (var_prefix, task_id, layer_id), w_key,
+                                                trainable=True, initializer=w)
+        afn_b = self.afn_create_or_get_variable("%s_%d_layer%d" % (var_prefix, task_id, layer_id), b_key,
+                                                trainable=True, initializer=b)
+        return afn_w, afn_b
+
     def clear(self):
         self.destroy_graph()
         self.sess.close()
@@ -234,28 +249,12 @@ class AFN(DEN):
         bottom = X
         stamp = self.time_stamp['task%d' % task_id]
         for i in range(1, self.n_layers):
-            w = self.get_variable('layer%d' % i, 'weight', True)
-            b = self.get_variable('layer%d' % i, 'biases', True)
-            w = w[:stamp[i - 1], :stamp[i]]
-            b = b[:stamp[i]]
-
-            afn_w = self.afn_create_or_get_variable("afn_t%d_layer%d" % (task_id, i), "weight",
-                                                    trainable=True, initializer=w)
-            afn_b = self.afn_create_or_get_variable("afn_t%d_layer%d" % (task_id, i), "biases",
-                                                    trainable=True, initializer=b)
+            afn_w, afn_b = self.afn_get_weight_and_bias_at_task(i, stamp, task_id, "imp", is_bottom=False)
             bottom = tf.nn.relu(tf.matmul(bottom, afn_w) + afn_b)
             hidden_layer_list.append(bottom)
             print(' [*] task %d, shape of layer %d : %s' % (task_id, i, afn_w.get_shape().as_list()))
 
-        w = self.get_variable('layer%d' % self.n_layers, 'weight_%d' % task_id, True)
-        b = self.get_variable('layer%d' % self.n_layers, 'biases_%d' % task_id, True)
-        w = w[:stamp[self.n_layers - 1], :stamp[self.n_layers]]
-        b = b[:stamp[self.n_layers]]
-        afn_w = self.afn_create_or_get_variable("afn_t%d_layer%d" % (task_id, self.n_layers), "weight_%d" % task_id,
-                                                trainable=True, initializer=w)
-        afn_b = self.afn_create_or_get_variable("afn_t%d_layer%d" % (task_id, self.n_layers), "biases_%d" % task_id,
-                                                trainable=True, initializer=b)
-
+        afn_w, afn_b = self.afn_get_weight_and_bias_at_task(self.n_layers, stamp, task_id, "imp", is_bottom=True)
         y = tf.matmul(bottom, afn_w) + afn_b
         yhat = tf.nn.sigmoid(y)
         loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y))
