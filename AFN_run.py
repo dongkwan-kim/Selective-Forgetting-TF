@@ -45,6 +45,19 @@ elif MODE == "SMALL":
 FLAGS = flags.FLAGS
 
 
+def experiment_forget(afn: AFN.AFN, flags, policies):
+    for policy in policies:
+        afn.sequentially_adaptive_forget_and_predict(
+            flags.task_to_forget, flags.one_step_neurons, flags.steps_to_forget,
+            policy=policy,
+        )
+        afn.recover_old_params()
+
+    afn.print_summary(flags.task_to_forget, flags.one_step_neurons)
+    afn.draw_chart_summary(flags.task_to_forget, flags.one_step_neurons,
+                           file_prefix="task{}_step{}".format(flags.task_to_forget, flags.one_step_neurons))
+
+
 if __name__ == '__main__':
 
     mnist_data, train_xs, val_xs, test_xs = get_data(FLAGS.n_tasks)
@@ -55,18 +68,5 @@ if __name__ == '__main__':
 
     print(model.predict_only_after_training())
 
-    task_to_forget = FLAGS.task_to_forget
-    one_step_neurons = FLAGS.one_step_neurons
-    steps_to_forget = FLAGS.steps_to_forget
-
-    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps_to_forget, policy="RANDOM")
-    model.recover_old_params()
-    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps_to_forget, policy="LIN")
-    model.recover_old_params()
-    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps_to_forget, policy="EIN")
-    model.recover_old_params()
-    model.sequentially_adaptive_forget_and_predict(task_to_forget, one_step_neurons, steps_to_forget, policy="ALL")
-    model.recover_old_params()
-    model.print_summary(task_to_forget, one_step_neurons)
-    model.draw_chart_summary(task_to_forget, one_step_neurons,
-                             file_prefix="task{}_step{}".format(task_to_forget, one_step_neurons))
+    policies_for_expr = ["LIN", "EIN", "RANDOM", "ALL"]
+    experiment_forget(model, FLAGS, policies_for_expr)
