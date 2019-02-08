@@ -32,7 +32,7 @@ flags.DEFINE_integer("steps_to_forget", 25, 'Total number of steps in forgetting
 
 MODE = "TEST"
 if MODE == "TEST":
-    flags.FLAGS.max_iter = 80
+    flags.FLAGS.max_iter = 90
     flags.FLAGS.n_tasks = 2
     flags.FLAGS.task_to_forget = 1
     flags.FLAGS.steps_to_forget = 2
@@ -58,15 +58,26 @@ def experiment_forget(afn: AFN.AFN, flags, policies):
                            file_prefix="task{}_step{}".format(flags.task_to_forget, flags.one_step_neurons))
 
 
+def experiment_forget_and_retrain(afn: AFN.AFN, flags, policies):
+    for policy in policies:
+        afn.sequentially_adaptive_forget_and_predict(
+            flags.task_to_forget, flags.one_step_neurons, flags.steps_to_forget,
+            policy=policy,
+        )
+        afn.retrain_after_forgetting(flags)
+        afn.recover_old_params()
+
+
 if __name__ == '__main__':
 
     mnist_data, train_xs, val_xs, test_xs = get_data(FLAGS.n_tasks)
     model = AFN.AFN(FLAGS)
     model.add_dataset(mnist_data, train_xs, val_xs, test_xs)
-    model.train_den(FLAGS)
-    model.get_importance_matrix()
 
-    print(model.predict_only_after_training())
+    if not model.restore():
+        model.train_den(FLAGS)
+        model.get_importance_matrix()
+        model.save()
 
     policies_for_expr = ["LIN", "EIN", "RANDOM", "ALL"]
-    experiment_forget(model, FLAGS, policies_for_expr)
+    experiment_forget_and_retrain(model, FLAGS, policies_for_expr)

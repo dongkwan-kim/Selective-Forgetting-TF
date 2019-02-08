@@ -1,12 +1,16 @@
+import collections
 from collections import defaultdict
 from typing import Dict, List
+import os
+import pickle
+from pprint import pprint
 
 import tensorflow as tf
 import numpy as np
-
-from pprint import pprint
+from termcolor import cprint
 
 from DEN.DEN import DEN
+from DEN.utils import print_all_vars, print_ckpt_vars
 from MatplotlibUtil import build_line_of_list
 from importanceUtil import *
 
@@ -15,6 +19,7 @@ class AFN(DEN):
 
     def __init__(self, den_config):
         super().__init__(den_config)
+        self.n_tasks = den_config.n_tasks
         self.afn_params = {}
         self.batch_idx = 0
         self.mnist, self.trainXs, self.valXs, self.testXs = None, None, None, None
@@ -22,6 +27,85 @@ class AFN(DEN):
         self.old_params_list = []
         self.prediction_history: Dict[str, List] = defaultdict(list)
         self.layer_to_removed_neuron_set: Dict[str, set] = defaultdict(set)
+
+        self.attr_to_save = [
+            "importance_matrix_tuple",
+            "old_params_list",
+            "layer_to_removed_neuron_set",
+            "time_stamp",
+            "n_tasks",
+            "T",
+        ]
+
+    def __repr__(self):
+        return "{}_{}_{}".format(self.__class__.__name__, self.n_tasks, "_".join(map(str, self.dims)))
+
+    def save(self, model_name=None):
+        model_name = model_name or str(self)
+        model_path = os.path.join(self.checkpoint_dir, "{}.ckpt".format(model_name))
+
+        # Model Save
+        saver = tf.train.Saver()
+        saver.save(self.sess, model_path)
+        print_all_vars("Saved: {}".format(model_path), "blue")
+
+        # Attribute Save
+        self.save_attr(model_name)
+
+    def save_attr(self, model_name=None, attr=None):
+        model_name = model_name or str(self)
+        attr_path = os.path.join(self.checkpoint_dir, "{}_attr.pkl".format(model_name))
+        attr = attr or self.attr_to_save
+        with open(attr_path, "wb") as f:
+            pickle.dump({k: self.__dict__[k] for k in attr}, f)
+        cprint("Saved: attribute of {}".format(model_name), "blue")
+        for a in attr:
+            print("\t - {}".format(a))
+
+    def restore(self, model_name=None):
+        model_name = model_name or str(self)
+        model_path = os.path.join(self.checkpoint_dir, "{}.ckpt".format(model_name))
+
+        if not os.path.isfile("{}.meta".format(model_path)):
+            return False
+
+        try:
+            # Attribute Restore
+            self.restore_attr(model_name)
+
+            # Model Restore
+            tf.reset_default_graph()
+
+            last_task_dims = self.time_stamp["task{}".format(self.n_tasks)]
+            for i in range(self.n_layers - 1):
+                self.create_variable('layer%d' % (i + 1), 'weight', [last_task_dims[i], last_task_dims[i + 1]])
+                self.create_variable('layer%d' % (i + 1), 'biases', [last_task_dims[i + 1]])
+
+            for task_id in range(1, self.n_tasks + 1):
+                self.create_variable('layer%d' % self.n_layers, 'weight_%d' % task_id,
+                                     [last_task_dims[-2], self.n_classes], True)
+                self.create_variable('layer%d' % self.n_layers, 'biases_%d' % task_id, [self.n_classes], True)
+
+            self.sess = tf.Session()
+            self.sess.run(tf.global_variables_initializer())
+            saver = tf.train.Saver()
+            saver.restore(self.sess, tf.train.latest_checkpoint("./checkpoints/"))
+            print_all_vars("Restored: {}".format(model_path), "blue")
+            return True
+
+        except Exception as e:
+            print("Restore Failed: {}".format(model_path), str(e))
+            return False
+
+    def restore_attr(self, model_name=None):
+        model_name = model_name or str(self)
+        attr_path = os.path.join(self.checkpoint_dir, "{}_attr.pkl".format(model_name))
+        with open(attr_path, "rb") as f:
+            attr_dict: dict = pickle.load(f)
+            self.__dict__.update(attr_dict)
+        cprint("Restored: attribute of {}".format(model_name), "blue")
+        for a in attr_dict.keys():
+            print("\t - {}".format(a))
 
     def add_dataset(self, mnist, trainXs, valXs, testXs):
         self.mnist, self.trainXs, self.valXs, self.testXs = mnist, trainXs, valXs, testXs
@@ -46,14 +130,32 @@ class AFN(DEN):
             w = self.afn_get_variable(scope, name, trainable)
         return w
 
-    def afn_get_weight_and_bias_at_task(self, layer_id: int, stamp, task_id: int, var_prefix: str, is_bottom=False):
+    def afn_get_weight_and_bias_at_task(self, layer_id: int, stamp: list, task_id: int, var_prefix: str,
+                                        is_bottom=False, is_forgotten=False):
 
         w_key, b_key = ("weight", "biases") if not is_bottom else ("weight_%d" % task_id, "biases_%d" % task_id)
+        layer_key = "layer%d" % layer_id
 
-        w = self.get_variable('layer%d' % layer_id, w_key, True)
-        b = self.get_variable('layer%d' % layer_id, b_key, True)
+        w: tf.Variable = self.get_variable(layer_key, w_key, True)
+        b: tf.Variable = self.get_variable(layer_key, b_key, True)
         w = w[:stamp[layer_id - 1], :stamp[layer_id]]
         b = b[:stamp[layer_id]]
+
+        if is_forgotten:
+            assert self.importance_matrix_tuple is not None
+
+            # Remove columns (neurons in the current layer)
+            removed_neurons = [neuron for neuron in self.layer_to_removed_neuron_set[layer_key]
+                               if neuron < stamp[layer_id]]  # layer_to_removed_neuron_set saves neurons on all tasks
+            w: np.ndarray = np.delete(w.eval(session=self.sess), removed_neurons, axis=1)
+            b: np.ndarray = np.delete(b.eval(session=self.sess), removed_neurons)
+
+            # Remove rows (neurons in the previous layer)
+            if layer_id > 1:  # Do not consider 1st layer, that does not have previous layer.
+                prev_layer_key = "layer%d" % (layer_id - 1)
+                removed_neurons_prev = [neuron for neuron in self.layer_to_removed_neuron_set[prev_layer_key]
+                                        if neuron < stamp[layer_id - 1]]
+                w = np.delete(w, removed_neurons_prev, axis=0)
 
         afn_w = self.afn_create_or_get_variable("%s_t%d_layer%d" % (var_prefix, task_id, layer_id), w_key,
                                                 trainable=True, initializer=w)
@@ -96,9 +198,72 @@ class AFN(DEN):
             if t != flags.n_tasks - 1:
                 self.clear()
 
+    def retrain_after_forgetting(self, flags):
+        print("\n RETRAIN AFTER FORGETTING")
+        for t in range(flags.n_tasks):
+            # TODO: Use coreset (data.py)
+            data = (self.trainXs[t], self.mnist.train.labels,
+                    self.valXs[t], self.mnist.validation.labels,
+                    self.testXs[t], self.mnist.test.labels)
+
+            print("\n\n\tTASK %d RE-TRAINING\n" % (t + 1))
+            self._retrain_at_task(t + 1, data, flags)
+
+            # TODO: Map retrained parameter to tensors
+            exit()
+
+    def _retrain_at_task(self, task_id, data, retrain_flags):
+
+        train_xs_t, train_labels_t, val_xs_t, val_labels_t, test_xs_t, test_labels_t = data
+
+        self.sess = tf.Session()
+        self.sess.run(tf.global_variables_initializer())
+
+        X = tf.placeholder(tf.float32, [None, self.dims[0]])
+        Y = tf.placeholder(tf.float32, [None, self.n_classes])
+
+        bottom = X
+        stamp = self.time_stamp['task%d' % task_id]
+        for i in range(1, self.n_layers):
+            afn_w, afn_b = self.afn_get_weight_and_bias_at_task(
+                i, stamp, task_id, "retrain",
+                is_bottom=False, is_forgotten=True)
+            bottom = tf.nn.relu(tf.matmul(bottom, afn_w) + afn_b)
+            print(' [*] task %d, shape of layer %d : %s' % (task_id, i, afn_w.get_shape().as_list()))
+
+        afn_w, afn_b = self.afn_get_weight_and_bias_at_task(
+            self.n_layers, stamp, task_id, "retrain",
+            is_bottom=True, is_forgotten=True)
+        y = tf.matmul(bottom, afn_w) + afn_b
+        yhat = tf.nn.sigmoid(y)
+        loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y))
+
+        train_step = tf.train.GradientDescentOptimizer(self.init_lr).minimize(loss)
+
+        loss_window = collections.deque(maxlen=10)
+        print_iter, old_loss = int(retrain_flags.max_iter / 3), 999
+        self.sess.run(tf.global_variables_initializer())
+        for epoch in range(retrain_flags.max_iter):
+            self.initialize_batch()
+            while True:
+                batch_x, batch_y = self.get_next_batch(train_xs_t, train_labels_t)
+                if len(batch_x) == 0:
+                    break
+                _, loss_val = self.sess.run([train_step, loss], feed_dict={X: batch_x, Y: batch_y})
+
+            val_preds, val_loss_val = self.sess.run([yhat, loss], feed_dict={X: val_xs_t, Y: val_labels_t})
+            loss_window.append(val_loss_val)
+            mean_loss = np.mean(loss_window)
+            val_perf = self.get_performance(val_preds, val_labels_t)
+
+            if epoch == 0 or epoch == retrain_flags.max_iter - 1 or (epoch + 1) % print_iter == 0:
+                print(" [*] iter: %d, val loss: %.4f, val perf: %.4f" % (epoch, val_loss_val, val_perf))
+                if abs(old_loss - mean_loss) < 1e-6:
+                    break
+                old_loss = mean_loss
+
     def predict_only_after_training(self):
         print("\n PREDICT ONLY AFTER TRAINING")
-        self.sess = tf.Session()
         temp_perfs = []
         for t in range(self.T):
             temp_perf = self.predict_perform(t + 1, self.testXs[t], self.mnist.test.labels)
@@ -132,17 +297,17 @@ class AFN(DEN):
 
     def print_history(self, one_step_neuron=1):
         for policy, history in self.prediction_history.items():
-            print("\t".join([policy] + [str(x) for x in range(1, len(history[0])+1)]))
+            print("\t".join([policy] + [str(x) for x in range(1, len(history[0]) + 1)]))
             for i, acc in enumerate(history):
-                print("\t".join([str(i*one_step_neuron)] + [str(x) for x in acc]))
+                print("\t".join([str(i * one_step_neuron)] + [str(x) for x in acc]))
 
     def print_summary(self, task_id, one_step_neuron=1):
         for policy, history in self.prediction_history.items():
-            print("\t".join([policy] + [str(x) for x in range(1, len(history[0])+1)] + ["Acc-{}".format(policy)]))
+            print("\t".join([policy] + [str(x) for x in range(1, len(history[0]) + 1)] + ["Acc-{}".format(policy)]))
             for i, acc in enumerate(history):
                 acc_except_t = np.delete(acc, task_id - 1)
                 mean_acc = np.mean(acc_except_t)
-                print("\t".join([str(i*one_step_neuron)] + [str(x) for x in acc] + [str(mean_acc)]))
+                print("\t".join([str(i * one_step_neuron)] + [str(x) for x in acc] + [str(mean_acc)]))
 
     def draw_chart_summary(self, task_id, one_step_neuron=1, file_prefix=None, file_extension=".png"):
 
@@ -151,15 +316,15 @@ class AFN(DEN):
 
         for policy, history in self.prediction_history.items():
 
-            x_removed_neurons = [i*one_step_neuron for i, acc in enumerate(history)]
+            x_removed_neurons = [i * one_step_neuron for i, acc in enumerate(history)]
             history_txn = np.transpose(history)
-            tasks = [x for x in range(1, self.T+1)]
+            tasks = [x for x in range(1, self.T + 1)]
 
             build_line_of_list(x=x_removed_neurons, y_list=history_txn, label_y_list=tasks,
                                xlabel="Removed Neurons", ylabel="Accuracy", ylim=[0, 1],
                                title="Accuracy by {} Neuron Deletion".format(policy),
                                file_name="{}_{}{}".format(file_prefix, policy, file_extension),
-                               highlight_yi=task_id-1)
+                               highlight_yi=task_id - 1)
 
             history_txn_except_t = np.delete(history_txn, task_id - 1, axis=0)
             history_n_mean_except_t = np.mean(history_txn_except_t, axis=0)
@@ -207,7 +372,7 @@ class AFN(DEN):
         print("\n SEQUENTIALLY ADAPTIVE FORGET {} task-{} from {}, neurons-{}".format(
             policy, task_to_forget, self.T, one_step_neurons * steps))
 
-        for i in range(steps+1):
+        for i in range(steps + 1):
             self.adaptive_forget(task_to_forget, i * one_step_neurons, policy)
             pred = self.predict_only_after_training()
             self.prediction_history[policy].append(pred)
@@ -343,7 +508,7 @@ class AFN(DEN):
         ei = np.zeros(shape=(num_neurons,))
         for j in range(num_neurons):
             if stdev_dot_j[j] != 0:
-                ei[j] = (i_mat[task_id - 1][j] - mean_dot_j[j])/stdev_dot_j[j]
+                ei[j] = (i_mat[task_id - 1][j] - mean_dot_j[j]) / stdev_dot_j[j]
             else:
                 ei[j] = np.inf
 
