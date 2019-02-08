@@ -40,6 +40,8 @@ class AFN(DEN):
     def __repr__(self):
         return "{}_{}_{}".format(self.__class__.__name__, self.n_tasks, "_".join(map(str, self.dims)))
 
+    # Save & Restore
+
     def save(self, model_name=None):
         model_name = model_name or str(self)
         model_path = os.path.join(self.checkpoint_dir, "{}.ckpt".format(model_name))
@@ -73,9 +75,8 @@ class AFN(DEN):
             # Attribute Restore
             self.restore_attr(model_name)
 
-            # Model Restore
+            # Model Reconstruction
             tf.reset_default_graph()
-
             last_task_dims = self.time_stamp["task{}".format(self.n_tasks)]
             for i in range(self.n_layers - 1):
                 self.create_variable('layer%d' % (i + 1), 'weight', [last_task_dims[i], last_task_dims[i + 1]])
@@ -86,6 +87,7 @@ class AFN(DEN):
                                      [last_task_dims[-2], self.n_classes], True)
                 self.create_variable('layer%d' % self.n_layers, 'biases_%d' % task_id, [self.n_classes], True)
 
+            # Model Restore
             self.sess = tf.Session()
             self.sess.run(tf.global_variables_initializer())
             saver = tf.train.Saver()
@@ -110,6 +112,8 @@ class AFN(DEN):
     def add_dataset(self, mnist, trainXs, valXs, testXs):
         self.mnist, self.trainXs, self.valXs, self.testXs = mnist, trainXs, valXs, testXs
 
+    # Variable Manipulation
+
     def afn_create_variable(self, scope, name, shape=None, trainable=True, initializer=None):
         with tf.variable_scope(scope):
             w = tf.get_variable(name, shape, initializer=initializer, trainable=trainable)
@@ -132,6 +136,25 @@ class AFN(DEN):
 
     def afn_get_weight_and_bias_at_task(self, layer_id: int, stamp: list, task_id: int, var_prefix: str,
                                         is_bottom=False, is_forgotten=False):
+        """
+        :param layer_id: id of layer 1 ~
+        :param stamp: time_stamp
+        :param task_id: id of task 1 ~
+        :param var_prefix: variable prefix
+        :param is_bottom: whether it is bottom layer (bottom layer differs by task)
+        :param is_forgotten: whether it is forgotten neural layers (delete rows & col that represent forgotten neurons)
+        :return: tuple of w and b
+
+        e.g. when layer_id == l,
+
+        layer (l-1)th, weight whose shape is (r0, c0), bias whose shape is (b0,)
+        layer (l)th, weight whose shape is (r1, c1), bias whose shape is (b1,)
+        removed_neurons of (l-1)th [...] whose length is n0
+        removed_neurons of (l)th [...] whose length is n1
+
+        return weight whose shape is (r1 - n0, c1 - n1)
+               bias whose shape is (b1 - n1)
+        """
 
         w_key, b_key = ("weight", "biases") if not is_bottom else ("weight_%d" % task_id, "biases_%d" % task_id)
         layer_key = "layer%d" % layer_id
@@ -167,6 +190,8 @@ class AFN(DEN):
         self.destroy_graph()
         self.sess.close()
 
+    # Train DEN: code from github.com/dongkwan-kim/DEN/blob/master/DEN/DEN_run.py
+
     def train_den(self, flags):
         params = dict()
         avg_perf = []
@@ -198,6 +223,8 @@ class AFN(DEN):
             if t != flags.n_tasks - 1:
                 self.clear()
 
+    # Retrain after forgetting
+
     def retrain_after_forgetting(self, flags):
         print("\n RETRAIN AFTER FORGETTING")
         for t in range(flags.n_tasks):
@@ -213,6 +240,9 @@ class AFN(DEN):
             exit()
 
     def _retrain_at_task(self, task_id, data, retrain_flags):
+        """
+        Note that this use afn_get_weight_and_bias_at_task with is_forgotten=True
+        """
 
         train_xs_t, train_labels_t, val_xs_t, val_labels_t, test_xs_t, test_labels_t = data
 
@@ -270,6 +300,8 @@ class AFN(DEN):
             temp_perfs.append(temp_perf)
         return temp_perfs
 
+    # Data batch
+
     def initialize_batch(self):
         self.batch_idx = 0
 
@@ -279,6 +311,8 @@ class AFN(DEN):
         r = x[self.batch_idx:next_idx], y[self.batch_idx:next_idx]
         self.batch_idx = next_idx
         return r
+
+    # Parameter recovery for sequential experiments
 
     def recover_recent_params(self):
         print("\n RECOVER RECENT PARAMS")
@@ -294,6 +328,9 @@ class AFN(DEN):
         self.sess = tf.Session()
         self.load_params(self.params)
         self.sess.run(tf.global_variables_initializer())
+
+    # Data visualization
+    # TODO: use pycm
 
     def print_history(self, one_step_neuron=1):
         for policy, history in self.prediction_history.items():
@@ -340,6 +377,8 @@ class AFN(DEN):
                            title="Mean Accuracy Except Forgetting Task-{}".format(task_id),
                            file_name="{}_MeanAcc{}".format(file_prefix, file_extension))
 
+    # Adaptive forgetting
+
     def adaptive_forget(self, task_to_forget, number_of_neurons, policy):
         assert policy in ["EIN", "LIN", "RANDOM", "ALL"]
 
@@ -380,6 +419,7 @@ class AFN(DEN):
 
     def _remove_neurons(self, scope, indexes: np.ndarray):
         """Zeroing columns of target indexes"""
+        # TODO: remove rows of the next layer
 
         if len(indexes) == 0:
             return
@@ -402,6 +442,8 @@ class AFN(DEN):
 
         self.params[w.name] = w
         self.params[b.name] = b
+
+    # Importance vectors
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
     def get_importance_vector(self, task_id, importance_criteria: str, layer_separate=False):
