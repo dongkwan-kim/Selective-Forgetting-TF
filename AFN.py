@@ -11,8 +11,8 @@ from termcolor import cprint
 
 from DEN.DEN import DEN
 from DEN.utils import print_all_vars, print_ckpt_vars
-from MatplotlibUtil import build_line_of_list
-from importanceUtil import *
+from utils import build_line_of_list
+from importance import *
 
 
 class AFN(DEN):
