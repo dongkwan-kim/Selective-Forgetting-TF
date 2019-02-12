@@ -1,10 +1,7 @@
 # Adaptive-Forgetting
-Adaptive Forgetting for Efficient Continual Learning
+Adaptive Forgetting to Reduce Model Size for Continual Learning
 
-## Reference Codes
-- [DEN, Tensorflow](https://github.com/jaehong-yoon93/DEN)
-- [InfoGAN, Tensorflow](https://github.com/openai/InfoGAN)
-- [Generative Replay, Pytorch](https://github.com/kuc2477/pytorch-deep-generative-replay)
-- [pytorch-generative-model-collections](https://github.com/znxlwm/pytorch-generative-model-collections)
-- [tensorflow-generative-model-collections](https://github.com/hwalsuklee/tensorflow-generative-model-collections)
+## References
+- [Yoon, Jaehong, et al. "Lifelong Learning with Dynamically Expandable Networks." (2018)](https://github.com/jaehong-yoon93/DEN)
+- [Molchanov, Pavlo, et al. "Pruning convolutional neural networks for resource efficient inference." arXiv preprint arXiv:1611.06440 (2016).](https://arxiv.org/abs/1611.06440)
 
