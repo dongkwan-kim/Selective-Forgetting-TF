@@ -1,6 +1,6 @@
 import collections
 from collections import defaultdict
-from typing import Dict, List
+from typing import Dict, List, Callable
 import os
 import pickle
 from pprint import pprint
@@ -11,7 +11,7 @@ from termcolor import cprint
 
 from DEN.DEN import DEN
 from DEN.utils import print_all_vars, print_ckpt_vars
-from utils import build_line_of_list
+from utils import build_line_of_list, get_zero_expanded_matrix, parse_var_name
 from importance import *
 
 
@@ -112,7 +112,7 @@ class AFN(DEN):
     def add_dataset(self, mnist, trainXs, valXs, testXs):
         self.mnist, self.trainXs, self.valXs, self.testXs = mnist, trainXs, valXs, testXs
 
-    # Variable Manipulation
+    # Variable, params, ...attributes Manipulation
 
     def afn_create_variable(self, scope, name, shape=None, trainable=True, initializer=None):
         with tf.variable_scope(scope):
@@ -168,23 +168,33 @@ class AFN(DEN):
             assert self.importance_matrix_tuple is not None
 
             # Remove columns (neurons in the current layer)
-            removed_neurons = [neuron for neuron in self.layer_to_removed_neuron_set[layer_key]
-                               if neuron < stamp[layer_id]]  # layer_to_removed_neuron_set saves neurons on all tasks
+            removed_neurons = self.get_removed_neurons_of_layer(layer_id, stamp)
             w: np.ndarray = np.delete(w.eval(session=self.sess), removed_neurons, axis=1)
             b: np.ndarray = np.delete(b.eval(session=self.sess), removed_neurons)
 
             # Remove rows (neurons in the previous layer)
             if layer_id > 1:  # Do not consider 1st layer, that does not have previous layer.
-                prev_layer_key = "layer%d" % (layer_id - 1)
-                removed_neurons_prev = [neuron for neuron in self.layer_to_removed_neuron_set[prev_layer_key]
-                                        if neuron < stamp[layer_id - 1]]
+                removed_neurons_prev = self.get_removed_neurons_of_layer(layer_id - 1, stamp)
                 w = np.delete(w, removed_neurons_prev, axis=0)
 
         afn_w = self.afn_create_or_get_variable("%s_t%d_layer%d" % (var_prefix, task_id, layer_id), w_key,
                                                 trainable=True, initializer=w)
-        afn_b = self.afn_create_or_get_variable("%s_%d_layer%d" % (var_prefix, task_id, layer_id), b_key,
+        afn_b = self.afn_create_or_get_variable("%s_t%d_layer%d" % (var_prefix, task_id, layer_id), b_key,
                                                 trainable=True, initializer=b)
         return afn_w, afn_b
+
+    def afn_get_params(self, name_filter: Callable = None):
+        """ Access the afn_parameters """
+        mdict = dict()
+        for scope_name, param in self.afn_params.items():
+            if name_filter is None or name_filter(scope_name):
+                w = self.sess.run(param)
+                mdict[scope_name] = w
+        return mdict
+
+    def get_removed_neurons_of_layer(self, layer_id, stamp=None) -> list:
+        return [neuron for neuron in self.layer_to_removed_neuron_set["layer%d" % layer_id]
+                if stamp is None or neuron < stamp[layer_id]]
 
     def clear(self):
         self.destroy_graph()
@@ -226,18 +236,27 @@ class AFN(DEN):
     # Retrain after forgetting
 
     def retrain_after_forgetting(self, flags):
-        print("\n RETRAIN AFTER FORGETTING")
+        cprint("\n RETRAIN AFTER FORGETTING", "green")
         for t in range(flags.n_tasks):
-            # TODO: Use coreset (data.py)
-            data = (self.trainXs[t], self.mnist.train.labels,
-                    self.valXs[t], self.mnist.validation.labels,
-                    self.testXs[t], self.mnist.test.labels)
 
-            print("\n\n\tTASK %d RE-TRAINING\n" % (t + 1))
-            self._retrain_at_task(t + 1, data, flags)
+            if (t + 1) != flags.task_to_forget:
+                # TODO: Use coreset (data.py)
+                data = (self.trainXs[t], self.mnist.train.labels,
+                        self.valXs[t], self.mnist.validation.labels,
+                        self.testXs[t], self.mnist.test.labels)
 
-            # TODO: Map retrained parameter to tensors
-            exit()
+                cprint("\n\n\tTASK %d RE-TRAINING\n" % (t + 1), "green")
+                self._retrain_at_task(t + 1, data, flags)
+                self._assign_retrained_value_to_tensor(t + 1)
+
+            else:
+                print("\n\n\tTASK %d NO NEED TO RE-TRAINING" % (t + 1))
+
+        params = self.get_params()
+        self.clear()
+        self.sess = tf.Session()
+        self.load_params(params)
+        self.predict_only_after_training()
 
     def _retrain_at_task(self, task_id, data, retrain_flags):
         """
@@ -292,8 +311,44 @@ class AFN(DEN):
                     break
                 old_loss = mean_loss
 
+    def _assign_retrained_value_to_tensor(self, task_id):
+
+        stamp = self.time_stamp['task%d' % task_id]
+
+        # Get retrained values.
+        retrained_values_dict = self.afn_get_params(name_filter=lambda n: "t{}".format(task_id) in n)
+
+        # get_zero_expanded_matrix.
+        for name, retrained_value in list(retrained_values_dict.items()):
+            prefix, _, layer_id, var_type = parse_var_name(name)
+            removed_neurons = self.get_removed_neurons_of_layer(layer_id, stamp)
+
+            # Expand columns
+            retrained_value = get_zero_expanded_matrix(retrained_value, removed_neurons, add_rows=False)
+
+            # Expand rows
+            if layer_id > 1 and "weight" in var_type:
+                removed_neurons_prev = self.get_removed_neurons_of_layer(layer_id - 1, stamp)
+                retrained_value = get_zero_expanded_matrix(retrained_value, removed_neurons_prev, add_rows=True)
+
+            retrained_values_dict[name] = retrained_value
+
+        # Assign values to tensors from DEN.
+        for name, retrained_value in retrained_values_dict.items():
+            prefix, _, layer_id, var_type = parse_var_name(name)
+            name_den = "layer{}/{}:0".format(layer_id, var_type)
+            tensor_den = self.params[name_den]
+            value_den = tensor_den.eval(session=self.sess)
+
+            if "weight" in var_type:
+                value_den[:stamp[layer_id - 1], :stamp[layer_id]] = retrained_value
+            else:
+                value_den[:stamp[layer_id]] = retrained_value
+
+            self.sess.run(tf.assign(tensor_den, value_den))
+
     def predict_only_after_training(self):
-        print("\n PREDICT ONLY AFTER TRAINING")
+        cprint("\n PREDICT ONLY AFTER TRAINING", "yellow")
         temp_perfs = []
         for t in range(self.T):
             temp_perf = self.predict_perform(t + 1, self.testXs[t], self.mnist.test.labels)
@@ -312,7 +367,11 @@ class AFN(DEN):
         self.batch_idx = next_idx
         return r
 
-    # Parameter recovery for sequential experiments
+    # Utils for sequential experiments
+
+    def clear_experiments(self):
+        self.layer_to_removed_neuron_set = defaultdict(set)
+        self.recover_old_params()
 
     def recover_recent_params(self):
         print("\n RECOVER RECENT PARAMS")
@@ -382,8 +441,8 @@ class AFN(DEN):
     def adaptive_forget(self, task_to_forget, number_of_neurons, policy):
         assert policy in ["EIN", "LIN", "RANDOM", "ALL"]
 
-        print("\n ADAPTIVE FORGET {} task-{} from {}, neurons-{}".format(
-            policy, task_to_forget, self.T, number_of_neurons))
+        cprint("\n ADAPTIVE FORGET {} task-{} from {}, neurons-{}".format(
+            policy, task_to_forget, self.T, number_of_neurons), "green")
 
         self.old_params_list.append(self.get_params())
 
@@ -408,8 +467,8 @@ class AFN(DEN):
 
     def sequentially_adaptive_forget_and_predict(self, task_to_forget, one_step_neurons, steps, policy):
 
-        print("\n SEQUENTIALLY ADAPTIVE FORGET {} task-{} from {}, neurons-{}".format(
-            policy, task_to_forget, self.T, one_step_neurons * steps))
+        cprint("\n SEQUENTIALLY ADAPTIVE FORGET {} task-{} from {}, neurons-{}".format(
+            policy, task_to_forget, self.T, one_step_neurons * steps), "green")
 
         for i in range(steps + 1):
             self.adaptive_forget(task_to_forget, i * one_step_neurons, policy)

@@ -1,6 +1,74 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import re
 
+
+def parse_var_name(var_name):
+    p = re.compile("(.+)_t(\d)_layer(\d)/(.+):0")
+    return [x if not x.isnumeric() else int(x) for x in p.findall(var_name)[0]]
+
+
+# Matrix utils
+
+def get_zero_expanded_matrix(base_matrix: np.ndarray, indexes_to_zero, add_rows=False):
+    """
+    :param base_matrix: np.ndarray (n, m)
+    :param indexes_to_zero: np.ndarray or list of int (size k)
+    :param add_rows: position to add zeros: row or column
+    :return: np.ndarray (n + k, m) is_row=True or (n, m + k) is_row=False
+
+    e.g.
+
+    >>> get_zero_expanded_matrix(
+        np.asarray([[1, 2],
+                    [3, 4]]),
+        [0, 2, 3],
+        add_rows=True,
+    )
+    [[0 0]
+    [1 2]
+    [0 0]
+    [0 0]
+    [3 4]]
+
+    >>> get_zero_expanded_matrix(
+        np.asarray([[1, 2],
+                    [3, 4]]),
+        [0, 2, 3],
+        add_rows=False,
+    )
+    [[0 1 0 0 2]
+     [0 3 0 0 4]]
+    """
+
+    if len(base_matrix.shape) == 1:
+        base_matrix = np.asarray([base_matrix])
+        was_1d = True
+    else:
+        was_1d = False
+
+    base_shape = base_matrix.shape
+    rowwise_ret_shape = (base_shape[0] + len(indexes_to_zero), base_shape[1]) if add_rows else \
+                        (base_shape[1] + len(indexes_to_zero), base_shape[0])
+
+    rowwise_base_list = list(base_matrix) if add_rows else list(np.transpose(base_matrix))
+    zero_expanded_list = []
+    for i in range(rowwise_ret_shape[0]):
+        if i not in indexes_to_zero:
+            zero_expanded_list.append(rowwise_base_list.pop(0))
+        else:
+            zero_expanded_list.append([0 for _ in range(rowwise_ret_shape[1])])
+
+    zero_expanded_matrix = np.asarray(zero_expanded_list)
+    zero_expanded_matrix = zero_expanded_matrix if add_rows else np.transpose(zero_expanded_matrix)
+
+    if was_1d:
+        return zero_expanded_matrix.squeeze()
+    else:
+        return zero_expanded_matrix
+
+
+# Matplotlib utils
 
 def build_bar(x, y, ylabel, title, draw_xticks=False, **kwargs):
     y_pos = np.arange(len(x))

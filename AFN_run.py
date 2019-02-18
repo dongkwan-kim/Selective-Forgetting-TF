@@ -32,10 +32,10 @@ flags.DEFINE_integer("steps_to_forget", 25, 'Total number of steps in forgetting
 
 MODE = "TEST"
 if MODE == "TEST":
-    flags.FLAGS.max_iter = 90
+    flags.FLAGS.max_iter = 30
     flags.FLAGS.n_tasks = 2
     flags.FLAGS.task_to_forget = 1
-    flags.FLAGS.steps_to_forget = 2
+    flags.FLAGS.steps_to_forget = 6
 elif MODE == "SMALL":
     flags.FLAGS.max_iter = 200
     flags.FLAGS.n_tasks = 3
@@ -65,7 +65,7 @@ def experiment_forget_and_retrain(afn: AFN.AFN, flags, policies):
             policy=policy,
         )
         afn.retrain_after_forgetting(flags)
-        afn.recover_old_params()
+        afn.clear_experiments()
 
 
 if __name__ == '__main__':
