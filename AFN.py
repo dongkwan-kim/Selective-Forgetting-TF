@@ -12,7 +12,7 @@ from termcolor import cprint
 from DEN.DEN import DEN
 from DEN.utils import print_all_vars, print_ckpt_vars
 from utils import build_line_of_list, get_zero_expanded_matrix, parse_var_name
-from importance import *
+from utils_importance import *
 
 
 class AFN(DEN):
@@ -547,8 +547,8 @@ class AFN(DEN):
 
             # shape = batch_size * |h|
             if importance_criteria == "first_Taylor_approximation":
-                batch_importance_vector_1 = np.absolute(hidden_1 * gradient_1)[0]
-                batch_importance_vector_2 = np.absolute(hidden_2 * gradient_2)[0]
+                batch_importance_vector_1 = get_gradient_times_activation(hidden_1, gradient_1)
+                batch_importance_vector_2 = get_gradient_times_activation(hidden_2, gradient_2)
             else:
                 raise NotImplementedError
 
