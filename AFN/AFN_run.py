@@ -30,7 +30,7 @@ flags.DEFINE_integer("steps_to_forget", 25, 'Total number of steps in forgetting
 
 MODE = "TEST"
 if MODE == "TEST":
-    flags.FLAGS.max_iter = 30
+    flags.FLAGS.max_iter = 90
     flags.FLAGS.n_tasks = 2
     flags.FLAGS.task_to_forget = 1
     flags.FLAGS.steps_to_forget = 6
@@ -56,19 +56,21 @@ def experiment_forget(afn: AFN.AFN, flags, policies):
                            file_prefix="task{}_step{}".format(flags.task_to_forget, flags.one_step_neurons))
 
 
-def experiment_forget_and_retrain(afn: AFN.AFN, flags, policies):
+def experiment_forget_and_retrain(afn: AFN.AFN, flags, policies, coreset=None):
     for policy in policies:
         afn.sequentially_adaptive_forget_and_predict(
             flags.task_to_forget, flags.one_step_neurons, flags.steps_to_forget,
             policy=policy,
         )
-        afn.retrain_after_forgetting(flags)
+        afn.retrain_after_forgetting(flags, coreset)
         afn.clear_experiments()
 
 
 if __name__ == '__main__':
 
-    mnist_data, train_xs, val_xs, test_xs = get_data(FLAGS.n_tasks)
+    mnist_data, train_xs, val_xs, test_xs = get_data_of_multiple_tasks(FLAGS.n_tasks)
+    mnist_coreset = MNISTCoreset(mnist_data, train_xs, val_xs, test_xs, sampling_ratio=[0.2, 1.0, 1.0])
+
     model = AFN.AFN(FLAGS)
     model.add_dataset(mnist_data, train_xs, val_xs, test_xs)
 
@@ -78,4 +80,4 @@ if __name__ == '__main__':
         model.save()
 
     policies_for_expr = ["LIN", "EIN", "RANDOM", "ALL"]
-    experiment_forget_and_retrain(model, FLAGS, policies_for_expr)
+    experiment_forget_and_retrain(model, FLAGS, policies_for_expr, mnist_coreset)

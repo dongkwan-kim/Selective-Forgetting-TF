@@ -8,6 +8,8 @@ from termcolor import cprint
 
 from DEN.DEN import DEN
 from DEN.utils import print_all_vars
+
+from data import MNISTCoreset
 from utils import build_line_of_list, get_zero_expanded_matrix, parse_var_name
 from utils_importance import *
 
@@ -232,18 +234,17 @@ class AFN(DEN):
 
     # Retrain after forgetting
 
-    def retrain_after_forgetting(self, flags):
+    def retrain_after_forgetting(self, flags, coreset: MNISTCoreset = None):
         cprint("\n RETRAIN AFTER FORGETTING", "green")
         for t in range(flags.n_tasks):
 
             if (t + 1) != flags.task_to_forget:
-                # TODO: Use coreset (data.py)
-                data = (self.trainXs[t], self.mnist.train.labels,
-                        self.valXs[t], self.mnist.validation.labels,
-                        self.testXs[t], self.mnist.test.labels)
+                coreset = coreset[t] or (self.trainXs[t], self.mnist.train.labels,
+                                         self.valXs[t], self.mnist.validation.labels,
+                                         self.testXs[t], self.mnist.test.labels)
 
                 cprint("\n\n\tTASK %d RE-TRAINING\n" % (t + 1), "green")
-                self._retrain_at_task(t + 1, data, flags)
+                self._retrain_at_task(t + 1, coreset, flags)
                 self._assign_retrained_value_to_tensor(t + 1)
 
             else:
