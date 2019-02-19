@@ -3,14 +3,11 @@ from collections import defaultdict
 from typing import Dict, List, Callable
 import os
 import pickle
-from pprint import pprint
 
-import tensorflow as tf
-import numpy as np
 from termcolor import cprint
 
 from DEN.DEN import DEN
-from DEN.utils import print_all_vars, print_ckpt_vars
+from DEN.utils import print_all_vars
 from utils import build_line_of_list, get_zero_expanded_matrix, parse_var_name
 from utils_importance import *
 

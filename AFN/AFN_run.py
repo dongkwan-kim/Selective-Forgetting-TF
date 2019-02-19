@@ -1,8 +1,6 @@
 import tensorflow as tf
-from pprint import pprint
 
 import AFN
-from utils import *
 from data import *
 
 np.random.seed(1004)
