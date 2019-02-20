@@ -28,17 +28,19 @@ flags.DEFINE_integer("task_to_forget", 6, 'Task to forget')
 flags.DEFINE_integer("one_step_neurons", 5, 'Number of neurons to forget in one step')
 flags.DEFINE_integer("steps_to_forget", 25, 'Total number of steps in forgetting')
 
-MODE = "TEST"
+MODE = "SMALL"
 if MODE == "TEST":
     flags.FLAGS.max_iter = 90
     flags.FLAGS.n_tasks = 2
     flags.FLAGS.task_to_forget = 1
     flags.FLAGS.steps_to_forget = 6
+    flags.FLAGS.checkpoint_dir = "./checkpoints/test"
 elif MODE == "SMALL":
     flags.FLAGS.max_iter = 200
     flags.FLAGS.n_tasks = 3
     flags.FLAGS.task_to_forget = 2
-    flags.FLAGS.steps_to_forget = 10
+    flags.FLAGS.steps_to_forget = 15
+    flags.FLAGS.checkpoint_dir = "./checkpoints/small"
 
 FLAGS = flags.FLAGS
 

@@ -90,7 +90,7 @@ class AFN(DEN):
             self.sess = tf.Session()
             self.sess.run(tf.global_variables_initializer())
             saver = tf.train.Saver()
-            saver.restore(self.sess, tf.train.latest_checkpoint("./checkpoints/"))
+            saver.restore(self.sess, tf.train.latest_checkpoint(self.checkpoint_dir))
             print_all_vars("Restored: {}".format(model_path), "blue")
             return True
 
@@ -239,12 +239,12 @@ class AFN(DEN):
         for t in range(flags.n_tasks):
 
             if (t + 1) != flags.task_to_forget:
-                coreset = coreset[t] or (self.trainXs[t], self.mnist.train.labels,
-                                         self.valXs[t], self.mnist.validation.labels,
-                                         self.testXs[t], self.mnist.test.labels)
+                coreset_t = coreset[t] if coreset is not None else (self.trainXs[t], self.mnist.train.labels,
+                                                                    self.valXs[t], self.mnist.validation.labels,
+                                                                    self.testXs[t], self.mnist.test.labels)
 
                 cprint("\n\n\tTASK %d RE-TRAINING\n" % (t + 1), "green")
-                self._retrain_at_task(t + 1, coreset, flags)
+                self._retrain_at_task(t + 1, coreset_t, flags)
                 self._assign_retrained_value_to_tensor(t + 1)
 
             else:
