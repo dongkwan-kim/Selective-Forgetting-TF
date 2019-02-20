@@ -27,6 +27,8 @@ class AFN(DEN):
         self.prediction_history: Dict[str, List] = defaultdict(list)
         self.layer_to_removed_neuron_set: Dict[str, set] = defaultdict(set)
 
+        self.retrained = False
+
         self.attr_to_save = [
             "importance_matrix_tuple",
             "old_params_list",
@@ -234,8 +236,10 @@ class AFN(DEN):
 
     # Retrain after forgetting
 
-    def retrain_after_forgetting(self, flags, coreset: MNISTCoreset = None):
-        cprint("\n RETRAIN AFTER FORGETTING", "green")
+    def retrain_after_forgetting(self, flags, policy, coreset: MNISTCoreset = None):
+        cprint("\n RETRAIN AFTER FORGETTING - {}".format(policy), "green")
+        self.retrained = True
+
         for t in range(flags.n_tasks):
 
             if (t + 1) != flags.task_to_forget:
@@ -247,14 +251,14 @@ class AFN(DEN):
                 self._retrain_at_task(t + 1, coreset_t, flags)
                 self._assign_retrained_value_to_tensor(t + 1)
 
-            else:
-                print("\n\n\tTASK %d NO NEED TO RE-TRAINING" % (t + 1))
+                params = self.get_params()
+                self.clear()
+                self.sess = tf.Session()
+                self.load_params(params)
+                self.predict_only_after_training()
 
-        params = self.get_params()
-        self.clear()
-        self.sess = tf.Session()
-        self.load_params(params)
-        self.predict_only_after_training()
+            else:
+                cprint("\n\n\tTASK %d NO NEED TO RE-TRAINING" % (t + 1), "green")
 
     def _retrain_at_task(self, task_id, data, retrain_flags):
         """
@@ -314,7 +318,7 @@ class AFN(DEN):
         stamp = self.time_stamp['task%d' % task_id]
 
         # Get retrained values.
-        retrained_values_dict = self.afn_get_params(name_filter=lambda n: "t{}".format(task_id) in n)
+        retrained_values_dict = self.afn_get_params(name_filter=lambda n: "t{}".format(task_id) in n and "retrain" in n)
 
         # get_zero_expanded_matrix.
         for name, retrained_value in list(retrained_values_dict.items()):
@@ -346,12 +350,26 @@ class AFN(DEN):
             self.sess.run(tf.assign(tensor_den, value_den))
 
     def predict_only_after_training(self):
-        cprint("\n PREDICT ONLY AFTER TRAINING", "yellow")
+        cprint("\n PREDICT ONLY AFTER " + ("TRAINING" if not self.retrained else "RE-TRAINING"), "yellow")
         temp_perfs = []
         for t in range(self.T):
             temp_perf = self.predict_perform(t + 1, self.testXs[t], self.mnist.test.labels)
             temp_perfs.append(temp_perf)
         return temp_perfs
+
+    def get_shape(self, obj_w_shape, task_id, layer_id):
+        """Override original get_shape"""
+        if not self.retrained:
+            return super().get_shape(obj_w_shape, task_id, layer_id)
+        else:
+            original_shape = super().get_shape(obj_w_shape, task_id, layer_id)
+            stamp = self.time_stamp['task%d' % task_id]
+            removed_neurons = self.get_removed_neurons_of_layer(layer_id, stamp)
+            original_shape[1] -= len(removed_neurons)
+            if layer_id > 1:
+                removed_neurons_prev = self.get_removed_neurons_of_layer(layer_id - 1, stamp)
+                original_shape[0] -= len(removed_neurons_prev)
+            return original_shape
 
     # Data batch
 
@@ -472,16 +490,17 @@ class AFN(DEN):
             self.adaptive_forget(task_to_forget, i * one_step_neurons, policy)
             pred = self.predict_only_after_training()
             self.prediction_history[policy].append(pred)
-            self.recover_recent_params()
+
+            if i != steps:
+                self.recover_recent_params()
 
     def _remove_neurons(self, scope, indexes: np.ndarray):
         """Zeroing columns of target indexes"""
-        # TODO: remove rows of the next layer
 
         if len(indexes) == 0:
             return
 
-        print("\n REMOVE NEURONS {} - {}".format(scope, indexes))
+        print("\n REMOVE NEURONS {} ({}) - {}".format(scope, len(indexes), indexes))
         self.layer_to_removed_neuron_set[scope].update(set(indexes))
 
         w: tf.Variable = self.get_variable(scope, "weight", False)

@@ -37,9 +37,9 @@ if MODE == "TEST":
     flags.FLAGS.checkpoint_dir = "./checkpoints/test"
 elif MODE == "SMALL":
     flags.FLAGS.max_iter = 200
-    flags.FLAGS.n_tasks = 3
+    flags.FLAGS.n_tasks = 4
     flags.FLAGS.task_to_forget = 2
-    flags.FLAGS.steps_to_forget = 15
+    flags.FLAGS.steps_to_forget = 14
     flags.FLAGS.checkpoint_dir = "./checkpoints/small"
 
 FLAGS = flags.FLAGS
@@ -64,7 +64,7 @@ def experiment_forget_and_retrain(afn: AFN.AFN, flags, policies, coreset=None):
             flags.task_to_forget, flags.one_step_neurons, flags.steps_to_forget,
             policy=policy,
         )
-        afn.retrain_after_forgetting(flags, coreset)
+        afn.retrain_after_forgetting(flags, policy, coreset)
         afn.clear_experiments()
 
 
