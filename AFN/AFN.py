@@ -3,6 +3,7 @@ from collections import defaultdict
 from typing import Dict, List, Callable
 import os
 import pickle
+from pprint import pprint
 
 from termcolor import cprint
 
@@ -12,6 +13,8 @@ from DEN.utils import print_all_vars
 from data import MNISTCoreset
 from utils import build_line_of_list, get_zero_expanded_matrix, parse_var_name
 from utils_importance import *
+from AFNBO import plot_gp
+from bayes_opt import BayesianOptimization
 
 
 class AFN(DEN):
@@ -671,3 +674,46 @@ class AFN(DEN):
 
         divider = self.importance_matrix_tuple[0].shape[-1]
         return selected[selected < divider], (selected[selected >= divider] - divider)
+
+    def optimize_number_of_neurons(self, task_to_forget, policy, seed=42,
+                                   init_points=5, n_iter=5, lmda=0.25, plot_optim_result=True):
+
+        time_stamp = self.time_stamp["task{}".format(task_to_forget)]
+        num_candidates_to_remove = sum(time_stamp[1:3])
+
+        cprint("\n OPTIMIZE NUMBER OF NEURONS {} task-{} from {}".format(policy, task_to_forget, self.T), "green")
+
+        # max f(n) = - err(n) + λ * sparsity(n)
+        def get_perf_after_remove_n_neurons(x):
+
+            n = int(x)
+
+            self.adaptive_forget(task_to_forget, n, policy)
+            preds = self.predict_only_after_training()
+            errs = [1 - p for p in preds]
+
+            # Mean error of tasks excl. the task to forget.
+            mean_err_wo_task_to_forget = sum(e for i, e in enumerate(errs) if i != task_to_forget - 1)
+
+            # sparsity = num of removed neurons / num of total neurons
+            sparsity = n / num_candidates_to_remove
+
+            self.recover_recent_params()
+
+            return - mean_err_wo_task_to_forget + lmda * sparsity
+
+        bounds = {'x': (1, num_candidates_to_remove)}
+
+        bayes_optimizer = BayesianOptimization(
+            f=get_perf_after_remove_n_neurons,
+            pbounds=bounds,
+            random_state=seed,
+        )
+        bayes_optimizer.maximize(init_points=init_points, n_iter=n_iter, kappa=5)
+
+        if plot_optim_result:
+            plot_gp(bayes_optimizer, bounds['x'], title="{} Bayes Opt. (λ = {})".format(policy, lmda))
+
+        optimal_n = int(bayes_optimizer.max["params"]["x"])
+
+        return optimal_n

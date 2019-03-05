@@ -1,6 +1,15 @@
+from copy import deepcopy
+
 import matplotlib.pyplot as plt
 import numpy as np
 import re
+
+
+def sum_set(s: set, *args):
+    s = deepcopy(s)
+    for _s in args:
+        s.update(_s)
+    return s
 
 
 def parse_var_name(var_name):
