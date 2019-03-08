@@ -28,14 +28,14 @@ flags.DEFINE_integer("task_to_forget", 6, 'Task to forget')
 flags.DEFINE_integer("one_step_neurons", 5, 'Number of neurons to forget in one step')
 flags.DEFINE_integer("steps_to_forget", 25, 'Total number of steps in forgetting')
 
-MODE = "SMALL"
-if MODE == "TEST":
+MODE = "SMALL_BO"
+if MODE.startswith("TEST"):
     flags.FLAGS.max_iter = 90
     flags.FLAGS.n_tasks = 2
     flags.FLAGS.task_to_forget = 1
     flags.FLAGS.steps_to_forget = 6
     flags.FLAGS.checkpoint_dir = "./checkpoints/test"
-elif MODE == "SMALL":
+elif MODE.startswith("SMALL"):
     flags.FLAGS.max_iter = 200
     flags.FLAGS.n_tasks = 4
     flags.FLAGS.task_to_forget = 2
@@ -68,6 +68,20 @@ def experiment_forget_and_retrain(afn: AFN.AFN, flags, policies, coreset=None):
         afn.clear_experiments()
 
 
+def experiment_bayesian_optimization(afn: AFN.AFN, flags, policies, coreset=None, retraining=True, **kwargs):
+    for policy in policies:
+        optimal_number_of_neurons = afn.optimize_number_of_neurons(
+            flags.task_to_forget, policy, **kwargs,
+        )
+        afn.sequentially_adaptive_forget_and_predict(
+            flags.task_to_forget, optimal_number_of_neurons, 1,
+            policy=policy,
+        )
+        if retraining:
+            afn.retrain_after_forgetting(flags, policy, coreset)
+        afn.clear_experiments()
+
+
 if __name__ == '__main__':
 
     mnist_data, train_xs, val_xs, test_xs = get_data_of_multiple_tasks(FLAGS.n_tasks)
@@ -82,4 +96,10 @@ if __name__ == '__main__':
         model.save()
 
     policies_for_expr = ["LIN", "EIN", "RANDOM", "ALL"]
-    experiment_forget_and_retrain(model, FLAGS, policies_for_expr, mnist_coreset)
+
+    if MODE.endswith("FORGET"):
+        experiment_forget(model, flags, policies_for_expr)
+    elif MODE.endswith("RETRAIN"):
+        experiment_forget_and_retrain(model, FLAGS, policies_for_expr, mnist_coreset)
+    elif MODE.endswith("BO"):
+        experiment_bayesian_optimization(model, FLAGS, policies_for_expr, mnist_coreset)
