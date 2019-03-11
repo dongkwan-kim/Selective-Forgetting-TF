@@ -16,13 +16,16 @@ from utils_importance import *
 
 class AFN(DEN):
 
-    def __init__(self, den_config):
-        super().__init__(den_config)
-        self.n_tasks = den_config.n_tasks
+    def __init__(self, config):
+        super().__init__(config)
+        self.n_tasks = config.n_tasks
         self.afn_params = {}
         self.batch_idx = 0
         self.mnist, self.trainXs, self.valXs, self.testXs = None, None, None, None
+
         self.importance_matrix_tuple = None
+        self.importance_criteria = config.importance_criteria
+
         self.old_params_list = []
         self.prediction_history: Dict[str, List] = defaultdict(list)
         self.layer_to_removed_neuron_set: Dict[str, set] = defaultdict(set)
@@ -31,6 +34,7 @@ class AFN(DEN):
 
         self.attr_to_save = [
             "importance_matrix_tuple",
+            "importance_criteria",
             "old_params_list",
             "layer_to_removed_neuron_set",
             "time_stamp",
@@ -529,12 +533,19 @@ class AFN(DEN):
         Y = tf.placeholder(tf.float32, [None, self.n_classes])
 
         hidden_layer_list = []
+        weight_list = []
+        bias_list = []
+
         bottom = X
         stamp = self.time_stamp['task%d' % task_id]
         for i in range(1, self.n_layers):
             afn_w, afn_b = self.afn_get_weight_and_bias_at_task(i, stamp, task_id, "imp", is_bottom=False)
             bottom = tf.nn.relu(tf.matmul(bottom, afn_w) + afn_b)
+
             hidden_layer_list.append(bottom)
+            weight_list.append(afn_w)
+            bias_list.append(afn_b)
+
             print(' [*] task %d, shape of layer %d : %s' % (task_id, i, afn_w.get_shape().as_list()))
 
         afn_w, afn_b = self.afn_get_weight_and_bias_at_task(self.n_layers, stamp, task_id, "imp", is_bottom=True)
@@ -557,15 +568,29 @@ class AFN(DEN):
             if len(batch_x) == 0:
                 break
 
-            hidden_1, hidden_2, gradient_1, gradient_2 = self.sess.run(
-                hidden_layer_list + gradient_list,
-                feed_dict={X: batch_x, Y: batch_y}
-            )
-
-            # shape = batch_size * |h|
+            # shape = (batch_size, |h|)
             if importance_criteria == "first_Taylor_approximation":
-                batch_importance_vector_1 = get_gradient_times_activation(hidden_1, gradient_1)
-                batch_importance_vector_2 = get_gradient_times_activation(hidden_2, gradient_2)
+                batch_importance_vector_1, batch_importance_vector_2 = get_1st_taylor_approximation_based(self.sess, {
+                    "hidden_layers": hidden_layer_list,
+                    "gradients": gradient_list,
+                }, {X: batch_x, Y: batch_y})
+
+            elif importance_criteria == "activation":
+                batch_importance_vector_1, batch_importance_vector_2 = get_activation_based(self.sess, {
+                    "hidden_layers": hidden_layer_list,
+                }, {X: batch_x, Y: batch_y})
+
+            elif importance_criteria == "magnitude":
+                batch_importance_vector_1, batch_importance_vector_2 = get_magnitude_based(self.sess, {
+                    "weights": weight_list,
+                    "biases": bias_list,
+                }, {X: batch_x, Y: batch_y})
+
+            elif importance_criteria == "gradient":
+                batch_importance_vector_1, batch_importance_vector_2 = get_gradient_based(self.sess, {
+                    "gradients": gradient_list,
+                }, {X: batch_x, Y: batch_y})
+
             else:
                 raise NotImplementedError
 
@@ -581,15 +606,18 @@ class AFN(DEN):
             return np.concatenate((importance_vector_1, importance_vector_2))  # shape = (|h|,)
 
     # shape = (T, |h|) or (T, |h1|), (T, |h2|)
-    def get_importance_matrix(self, layer_separate=False):
+    def get_importance_matrix(self, layer_separate=False, importance_criteria=None):
+
+        assert self.T > 0
 
         importance_matrix_1, importance_matrix_2 = None, None
+        importance_criteria = importance_criteria or self.importance_criteria
 
         for t in reversed(range(1, self.T + 1)):
             iv_1, iv_2 = self.get_importance_vector(
                 task_id=t,
                 layer_separate=True,
-                importance_criteria="first_Taylor_approximation"
+                importance_criteria=importance_criteria,
             )
 
             if t == self.T:
