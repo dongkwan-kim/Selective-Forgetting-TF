@@ -656,10 +656,7 @@ class AFN(DEN):
 
         ei = np.zeros(shape=(num_neurons,))
         for j in range(num_neurons):
-            if stdev_dot_j[j] != 0:
-                ei[j] = (i_mat[task_id - 1][j] - mean_dot_j[j]) / stdev_dot_j[j]
-            else:
-                ei[j] = np.inf
+            ei[j] = (i_mat[task_id - 1][j] - mean_dot_j[j]) / (stdev_dot_j[j] + 1e-7)
 
         ei_desc_sorted_idx = np.argsort(ei)[::-1]
         selected = ei_desc_sorted_idx[:number_to_select]
