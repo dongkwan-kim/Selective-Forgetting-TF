@@ -29,7 +29,7 @@ flags.DEFINE_integer("one_step_neurons", 5, 'Number of neurons to forget in one 
 flags.DEFINE_integer("steps_to_forget", 25, 'Total number of steps in forgetting')
 flags.DEFINE_string("importance_criteria", "first_Taylor_approximation", "Criteria to measure importance of neurons")
 
-MODE = "SMALL_BO"
+MODE = "SMALL_FORGET"
 if MODE.startswith("TEST"):
     flags.FLAGS.max_iter = 90
     flags.FLAGS.n_tasks = 2
@@ -99,7 +99,7 @@ if __name__ == '__main__':
     policies_for_expr = ["LIN", "EIN", "RANDOM", "ALL"]
 
     if MODE.endswith("FORGET"):
-        experiment_forget(model, flags, policies_for_expr)
+        experiment_forget(model, FLAGS, policies_for_expr)
     elif MODE.endswith("RETRAIN"):
         experiment_forget_and_retrain(model, FLAGS, policies_for_expr, mnist_coreset)
     elif MODE.endswith("BO"):
