@@ -462,14 +462,19 @@ class AFN(DEN):
     # Adaptive forgetting
 
     def adaptive_forget(self, task_to_forget, number_of_neurons, policy):
-        assert policy in ["EIN", "LIN", "RANDOM", "ALL"]
+        assert policy in ["MIX", "EIN", "LIN", "RANDOM", "ALL"]
 
         cprint("\n ADAPTIVE FORGET {} task-{} from {}, neurons-{}".format(
             policy, task_to_forget, self.T, number_of_neurons), "green")
 
         self.old_params_list.append(self.get_params())
 
-        if policy == "EIN":
+        if not self.importance_matrix_tuple:
+            self.get_importance_matrix()
+
+        if policy == "MIX":
+            ni_1, ni_2 = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons)
+        elif policy == "EIN":
             ni_1, ni_2 = self.get_exceptionally_important_neurons_for_t(task_to_forget, number_of_neurons)
         elif policy == "LIN":
             ni_1, ni_2 = self.get_least_important_neurons_for_others(task_to_forget, number_of_neurons)
@@ -642,12 +647,11 @@ class AFN(DEN):
         else:
             return np.concatenate(self.importance_matrix_tuple, axis=1)  # shape = (T, |h|)
 
-    # Inappropriate for T=2
-    def get_exceptionally_important_neurons_for_t(self, task_id, number_to_select):
+    def get_neurons_by_mixed_ein_and_lin(self, task_id, number_to_select):
+        # TODO
+        raise NotImplementedError
 
-        if not self.importance_matrix_tuple:
-            self.get_importance_matrix()
-
+    def get_ei_value(self, task_id):
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
         num_neurons = i_mat.shape[-1]
 
@@ -656,19 +660,11 @@ class AFN(DEN):
 
         ei = np.zeros(shape=(num_neurons,))
         for j in range(num_neurons):
-            ei[j] = (i_mat[task_id - 1][j] - mean_dot_j[j]) / (stdev_dot_j[j] + 1e-7)
+            ei[j] = (i_mat[task_id - 1][j] - mean_dot_j[j]) / (stdev_dot_j[j] + 1e-6)
 
-        ei_desc_sorted_idx = np.argsort(ei)[::-1]
-        selected = ei_desc_sorted_idx[:number_to_select]
+        return ei
 
-        divider = self.importance_matrix_tuple[0].shape[-1]
-        return selected[selected < divider], (selected[selected >= divider] - divider)
-
-    def get_least_important_neurons_for_others(self, task_id_or_ids: int or list, number_to_select):
-
-        if not self.importance_matrix_tuple:
-            self.get_importance_matrix()
-
+    def get_li_value(self, task_id_or_ids):
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
         if isinstance(task_id_or_ids, int):
             i_mat = np.delete(i_mat, task_id_or_ids - 1, axis=0)
@@ -677,26 +673,31 @@ class AFN(DEN):
         else:
             raise TypeError
 
-        mean_dot_j = np.mean(i_mat, axis=0)
+        li = np.mean(i_mat, axis=0)
 
-        mean_asc_sorted_idx = np.argsort(mean_dot_j)
+        return li
+
+    # Inappropriate for T=2
+    def get_exceptionally_important_neurons_for_t(self, task_id, number_to_select):
+        ei = self.get_ei_value(task_id)
+        ei_desc_sorted_idx = np.argsort(ei)[::-1]
+        selected = ei_desc_sorted_idx[:number_to_select]
+        divider = self.importance_matrix_tuple[0].shape[-1]
+        return selected[selected < divider], (selected[selected >= divider] - divider)
+
+    def get_least_important_neurons_for_others(self, task_id_or_ids: int or list, number_to_select):
+        li = self.get_li_value(task_id_or_ids)
+        mean_asc_sorted_idx = np.argsort(li)
         selected = mean_asc_sorted_idx[:number_to_select]
-
         divider = self.importance_matrix_tuple[0].shape[-1]
         return selected[selected < divider], (selected[selected >= divider] - divider)
 
     def get_random_neurons(self, number_to_select):
-
-        if not self.importance_matrix_tuple:
-            self.get_importance_matrix()
-
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
-
         indexes = np.asarray(range(i_mat.shape[-1]))
         np.random.seed(i_mat.shape[-1])
         np.random.shuffle(indexes)
         selected = indexes[:number_to_select]
-
         divider = self.importance_matrix_tuple[0].shape[-1]
         return selected[selected < divider], (selected[selected >= divider] - divider)
 
