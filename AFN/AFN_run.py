@@ -96,7 +96,7 @@ if __name__ == '__main__':
         model.get_importance_matrix()
         model.save()
 
-    policies_for_expr = ["LIN", "EIN", "RANDOM", "ALL"]
+    policies_for_expr = ["MIX", "LIN", "EIN", "RANDOM", "ALL"]
 
     if MODE.endswith("FORGET"):
         experiment_forget(model, FLAGS, policies_for_expr)

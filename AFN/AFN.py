@@ -648,8 +648,22 @@ class AFN(DEN):
             return np.concatenate(self.importance_matrix_tuple, axis=1)  # shape = (T, |h|)
 
     def get_neurons_by_mixed_ein_and_lin(self, task_id, number_to_select):
-        # TODO
-        raise NotImplementedError
+
+        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
+        num_neurons = i_mat.shape[-1]
+
+        ei = self.get_ei_value(task_id)
+        minus_ei = - ei
+        li = self.get_li_value(task_id)
+
+        sparsity = number_to_select / num_neurons
+        mixing_coeff = sparsity ** 0.75
+        mixed = (1 - mixing_coeff) * minus_ei + mixing_coeff * li
+
+        mixed_asc_sorted_idx = np.argsort(mixed)
+        selected = mixed_asc_sorted_idx[:number_to_select]
+        divider = self.importance_matrix_tuple[0].shape[-1]
+        return selected[selected < divider], (selected[selected >= divider] - divider)
 
     def get_ei_value(self, task_id):
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
@@ -687,8 +701,8 @@ class AFN(DEN):
 
     def get_least_important_neurons_for_others(self, task_id_or_ids: int or list, number_to_select):
         li = self.get_li_value(task_id_or_ids)
-        mean_asc_sorted_idx = np.argsort(li)
-        selected = mean_asc_sorted_idx[:number_to_select]
+        li_asc_sorted_idx = np.argsort(li)
+        selected = li_asc_sorted_idx[:number_to_select]
         divider = self.importance_matrix_tuple[0].shape[-1]
         return selected[selected < divider], (selected[selected >= divider] - divider)
 
