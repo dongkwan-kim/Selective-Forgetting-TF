@@ -428,10 +428,11 @@ class AFN(DEN):
                 mean_acc = np.mean(acc_except_t)
                 print("\t".join([str(i * one_step_neuron)] + [str(x) for x in acc] + [str(mean_acc)]))
 
-    def draw_chart_summary(self, task_id, one_step_neuron=1, file_prefix=None, file_extension=".png"):
+    def draw_chart_summary(self, task_id, one_step_neuron=1, file_prefix=None, file_extension=".png", ylim=None):
 
         mean_acc_except_t = None
         x_removed_neurons = None
+        ylim = ylim or [0, 1]
 
         for policy, history in self.prediction_history.items():
 
@@ -440,7 +441,7 @@ class AFN(DEN):
             tasks = [x for x in range(1, self.T + 1)]
 
             build_line_of_list(x=x_removed_neurons, y_list=history_txn, label_y_list=tasks,
-                               xlabel="Removed Neurons", ylabel="Accuracy", ylim=[0, 1],
+                               xlabel="Removed Neurons", ylabel="Accuracy", ylim=ylim,
                                title="Accuracy by {} Neuron Deletion".format(policy),
                                file_name="{}_{}{}".format(file_prefix, policy, file_extension),
                                highlight_yi=task_id - 1)
@@ -455,14 +456,14 @@ class AFN(DEN):
 
         build_line_of_list(x=x_removed_neurons, y_list=mean_acc_except_t,
                            label_y_list=[policy for policy in self.prediction_history.keys()],
-                           xlabel="Removed Neurons", ylabel="Mean Accuracy", ylim=[0, 1],
+                           xlabel="Removed Neurons", ylabel="Mean Accuracy", ylim=ylim,
                            title="Mean Accuracy Except Forgetting Task-{}".format(task_id),
                            file_name="{}_MeanAcc{}".format(file_prefix, file_extension))
 
     # Adaptive forgetting
 
     def adaptive_forget(self, task_to_forget, number_of_neurons, policy):
-        assert policy in ["MIX", "EIN", "LIN", "RANDOM", "ALL"]
+        assert policy in ["MIX", "VAR", "EIN", "LIN", "RANDOM", "ALL"]
 
         cprint("\n ADAPTIVE FORGET {} task-{} from {}, neurons-{}".format(
             policy, task_to_forget, self.T, number_of_neurons), "green")
@@ -474,6 +475,8 @@ class AFN(DEN):
 
         if policy == "MIX":
             ni_1, ni_2 = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons)
+        elif policy == "VAR":
+            ni_1, ni_2 = self.get_neurons_by_task_variance(task_to_forget, number_of_neurons)
         elif policy == "EIN":
             ni_1, ni_2 = self.get_exceptionally_important_neurons_for_t(task_to_forget, number_of_neurons)
         elif policy == "LIN":
@@ -650,7 +653,7 @@ class AFN(DEN):
     def get_neurons_by_mixed_ein_and_lin(self, task_id, number_to_select):
 
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
-        num_neurons = i_mat.shape[-1]
+        num_tasks, num_neurons = i_mat.shape
 
         ei = self.get_ei_value(task_id)
         minus_ei = - ei
@@ -658,7 +661,25 @@ class AFN(DEN):
 
         sparsity = number_to_select / num_neurons
         mixing_coeff = sparsity ** 0.75
-        mixed = (1 - mixing_coeff) * minus_ei + mixing_coeff * li
+        mixed = (1 - mixing_coeff) * (num_tasks - 1) * minus_ei + mixing_coeff * li
+
+        mixed_asc_sorted_idx = np.argsort(mixed)
+        selected = mixed_asc_sorted_idx[:number_to_select]
+        divider = self.importance_matrix_tuple[0].shape[-1]
+        return selected[selected < divider], (selected[selected >= divider] - divider)
+
+    def get_neurons_by_task_variance(self, task_id, number_to_select):
+
+        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
+        i_mat = np.delete(i_mat, task_id - 1, axis=0)
+        num_neurons = i_mat.shape[-1]
+
+        li = self.get_li_value(task_id)
+        variance = np.std(i_mat, axis=0) ** 2
+
+        sparsity = number_to_select / num_neurons
+        mixing_coeff = sparsity ** 0.75
+        mixed = (1 - mixing_coeff) * variance + mixing_coeff * li
 
         mixed_asc_sorted_idx = np.argsort(mixed)
         selected = mixed_asc_sorted_idx[:number_to_select]
@@ -667,14 +688,14 @@ class AFN(DEN):
 
     def get_ei_value(self, task_id):
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
-        num_neurons = i_mat.shape[-1]
+        num_tasks, num_neurons = i_mat.shape
 
         mean_dot_j = np.mean(i_mat, axis=0)
         stdev_dot_j = np.std(i_mat, axis=0)
 
         ei = np.zeros(shape=(num_neurons,))
         for j in range(num_neurons):
-            ei[j] = (i_mat[task_id - 1][j] - mean_dot_j[j]) / (stdev_dot_j[j] + 1e-6)
+            ei[j] = 1 / (num_tasks - 1) * (i_mat[task_id - 1][j] - mean_dot_j[j]) / (stdev_dot_j[j] + 1e-6)
 
         return ei
 

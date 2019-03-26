@@ -29,7 +29,7 @@ flags.DEFINE_integer("one_step_neurons", 5, 'Number of neurons to forget in one 
 flags.DEFINE_integer("steps_to_forget", 25, 'Total number of steps in forgetting')
 flags.DEFINE_string("importance_criteria", "first_Taylor_approximation", "Criteria to measure importance of neurons")
 
-MODE = "SMALL_FORGET"
+MODE = "ELSE_FORGET"
 if MODE.startswith("TEST"):
     flags.FLAGS.max_iter = 90
     flags.FLAGS.n_tasks = 2
@@ -56,7 +56,8 @@ def experiment_forget(afn: AFN.AFN, flags, policies):
 
     afn.print_summary(flags.task_to_forget, flags.one_step_neurons)
     afn.draw_chart_summary(flags.task_to_forget, flags.one_step_neurons,
-                           file_prefix="task{}_step{}".format(flags.task_to_forget, flags.one_step_neurons))
+                           file_prefix="task{}_step{}".format(flags.task_to_forget, flags.one_step_neurons),
+                           ylim=[0.5, 1])
 
 
 def experiment_forget_and_retrain(afn: AFN.AFN, flags, policies, coreset=None):
@@ -96,7 +97,7 @@ if __name__ == '__main__':
         model.get_importance_matrix()
         model.save()
 
-    policies_for_expr = ["MIX", "LIN", "EIN", "RANDOM", "ALL"]
+    policies_for_expr = ["MIX", "VAR", "LIN", "EIN", "RANDOM", "ALL"]
 
     if MODE.endswith("FORGET"):
         experiment_forget(model, FLAGS, policies_for_expr)
