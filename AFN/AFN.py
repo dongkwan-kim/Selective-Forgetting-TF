@@ -463,7 +463,7 @@ class AFN(DEN):
     # Adaptive forgetting
 
     def adaptive_forget(self, task_to_forget, number_of_neurons, policy):
-        assert policy in ["MIX", "VAR", "EIN", "LIN", "RANDOM", "ALL"]
+        assert policy in ["MIX", "VAR", "EIN", "LIN", "RANDOM", "ALL", "ALL_VAR"]
 
         cprint("\n ADAPTIVE FORGET {} task-{} from {}, neurons-{}".format(
             policy, task_to_forget, self.T, number_of_neurons), "green")
@@ -476,7 +476,7 @@ class AFN(DEN):
         if policy == "MIX":
             ni_1, ni_2 = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons)
         elif policy == "VAR":
-            ni_1, ni_2 = self.get_neurons_by_task_variance(task_to_forget, number_of_neurons)
+            ni_1, ni_2 = self.get_neurons_with_task_variance(task_to_forget, number_of_neurons)
         elif policy == "EIN":
             ni_1, ni_2 = self.get_exceptionally_important_neurons_for_t(task_to_forget, number_of_neurons)
         elif policy == "LIN":
@@ -485,6 +485,8 @@ class AFN(DEN):
             ni_1, ni_2 = self.get_random_neurons(number_of_neurons)
         elif policy == "ALL":
             ni_1, ni_2 = self.get_least_important_neurons_for_others([], number_of_neurons)
+        elif policy == "ALL_VAR":
+            ni_1, ni_2 = self.get_neurons_with_task_variance([], number_of_neurons)
         else:
             raise NotImplementedError
 
@@ -668,13 +670,18 @@ class AFN(DEN):
         divider = self.importance_matrix_tuple[0].shape[-1]
         return selected[selected < divider], (selected[selected >= divider] - divider)
 
-    def get_neurons_by_task_variance(self, task_id, number_to_select):
+    def get_neurons_with_task_variance(self, task_id_or_ids, number_to_select):
 
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
-        i_mat = np.delete(i_mat, task_id - 1, axis=0)
+        if isinstance(task_id_or_ids, int):
+            i_mat = np.delete(i_mat, task_id_or_ids - 1, axis=0)
+        elif isinstance(task_id_or_ids, list):
+            i_mat = np.delete(i_mat, [tid - 1 for tid in task_id_or_ids], axis=0)
+        else:
+            raise TypeError
         num_neurons = i_mat.shape[-1]
 
-        li = self.get_li_value(task_id)
+        li = self.get_li_value(task_id_or_ids)
         variance = np.std(i_mat, axis=0) ** 2
 
         sparsity = number_to_select / num_neurons
