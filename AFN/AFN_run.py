@@ -26,7 +26,7 @@ flags.DEFINE_float('spl_thr', 0.1, "Threshold of split and duplication")
 flags.DEFINE_integer("n_tasks", 10, 'The number of tasks')
 flags.DEFINE_integer("task_to_forget", 6, 'Task to forget')
 flags.DEFINE_integer("one_step_neurons", 5, 'Number of neurons to forget in one step')
-flags.DEFINE_integer("steps_to_forget", 25, 'Total number of steps in forgetting')
+flags.DEFINE_integer("steps_to_forget", 35, 'Total number of steps in forgetting')
 flags.DEFINE_string("importance_criteria", "first_Taylor_approximation", "Criteria to measure importance of neurons")
 
 MODE = "ELSE_FORGET"
@@ -56,7 +56,11 @@ def experiment_forget(afn: AFN.AFN, flags, policies):
 
     afn.print_summary(flags.task_to_forget, flags.one_step_neurons)
     afn.draw_chart_summary(flags.task_to_forget, flags.one_step_neurons,
-                           file_prefix="task{}_step{}".format(flags.task_to_forget, flags.one_step_neurons),
+                           file_prefix="task{}_step{}_total{}".format(
+                               flags.task_to_forget,
+                               flags.one_step_neurons,
+                               str(int(flags.steps_to_forget) * int(flags.one_step_neurons)),
+                           ),
                            ylim=[0.5, 1])
 
 
