@@ -60,8 +60,7 @@ def experiment_forget(afn: AFN.AFN, flags, policies):
                                flags.task_to_forget,
                                flags.one_step_neurons,
                                str(int(flags.steps_to_forget) * int(flags.one_step_neurons)),
-                           ),
-                           ylim=[0.5, 1])
+                           ))
 
 
 def experiment_forget_and_retrain(afn: AFN.AFN, flags, policies, coreset=None):

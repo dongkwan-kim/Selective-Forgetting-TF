@@ -432,7 +432,6 @@ class AFN(DEN):
 
         mean_acc_except_t = None
         x_removed_neurons = None
-        ylim = ylim or [0, 1]
 
         for policy, history in self.prediction_history.items():
 
@@ -441,7 +440,8 @@ class AFN(DEN):
             tasks = [x for x in range(1, self.T + 1)]
 
             build_line_of_list(x=x_removed_neurons, y_list=history_txn, label_y_list=tasks,
-                               xlabel="Removed Neurons", ylabel="Accuracy", ylim=ylim,
+                               xlabel="Removed Neurons", ylabel="Accuracy",
+                               ylim=ylim or [0.5, 1],
                                title="Accuracy by {} Neuron Deletion".format(policy),
                                file_name="{}_{}{}".format(file_prefix, policy, file_extension),
                                highlight_yi=task_id - 1)
@@ -456,7 +456,8 @@ class AFN(DEN):
 
         build_line_of_list(x=x_removed_neurons, y_list=mean_acc_except_t,
                            label_y_list=[policy for policy in self.prediction_history.keys()],
-                           xlabel="Removed Neurons", ylabel="Mean Accuracy", ylim=ylim,
+                           xlabel="Removed Neurons", ylabel="Mean Accuracy",
+                           ylim=ylim or [0.7, 1],
                            title="Mean Accuracy Except Forgetting Task-{}".format(task_id),
                            file_name="{}_MeanAcc{}".format(file_prefix, file_extension))
 
@@ -652,7 +653,7 @@ class AFN(DEN):
         else:
             return np.concatenate(self.importance_matrix_tuple, axis=1)  # shape = (T, |h|)
 
-    def get_neurons_by_mixed_ein_and_lin(self, task_id, number_to_select):
+    def get_neurons_by_mixed_ein_and_lin(self, task_id, number_to_select, sparsity_coeff=0.7):
 
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
         num_tasks, num_neurons = i_mat.shape
@@ -662,7 +663,7 @@ class AFN(DEN):
         li = self.get_li_value(task_id)
 
         sparsity = number_to_select / num_neurons
-        mixing_coeff = sparsity ** 0.75
+        mixing_coeff = sparsity ** sparsity_coeff
         mixed = (1 - mixing_coeff) * (num_tasks - 1) * minus_ei + mixing_coeff * li
 
         mixed_asc_sorted_idx = np.argsort(mixed)
@@ -670,7 +671,7 @@ class AFN(DEN):
         divider = self.importance_matrix_tuple[0].shape[-1]
         return selected[selected < divider], (selected[selected >= divider] - divider)
 
-    def get_neurons_with_task_variance(self, task_id_or_ids, number_to_select):
+    def get_neurons_with_task_variance(self, task_id_or_ids, number_to_select, sparsity_coeff=0.2):
 
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
         if isinstance(task_id_or_ids, int):
@@ -685,7 +686,7 @@ class AFN(DEN):
         variance = np.std(i_mat, axis=0) ** 2
 
         sparsity = number_to_select / num_neurons
-        mixing_coeff = sparsity ** 0.75
+        mixing_coeff = sparsity ** sparsity_coeff
         mixed = (1 - mixing_coeff) * variance + mixing_coeff * li
 
         mixed_asc_sorted_idx = np.argsort(mixed)
