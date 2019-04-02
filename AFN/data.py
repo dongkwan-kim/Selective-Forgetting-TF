@@ -1,12 +1,14 @@
+from copy import deepcopy
 from typing import List
 
 from tensorflow.examples.tutorials.mnist import input_data
 import numpy as np
 from termcolor import cprint
 
+from reject.ReusableObject import ReusableObject
 
-def get_data_of_multiple_tasks(n_tasks: int, mnist_dir: str = "./MNIST_data", base_seed=42) -> tuple:
 
+def get_permuted_mnist_datasets(n_tasks: int, mnist_dir: str = "./MNIST_data", base_seed=42) -> tuple:
     mnist = input_data.read_data_sets(mnist_dir, one_hot=True)
     train_x = mnist.train.images
     val_x = mnist.validation.images
@@ -30,12 +32,45 @@ def sample_indices(sz, ratio):
     return np.random.choice(np.arange(sz, dtype=int), size=int(sz * ratio), replace=False)
 
 
-class MNISTCoreset:
+def update_distance_k_center(dists, xs, current_id):
+    dists = deepcopy(dists)
+    for i in range(xs.shape[0]):
+        current_dist = np.linalg.norm(xs[i, :] - xs[current_id, :])
+        dists[i] = np.minimum(current_dist, dists[i])
+    return dists
+
+
+def get_k_center_indices(xs: np.ndarray, sz: int):
+    # Select K centers from (x_train, y_train) and add to current coreset (x_coreset, y_coreset)
+    if xs.shape[0] == sz:
+        return list(range(sz))
+
+    current_id = 0
+    indices = [current_id]
+
+    dists = update_distance_k_center(np.full(xs.shape[0], np.inf), xs, current_id)
+    for i in range(1, sz):
+        current_id = int(np.argmax(dists))
+        dists = update_distance_k_center(dists, xs, current_id)
+        indices.append(current_id)
+
+    return indices
+
+
+def slice_xs(xs, indices):
+    return list(map(lambda ndarr: ndarr[indices], xs))
+
+
+class PermutedMNISTCoreset(ReusableObject):
 
     def __init__(self, mnist, train_xs, val_xs, test_xs,
                  sampling_ratio: float or List[float],
                  sampling_type: str = None,
-                 seed: int = 42):
+                 seed: int = 42,
+                 load_file_name: str=None):
+
+        if load_file_name and self.load(load_file_name):
+            return
 
         self.sampling_type = sampling_type or "uniform"
 
@@ -55,12 +90,20 @@ class MNISTCoreset:
                 [train_sz, val_sz, test_sz],
                 self.sampling_ratio_list,
             ))
+
+        elif self.sampling_type == "k-center":
+            train_sampled_idx, val_sampled_idx, test_sampled_idx = tuple(map(
+                get_k_center_indices,
+                [train_xs[0], val_xs[0], test_xs[0]],
+                [int(sz * ratio) for sz, ratio in zip([train_sz, val_sz, test_sz], self.sampling_ratio_list)]
+            ))
+
         else:
             raise ValueError
 
-        self.train_xs = self.slice_xs(train_xs, train_sampled_idx)
-        self.val_xs = self.slice_xs(val_xs, val_sampled_idx)
-        self.test_xs = self.slice_xs(test_xs, test_sampled_idx)
+        self.train_xs = slice_xs(train_xs, train_sampled_idx)
+        self.val_xs = slice_xs(val_xs, val_sampled_idx)
+        self.test_xs = slice_xs(test_xs, test_sampled_idx)
 
         self.train_labels = mnist.train.labels[train_sampled_idx]
         self.val_labels = mnist.validation.labels[val_sampled_idx]
@@ -75,17 +118,13 @@ class MNISTCoreset:
                   \n - test: {test_len} ({test_ratio}) \n""".format(**{
             "name": self.__class__.__name__,
             "num_tasks": self.num_tasks,
-            "train_len": train_sz,
-            "val_len": val_sz,
-            "test_len": test_sz,
+            "train_len": len(train_sampled_idx),
+            "val_len": len(val_sampled_idx),
+            "test_len": len(test_sampled_idx),
             "train_ratio": self.sampling_ratio_list[0],
             "val_ratio": self.sampling_ratio_list[1],
             "test_ratio": self.sampling_ratio_list[2],
         }), "blue")
-
-    @staticmethod
-    def slice_xs(xs, indices):
-        return list(map(lambda ndarr: ndarr[indices], xs))
 
     def __getitem__(self, item):
         return self.train_xs[item], self.train_labels, \
@@ -93,6 +132,9 @@ class MNISTCoreset:
                self.test_xs[item], self.test_labels
 
 
-
 if __name__ == '__main__':
-    c = MNISTCoreset(*get_data_of_multiple_tasks(3, "../MNIST_data"), sampling_ratio=0.1)
+    c = PermutedMNISTCoreset(*get_permuted_mnist_datasets(3, "../MNIST_data"),
+                             sampling_ratio=[0.00182, 1.0, 1.0],
+                             sampling_type="k-center",
+                             load_file_name="pmc_100.pkl")
+    c.dump("pmc_100.pkl")

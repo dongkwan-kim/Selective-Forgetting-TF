@@ -89,8 +89,12 @@ def experiment_bayesian_optimization(afn: AFN.AFN, flags, policies, coreset=None
 
 if __name__ == '__main__':
 
-    mnist_data, train_xs, val_xs, test_xs = get_data_of_multiple_tasks(FLAGS.n_tasks)
-    mnist_coreset = MNISTCoreset(mnist_data, train_xs, val_xs, test_xs, sampling_ratio=[0.2, 1.0, 1.0])
+    mnist_data, train_xs, val_xs, test_xs = get_permuted_mnist_datasets(FLAGS.n_tasks)
+    mnist_coreset = PermutedMNISTCoreset(
+        mnist_data, train_xs, val_xs, test_xs,
+        sampling_ratio=[0.00182, 1.0, 1.0],
+        sampling_type="k-center",
+    )
 
     model = AFN.AFN(FLAGS)
     model.add_dataset(mnist_data, train_xs, val_xs, test_xs)

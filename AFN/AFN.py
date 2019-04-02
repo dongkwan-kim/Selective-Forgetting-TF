@@ -4,13 +4,12 @@ from typing import Dict, List, Callable
 import os
 import pickle
 from pprint import pprint
-
 from termcolor import cprint
 
 from DEN.DEN import DEN
 from DEN.utils import print_all_vars
 
-from data import MNISTCoreset
+from data import PermutedMNISTCoreset
 from utils import build_line_of_list, get_zero_expanded_matrix, parse_var_name
 from utils_importance import *
 from AFNBO import plot_gp
@@ -243,7 +242,7 @@ class AFN(DEN):
 
     # Retrain after forgetting
 
-    def retrain_after_forgetting(self, flags, policy, coreset: MNISTCoreset = None):
+    def retrain_after_forgetting(self, flags, policy, coreset: PermutedMNISTCoreset = None):
         cprint("\n RETRAIN AFTER FORGETTING - {}".format(policy), "green")
         self.retrained = True
 
