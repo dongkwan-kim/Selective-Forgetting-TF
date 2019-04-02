@@ -28,7 +28,7 @@ flags.DEFINE_integer("task_to_forget", 6, 'Task to forget')
 flags.DEFINE_integer("one_step_neurons", 5, 'Number of neurons to forget in one step')
 flags.DEFINE_integer("steps_to_forget", 25, 'Total number of steps in forgetting')
 
-MODE = "SMALL_BO"
+MODE = "SMALL_RETRAIN"
 if MODE.startswith("TEST"):
     flags.FLAGS.max_iter = 90
     flags.FLAGS.n_tasks = 2
@@ -84,8 +84,12 @@ def experiment_bayesian_optimization(afn: AFN.AFN, flags, policies, coreset=None
 
 if __name__ == '__main__':
 
-    mnist_data, train_xs, val_xs, test_xs = get_data_of_multiple_tasks(FLAGS.n_tasks)
-    mnist_coreset = MNISTCoreset(mnist_data, train_xs, val_xs, test_xs, sampling_ratio=[0.2, 1.0, 1.0])
+    mnist_data, train_xs, val_xs, test_xs = get_permuted_mnist_datasets(FLAGS.n_tasks)
+    mnist_coreset = PermutedMNISTCoreset(
+        mnist_data, train_xs, val_xs, test_xs,
+        sampling_ratio=[0.00182, 1.0, 1.0],
+        sampling_type="k-center",
+    )
 
     model = AFN.AFN(FLAGS)
     model.add_dataset(mnist_data, train_xs, val_xs, test_xs)
