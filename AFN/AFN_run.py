@@ -26,10 +26,10 @@ flags.DEFINE_float('spl_thr', 0.1, "Threshold of split and duplication")
 flags.DEFINE_integer("n_tasks", 10, 'The number of tasks')
 flags.DEFINE_integer("task_to_forget", 6, 'Task to forget')
 flags.DEFINE_integer("one_step_neurons", 5, 'Number of neurons to forget in one step')
-flags.DEFINE_integer("steps_to_forget", 25, 'Total number of steps in forgetting')
+flags.DEFINE_integer("steps_to_forget", 35, 'Total number of steps in forgetting')
 flags.DEFINE_string("importance_criteria", "first_Taylor_approximation", "Criteria to measure importance of neurons")
 
-MODE = "SMALL_RETRAIN"
+MODE = "ELSE_FORGET"
 if MODE.startswith("TEST"):
     flags.FLAGS.max_iter = 90
     flags.FLAGS.n_tasks = 2
@@ -56,7 +56,11 @@ def experiment_forget(afn: AFN.AFN, flags, policies):
 
     afn.print_summary(flags.task_to_forget, flags.one_step_neurons)
     afn.draw_chart_summary(flags.task_to_forget, flags.one_step_neurons,
-                           file_prefix="task{}_step{}".format(flags.task_to_forget, flags.one_step_neurons))
+                           file_prefix="task{}_step{}_total{}".format(
+                               flags.task_to_forget,
+                               flags.one_step_neurons,
+                               str(int(flags.steps_to_forget) * int(flags.one_step_neurons)),
+                           ))
 
 
 def experiment_forget_and_retrain(afn: AFN.AFN, flags, policies, coreset=None):
@@ -100,10 +104,10 @@ if __name__ == '__main__':
         model.get_importance_matrix()
         model.save()
 
-    policies_for_expr = ["LIN", "EIN", "RANDOM", "ALL"]
+    policies_for_expr = ["MIX", "VAR", "LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
 
     if MODE.endswith("FORGET"):
-        experiment_forget(model, flags, policies_for_expr)
+        experiment_forget(model, FLAGS, policies_for_expr)
     elif MODE.endswith("RETRAIN"):
         experiment_forget_and_retrain(model, FLAGS, policies_for_expr, mnist_coreset)
     elif MODE.endswith("BO"):
