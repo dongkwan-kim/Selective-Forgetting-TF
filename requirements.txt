@@ -24,3 +24,4 @@ tensorflow==1.12.0
 termcolor==1.1.0
 Werkzeug==0.14.1
 git+https://github.com/dongkwan-kim/DEN.git
+git+https://github.com/dongkwan-kim/reject.git

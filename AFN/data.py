@@ -5,6 +5,8 @@ from tensorflow.examples.tutorials.mnist import input_data
 import numpy as np
 from termcolor import cprint
 
+from reject.ReusableObject import ReusableObject
+
 
 def get_permuted_mnist_datasets(n_tasks: int, mnist_dir: str = "./MNIST_data", base_seed=42) -> tuple:
     mnist = input_data.read_data_sets(mnist_dir, one_hot=True)
@@ -59,12 +61,17 @@ def slice_xs(xs, indices):
     return list(map(lambda ndarr: ndarr[indices], xs))
 
 
-class PermutedMNISTCoreset:
+class PermutedMNISTCoreset(ReusableObject):
 
     def __init__(self, mnist, train_xs, val_xs, test_xs,
                  sampling_ratio: float or List[float],
                  sampling_type: str = None,
-                 seed: int = 42):
+                 seed: int = 42,
+                 load_file_name: str=None):
+
+        if load_file_name and self.load(load_file_name):
+            return
+
         self.sampling_type = sampling_type or "uniform"
 
         train_sz, val_sz, test_sz = tuple(map(lambda l: len(l[0]), [train_xs, val_xs, test_xs]))
@@ -127,5 +134,7 @@ class PermutedMNISTCoreset:
 
 if __name__ == '__main__':
     c = PermutedMNISTCoreset(*get_permuted_mnist_datasets(3, "../MNIST_data"),
-                             sampling_ratio=[0.00182/5, 1.0, 1.0],
-                             sampling_type="k-center")
+                             sampling_ratio=[0.00182, 1.0, 1.0],
+                             sampling_type="k-center",
+                             load_file_name="pmc_100.pkl")
+    c.dump("pmc_100.pkl")
