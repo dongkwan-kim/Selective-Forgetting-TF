@@ -4,7 +4,6 @@ from typing import Dict, List, Callable
 import os
 import pickle
 from pprint import pprint
-
 from termcolor import cprint
 
 from DEN.DEN import DEN
@@ -13,11 +12,10 @@ from DEN.utils import print_all_vars
 from data import MNISTCoreset
 from utils import build_line_of_list, get_zero_expanded_matrix, parse_var_name
 from utils_importance import *
-from AFNBO import plot_gp
-from bayes_opt import BayesianOptimization
+#from AFNBO import plot_gp
+#from bayes_opt import BayesianOptimization
 
-
-class AFN(DEN):
+class AFN(DEN.DEN):
 
     def __init__(self, den_config):
         super().__init__(den_config)
@@ -114,7 +112,9 @@ class AFN(DEN):
             print("\t - {}".format(a))
 
     def add_dataset(self, mnist, trainXs, valXs, testXs):
+        print('$$$$$$$$$$$$$$$$$$$$$$$$$$')
         self.mnist, self.trainXs, self.valXs, self.testXs = mnist, trainXs, valXs, testXs
+        print(np.shape(self.trainXs))
 
     # Variable, params, ...attributes Manipulation
 
@@ -300,7 +300,7 @@ class AFN(DEN):
         for epoch in range(retrain_flags.max_iter):
             self.initialize_batch()
             while True:
-                batch_x, batch_y = self.get_next_batch(train_xs_t, train_labels_t)
+                batch_x, batch_y = self.get_next_batch(train_xs_t, train_labels_t[0])
                 if len(batch_x) == 0:
                     break
                 _, loss_val = self.sess.run([train_step, loss], feed_dict={X: batch_x, Y: batch_y})
@@ -674,7 +674,7 @@ class AFN(DEN):
 
         divider = self.importance_matrix_tuple[0].shape[-1]
         return selected[selected < divider], (selected[selected >= divider] - divider)
-
+'''
     def optimize_number_of_neurons(self, task_to_forget, policy, seed=42,
                                    init_points=5, n_iter=5, lmda=0.25, plot_optim_result=True):
 
@@ -717,3 +717,5 @@ class AFN(DEN):
         optimal_n = int(bayes_optimizer.max["params"]["x"])
 
         return optimal_n
+'''
+
