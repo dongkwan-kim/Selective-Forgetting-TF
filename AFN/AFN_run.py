@@ -27,6 +27,7 @@ flags.DEFINE_integer("n_tasks", 10, 'The number of tasks')
 flags.DEFINE_integer("task_to_forget", 6, 'Task to forget')
 flags.DEFINE_integer("one_step_neurons", 5, 'Number of neurons to forget in one step')
 flags.DEFINE_integer("steps_to_forget", 25, 'Total number of steps in forgetting')
+flags.DEFINE_string("importance_criteria", "first_Taylor_approximation", "Criteria to measure importance of neurons")
 
 MODE = "SMALL_RETRAIN"
 if MODE.startswith("TEST"):
