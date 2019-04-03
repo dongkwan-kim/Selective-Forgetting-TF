@@ -13,7 +13,7 @@ def sum_set(s: set, *args):
 
 
 def parse_var_name(var_name):
-    p = re.compile("(.+)_t(\d)_layer(\d)/(.+):0")
+    p = re.compile("(.+)_t(\d+)_layer(\d)/(.+):0")
     return [x if not x.isnumeric() else int(x) for x in p.findall(var_name)[0]]
 
 
