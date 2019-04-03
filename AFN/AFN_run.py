@@ -29,7 +29,7 @@ flags.DEFINE_integer("one_step_neurons", 5, 'Number of neurons to forget in one 
 flags.DEFINE_integer("steps_to_forget", 35, 'Total number of steps in forgetting')
 flags.DEFINE_string("importance_criteria", "first_Taylor_approximation", "Criteria to measure importance of neurons")
 
-MODE = "ELSE_FORGET"
+MODE = "ELSE_RETRAIN"
 if MODE.startswith("TEST"):
     flags.FLAGS.max_iter = 90
     flags.FLAGS.n_tasks = 2
@@ -42,6 +42,9 @@ elif MODE.startswith("SMALL"):
     flags.FLAGS.task_to_forget = 2
     flags.FLAGS.steps_to_forget = 14
     flags.FLAGS.checkpoint_dir = "./checkpoints/small"
+
+if MODE.endswith("RETRAIN"):
+    flags.FLAGS.steps_to_forget = flags.FLAGS.steps_to_forget - 10
 
 FLAGS = flags.FLAGS
 
@@ -64,9 +67,10 @@ def experiment_forget(afn: AFN.AFN, flags, policies):
 
 
 def experiment_forget_and_retrain(afn: AFN.AFN, flags, policies, coreset=None):
+    one_shot_neurons = flags.one_step_neurons * flags.steps_to_forget
     for policy in policies:
         afn.sequentially_adaptive_forget_and_predict(
-            flags.task_to_forget, flags.one_step_neurons, flags.steps_to_forget,
+            flags.task_to_forget, one_shot_neurons, 1,
             policy=policy,
         )
         afn.retrain_after_forgetting(flags, policy, coreset)
@@ -92,8 +96,9 @@ if __name__ == '__main__':
     mnist_data, train_xs, val_xs, test_xs = get_permuted_mnist_datasets(FLAGS.n_tasks)
     mnist_coreset = PermutedMNISTCoreset(
         mnist_data, train_xs, val_xs, test_xs,
-        sampling_ratio=[0.00182, 1.0, 1.0],
+        sampling_ratio=[(250 / 55000), 1.0, 1.0],
         sampling_type="k-center",
+        load_file_name="AFN/pmc_tasks_{}_size_250.pkl".format(FLAGS.n_tasks),
     )
 
     model = AFN.AFN(FLAGS)
