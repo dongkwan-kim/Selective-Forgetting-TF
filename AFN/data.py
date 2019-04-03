@@ -70,7 +70,10 @@ class PermutedMNISTCoreset(ReusableObject):
                  load_file_name: str=None):
 
         if load_file_name and self.load(load_file_name):
+            self.loaded = True
             return
+        else:
+            self.loaded = False
 
         self.sampling_type = sampling_type or "uniform"
 
@@ -131,10 +134,35 @@ class PermutedMNISTCoreset(ReusableObject):
                self.val_xs[item], self.val_labels, \
                self.test_xs[item], self.test_labels
 
+    def reduce_xs(self, small_sz: int):
+        assert small_sz <= len(self.train_labels)
+        small_indices = np.arange(small_sz)
+        self.train_xs = slice_xs(self.train_xs, small_indices)
+        self.train_labels = self.train_labels[small_indices]
+
+    def reduce_tasks(self, small_num_tasks: int):
+        assert small_num_tasks <= len(self.train_xs)
+        self.train_xs = [x for t_idx, x in enumerate(self.train_xs) if t_idx < small_num_tasks]
+        self.val_xs = [x for t_idx, x in enumerate(self.val_xs) if t_idx < small_num_tasks]
+        self.test_xs = [x for t_idx, x in enumerate(self.test_xs) if t_idx < small_num_tasks]
+
 
 if __name__ == '__main__':
-    c = PermutedMNISTCoreset(*get_permuted_mnist_datasets(3, "../MNIST_data"),
-                             sampling_ratio=[0.00182, 1.0, 1.0],
+    t, s = 10, 5000
+    file_name = "pmc_tasks_{}_size_{}.pkl".format(t, s)
+    c = PermutedMNISTCoreset(*get_permuted_mnist_datasets(t, "../MNIST_data"),
+                             sampling_ratio=[(1 / 55000) * s, 1.0, 1.0],
                              sampling_type="k-center",
-                             load_file_name="pmc_100.pkl")
-    c.dump("pmc_100.pkl")
+                             load_file_name=file_name)
+
+    if not c.loaded:
+        c.dump(file_name)
+
+    cc = deepcopy(c)
+    for t in [10, 4, 2]:
+        c.reduce_tasks(t)
+        for s in [5000, 2500, 1000, 500, 250, 100]:
+            if not (t == 10 and s == 1000):
+                c.reduce_xs(s)
+                c.dump("pmc_tasks_{}_size_{}.pkl".format(t, s))
+        c = deepcopy(cc)
