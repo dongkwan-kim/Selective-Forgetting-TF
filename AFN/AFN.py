@@ -463,7 +463,7 @@ class AFN(DEN):
     # Adaptive forgetting
 
     def adaptive_forget(self, task_to_forget, number_of_neurons, policy):
-        assert policy in ["MIX", "VAR", "EIN", "LIN", "RANDOM", "ALL", "ALL_VAR"]
+        assert policy in ["BAL_MIX", "MIX", "VAR", "EIN", "LIN", "BAL_LIN", "RANDOM", "ALL", "ALL_VAR"]
 
         cprint("\n ADAPTIVE FORGET {} task-{} from {}, neurons-{}".format(
             policy, task_to_forget, self.T, number_of_neurons), "green")
@@ -475,12 +475,16 @@ class AFN(DEN):
 
         if policy == "MIX":
             ni_1, ni_2 = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons)
+        elif policy == "BAL_MIX":
+            ni_1, ni_2 = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, balanced=True)
         elif policy == "VAR":
             ni_1, ni_2 = self.get_neurons_with_task_variance(task_to_forget, number_of_neurons)
         elif policy == "EIN":
             ni_1, ni_2 = self.get_exceptionally_important_neurons_for_t(task_to_forget, number_of_neurons)
         elif policy == "LIN":
             ni_1, ni_2 = self.get_least_important_neurons_for_others(task_to_forget, number_of_neurons)
+        elif policy == "BAL_LIN":
+            ni_1, ni_2 = self.get_least_important_neurons_for_others(task_to_forget, number_of_neurons, balanced=True)
         elif policy == "RANDOM":
             ni_1, ni_2 = self.get_random_neurons(number_of_neurons)
         elif policy == "ALL":
@@ -652,14 +656,14 @@ class AFN(DEN):
         else:
             return np.concatenate(self.importance_matrix_tuple, axis=1)  # shape = (T, |h|)
 
-    def get_neurons_by_mixed_ein_and_lin(self, task_id, number_to_select, sparsity_coeff=0.7):
+    def get_neurons_by_mixed_ein_and_lin(self, task_id, number_to_select, sparsity_coeff=0.7, balanced=False):
 
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
         num_tasks, num_neurons = i_mat.shape
 
         ei = self.get_ei_value(task_id)
         minus_ei = - ei
-        li = self.get_li_value(task_id)
+        li = self.get_li_value(task_id, balanced)
 
         sparsity = number_to_select / num_neurons
         mixing_coeff = sparsity ** sparsity_coeff
@@ -706,7 +710,7 @@ class AFN(DEN):
 
         return ei
 
-    def get_li_value(self, task_id_or_ids):
+    def get_li_value(self, task_id_or_ids, balanced=False):
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
         if isinstance(task_id_or_ids, int):
             i_mat = np.delete(i_mat, task_id_or_ids - 1, axis=0)
@@ -716,6 +720,21 @@ class AFN(DEN):
             raise TypeError
 
         li = np.mean(i_mat, axis=0)
+
+        if balanced:
+            n_tasks_to_remove = 1 if isinstance(task_id_or_ids, int) else len(task_id_or_ids)
+            n_tasks = self.n_tasks - n_tasks_to_remove
+
+            time_stamps = [stamp for task_id, stamp in self.time_stamp.items()
+                           if (isinstance(task_id_or_ids, int) and task_id != "task{}".format(task_id_or_ids)) or
+                              (isinstance(task_id_or_ids, list) and task_id not in task_id_or_ids)]
+
+            prev_layer1, prev_layer2 = 0, 0
+            for (i, stamp) in enumerate(time_stamps):
+                _, layer1, layer2, _ = stamp
+                li[prev_layer1:layer1] *= n_tasks/(n_tasks - i)
+                li[prev_layer2:layer2] *= n_tasks/(n_tasks - i)
+                prev_layer1, prev_layer2 = layer1, layer2
 
         return li
 
@@ -727,8 +746,8 @@ class AFN(DEN):
         divider = self.importance_matrix_tuple[0].shape[-1]
         return selected[selected < divider], (selected[selected >= divider] - divider)
 
-    def get_least_important_neurons_for_others(self, task_id_or_ids: int or list, number_to_select):
-        li = self.get_li_value(task_id_or_ids)
+    def get_least_important_neurons_for_others(self, task_id_or_ids: int or list, number_to_select, balanced=False):
+        li = self.get_li_value(task_id_or_ids, balanced)
         li_asc_sorted_idx = np.argsort(li)
         selected = li_asc_sorted_idx[:number_to_select]
         divider = self.importance_matrix_tuple[0].shape[-1]
