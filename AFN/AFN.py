@@ -442,7 +442,8 @@ class AFN(DEN):
                                xlabel="Removed Neurons", ylabel="Accuracy",
                                ylim=ylim or [0.5, 1],
                                title="Accuracy by {} Neuron Deletion".format(policy),
-                               file_name="{}_{}{}".format(file_prefix, policy, file_extension),
+                               file_name="{}_{}_{}{}".format(
+                                   self.importance_criteria.split("_")[0], file_prefix, policy, file_extension),
                                highlight_yi=task_id - 1)
 
             history_txn_except_t = np.delete(history_txn, task_id - 1, axis=0)
@@ -458,7 +459,7 @@ class AFN(DEN):
                            xlabel="Removed Neurons", ylabel="Mean Accuracy",
                            ylim=ylim or [0.7, 1],
                            title="Mean Accuracy Except Forgetting Task-{}".format(task_id),
-                           file_name="{}_MeanAcc{}".format(file_prefix, file_extension))
+                           file_name="{}_{}_MeanAcc{}".format(self.importance_criteria.split("_")[0], file_prefix, file_extension))
 
     # Adaptive forgetting
 
@@ -628,7 +629,9 @@ class AFN(DEN):
         assert self.T > 0
 
         importance_matrix_1, importance_matrix_2 = None, None
+
         importance_criteria = importance_criteria or self.importance_criteria
+        self.importance_criteria = importance_criteria
 
         for t in reversed(range(1, self.T + 1)):
             iv_1, iv_2 = self.get_importance_vector(

@@ -8,7 +8,7 @@ flags = tf.app.flags
 flags.DEFINE_integer("max_iter", 400, "Epoch to train")
 flags.DEFINE_float("lr", 0.001, "Learing rate(init) for train")
 flags.DEFINE_integer("batch_size", 256, "The size of batch for 1 iteration")
-flags.DEFINE_string("checkpoint_dir", "./checkpoints", "Directory path to save the checkpoints")
+flags.DEFINE_string("checkpoint_dir", "./checkpoints/default", "Directory path to save the checkpoints")
 flags.DEFINE_integer("dims0", 784, "Dimensions about input layer")
 flags.DEFINE_integer("dims1", 64, "Dimensions about 1st layer")
 flags.DEFINE_integer("dims2", 32, "Dimensions about 2nd layer")
@@ -29,7 +29,8 @@ flags.DEFINE_integer("one_step_neurons", 5, 'Number of neurons to forget in one 
 flags.DEFINE_integer("steps_to_forget", 35, 'Total number of steps in forgetting')
 flags.DEFINE_string("importance_criteria", "first_Taylor_approximation", "Criteria to measure importance of neurons")
 
-MODE = "ELSE_FORGET"
+MODE = "DEFAULT_CRITERIA"
+
 if MODE.startswith("TEST"):
     flags.FLAGS.max_iter = 90
     flags.FLAGS.n_tasks = 2
@@ -45,6 +46,9 @@ elif MODE.startswith("SMALL"):
 
 if MODE.endswith("RETRAIN"):
     flags.FLAGS.steps_to_forget = flags.FLAGS.steps_to_forget - 10
+elif MODE.endswith("CRITERIA"):
+    flags.FLAGS.importance_criteria = "activation"
+    flags.FLAGS.checkpoint_dir += "/" + flags.FLAGS.importance_criteria
 
 FLAGS = flags.FLAGS
 
@@ -109,9 +113,9 @@ if __name__ == '__main__':
         model.get_importance_matrix()
         model.save()
 
-    policies_for_expr = ["BAL_MIX", "MIX", "VAR", "LIN", "BAL_LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
+    policies_for_expr = ["MIX", "VAR", "LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
 
-    if MODE.endswith("FORGET"):
+    if MODE.endswith("FORGET") or MODE.endswith("CRITERIA"):
         experiment_forget(model, FLAGS, policies_for_expr)
     elif MODE.endswith("RETRAIN"):
         experiment_forget_and_retrain(model, FLAGS, policies_for_expr, mnist_coreset)
