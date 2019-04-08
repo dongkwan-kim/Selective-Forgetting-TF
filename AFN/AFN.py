@@ -242,31 +242,49 @@ class AFN(DEN):
 
     # Retrain after forgetting
 
-    def retrain_after_forgetting(self, flags, policy, coreset: PermutedMNISTCoreset = None):
+    def retrain_after_forgetting(self, flags, policy, coreset: PermutedMNISTCoreset = None,
+                                 epoches_to_print: list = None, is_verbose: bool = True):
         cprint("\n RETRAIN AFTER FORGETTING - {}".format(policy), "green")
         self.retrained = True
+        series_of_perfs = []
 
-        for t in range(flags.n_tasks):
+        # First, append perfs wo/ retraining
+        perfs = self.predict_only_after_training()
+        series_of_perfs.append(perfs)
 
-            if (t + 1) != flags.task_to_forget:
-                coreset_t = coreset[t] if coreset is not None else (self.trainXs[t], self.mnist.train.labels,
-                                                                    self.valXs[t], self.mnist.validation.labels,
-                                                                    self.testXs[t], self.mnist.test.labels)
+        for retrain_iter in range(flags.retrain_task_iter):
 
-                cprint("\n\n\tTASK %d RE-TRAINING\n" % (t + 1), "green")
-                self._retrain_at_task(t + 1, coreset_t, flags)
-                self._assign_retrained_value_to_tensor(t + 1)
+            cprint("\n\n\tRE-TRAINING at iteration %d\n" % retrain_iter, "green")
 
-                params = self.get_params()
-                self.clear()
-                self.sess = tf.Session()
-                self.load_params(params)
-                self.predict_only_after_training()
+            for t in range(flags.n_tasks):
+                if (t + 1) != flags.task_to_forget:
+                    coreset_t = coreset[t] if coreset is not None else (self.trainXs[t], self.mnist.train.labels,
+                                                                        self.valXs[t], self.mnist.validation.labels,
+                                                                        self.testXs[t], self.mnist.test.labels)
+                    if is_verbose:
+                        cprint("\n\n\tTASK %d RE-TRAINING at iteration %d\n" % (t + 1, retrain_iter), "green")
+                    self._retrain_at_task(t + 1, coreset_t, flags, is_verbose)
+                    self._assign_retrained_value_to_tensor(t + 1)
 
-            else:
-                cprint("\n\n\tTASK %d NO NEED TO RE-TRAINING" % (t + 1), "green")
+                    params = self.get_params()
+                    self.clear()
+                    self.sess = tf.Session()
+                    self.load_params(params)
+                else:
+                    if is_verbose:
+                        cprint("\n\n\tTASK %d NO NEED TO RE-TRAIN at iteration %d" % (t + 1, retrain_iter), "green")
 
-    def _retrain_at_task(self, task_id, data, retrain_flags):
+            perfs = self.predict_only_after_training()
+            series_of_perfs.append(perfs)
+
+        if epoches_to_print:
+            print("\t".join(str(t + 1) for t in range(self.n_tasks)))
+            for epo in epoches_to_print:
+                print("\t".join(str(round(acc, 4)) for acc in series_of_perfs[epo]))
+
+        return series_of_perfs
+
+    def _retrain_at_task(self, task_id, data, retrain_flags, is_verbose):
         """
         Note that this use afn_get_weight_and_bias_at_task with is_forgotten=True
         """
@@ -286,7 +304,8 @@ class AFN(DEN):
                 i, stamp, task_id, "retrain",
                 is_bottom=False, is_forgotten=True)
             bottom = tf.nn.relu(tf.matmul(bottom, afn_w) + afn_b)
-            print(' [*] task %d, shape of layer %d : %s' % (task_id, i, afn_w.get_shape().as_list()))
+            if is_verbose:
+                print(' [*] task %d, shape of layer %d : %s' % (task_id, i, afn_w.get_shape().as_list()))
 
         afn_w, afn_b = self.afn_get_weight_and_bias_at_task(
             self.n_layers, stamp, task_id, "retrain",
@@ -298,9 +317,9 @@ class AFN(DEN):
         train_step = tf.train.GradientDescentOptimizer(self.init_lr).minimize(loss)
 
         loss_window = collections.deque(maxlen=10)
-        print_iter, old_loss = int(retrain_flags.max_iter / 3), 999
+        old_loss = 999
         self.sess.run(tf.global_variables_initializer())
-        for epoch in range(retrain_flags.max_iter):
+        for epoch in range(retrain_flags.retrain_max_iter_per_task):
             self.initialize_batch()
             while True:
                 batch_x, batch_y = self.get_next_batch(train_xs_t, train_labels_t)
@@ -313,8 +332,9 @@ class AFN(DEN):
             mean_loss = np.mean(loss_window)
             val_perf = self.get_performance(val_preds, val_labels_t)
 
-            if epoch == 0 or epoch == retrain_flags.max_iter - 1 or (epoch + 1) % print_iter == 0:
-                print(" [*] iter: %d, val loss: %.4f, val perf: %.4f" % (epoch, val_loss_val, val_perf))
+            if epoch == 0 or epoch == retrain_flags.max_iter - 1:
+                if is_verbose:
+                    print(" [*] iter: %d, val loss: %.4f, val perf: %.4f" % (epoch, val_loss_val, val_perf))
                 if abs(old_loss - mean_loss) < 1e-6:
                     break
                 old_loss = mean_loss
@@ -324,7 +344,8 @@ class AFN(DEN):
         stamp = self.time_stamp['task%d' % task_id]
 
         # Get retrained values.
-        retrained_values_dict = self.afn_get_params(name_filter=lambda n: "t{}".format(task_id) in n and "retrain" in n)
+        retrained_values_dict = self.afn_get_params(name_filter=lambda n: "_t{}_".format(task_id) in n
+                                                                          and "retrain" in n)
 
         # get_zero_expanded_matrix.
         for name, retrained_value in list(retrained_values_dict.items()):

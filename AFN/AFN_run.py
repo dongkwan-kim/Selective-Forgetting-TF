@@ -2,6 +2,7 @@ import tensorflow as tf
 
 import AFN
 from data import *
+from utils import build_line_of_list
 
 np.random.seed(1004)
 flags = tf.app.flags
@@ -28,8 +29,10 @@ flags.DEFINE_integer("task_to_forget", 6, 'Task to forget')
 flags.DEFINE_integer("one_step_neurons", 5, 'Number of neurons to forget in one step')
 flags.DEFINE_integer("steps_to_forget", 35, 'Total number of steps in forgetting')
 flags.DEFINE_string("importance_criteria", "first_Taylor_approximation", "Criteria to measure importance of neurons")
+flags.DEFINE_integer("retrain_max_iter_per_task", 150, "Epoch to re-train per one task")
+flags.DEFINE_integer("retrain_task_iter", 80, "Number of re-training one task with retrain_max_iter_per_task")
 
-MODE = "DEFAULT_FORGET"
+MODE = "DEFAULT_RETRAIN"
 
 if MODE.startswith("TEST"):
     flags.FLAGS.max_iter = 90
@@ -45,7 +48,7 @@ elif MODE.startswith("SMALL"):
     flags.FLAGS.checkpoint_dir = "./checkpoints/small"
 
 if MODE.endswith("RETRAIN"):
-    flags.FLAGS.steps_to_forget = flags.FLAGS.steps_to_forget - 10
+    flags.FLAGS.steps_to_forget = flags.FLAGS.steps_to_forget - 12
 elif MODE.endswith("CRITERIA"):
     flags.FLAGS.importance_criteria = "activation"
     flags.FLAGS.checkpoint_dir += "/" + flags.FLAGS.importance_criteria
@@ -77,7 +80,23 @@ def experiment_forget_and_retrain(afn: AFN.AFN, flags, policies, coreset=None):
             flags.task_to_forget, one_shot_neurons, 1,
             policy=policy,
         )
-        afn.retrain_after_forgetting(flags, policy, coreset)
+        lst_of_perfs_at_epoch = afn.retrain_after_forgetting(
+            flags, policy, coreset,
+            epoches_to_print=[0, 1, -2, -1],
+            is_verbose=False,
+        )
+        build_line_of_list(x=list(i * flags.retrain_max_iter_per_task for i in range(len(lst_of_perfs_at_epoch))),
+                           y_list=np.transpose(lst_of_perfs_at_epoch),
+                           label_y_list=[t + 1 for t in range(flags.n_tasks)],
+                           xlabel="Re-training Epoches", ylabel="Accuracy", ylim=[0.9, 1],
+                           title="Accuracy By Retraining After Forgetting Task-{} ({})".format(
+                               flags.task_to_forget,
+                               policy,
+                           ),
+                           file_name="{}_task{}_RetrainAcc.png".format(
+                               afn.importance_criteria.split("_")[0],
+                               flags.task_to_forget,
+                           ))
         afn.clear_experiments()
 
 
@@ -113,11 +132,12 @@ if __name__ == '__main__':
         model.get_importance_matrix()
         model.save()
 
-    policies_for_expr = ["MAX", "MIX", "VAR", "LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
-
     if MODE.endswith("FORGET") or MODE.endswith("CRITERIA"):
+        policies_for_expr = ["MIX", "MAX", "VAR", "LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
         experiment_forget(model, FLAGS, policies_for_expr)
     elif MODE.endswith("RETRAIN"):
+        policies_for_expr = ["MIX"]
         experiment_forget_and_retrain(model, FLAGS, policies_for_expr, mnist_coreset)
     elif MODE.endswith("BO"):
+        policies_for_expr = ["MIX"]
         experiment_bayesian_optimization(model, FLAGS, policies_for_expr, mnist_coreset)
