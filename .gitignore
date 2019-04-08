@@ -1,6 +1,7 @@
 MNIST_data
 checkpoints*/
 *.pkl
+log.txt
 
 # Created by https://www.gitignore.io/api/git,vim,macos,python,windows,virtualenv,pycharm+all
 
