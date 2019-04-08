@@ -29,7 +29,7 @@ flags.DEFINE_integer("one_step_neurons", 5, 'Number of neurons to forget in one 
 flags.DEFINE_integer("steps_to_forget", 35, 'Total number of steps in forgetting')
 flags.DEFINE_string("importance_criteria", "first_Taylor_approximation", "Criteria to measure importance of neurons")
 
-MODE = "DEFAULT_CRITERIA"
+MODE = "DEFAULT_FORGET"
 
 if MODE.startswith("TEST"):
     flags.FLAGS.max_iter = 90
@@ -113,7 +113,7 @@ if __name__ == '__main__':
         model.get_importance_matrix()
         model.save()
 
-    policies_for_expr = ["MIX", "VAR", "LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
+    policies_for_expr = ["MAX", "MIX", "VAR", "LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
 
     if MODE.endswith("FORGET") or MODE.endswith("CRITERIA"):
         experiment_forget(model, FLAGS, policies_for_expr)

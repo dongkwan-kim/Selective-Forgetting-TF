@@ -464,7 +464,7 @@ class AFN(DEN):
     # Adaptive forgetting
 
     def adaptive_forget(self, task_to_forget, number_of_neurons, policy):
-        assert policy in ["BAL_MIX", "MIX", "VAR", "EIN", "LIN", "BAL_LIN", "RANDOM", "ALL", "ALL_VAR"]
+        assert policy in ["BAL_MIX", "MIX", "MAX", "VAR", "EIN", "LIN", "BAL_LIN", "RANDOM", "ALL", "ALL_VAR"]
 
         cprint("\n ADAPTIVE FORGET {} task-{} from {}, neurons-{}".format(
             policy, task_to_forget, self.T, number_of_neurons), "green")
@@ -476,6 +476,8 @@ class AFN(DEN):
 
         if policy == "MIX":
             ni_1, ni_2 = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons)
+        elif policy == "MAX":
+            ni_1, ni_2 = self.get_neurons_with_maximum_importance(task_to_forget, number_of_neurons)
         elif policy == "BAL_MIX":
             ni_1, ni_2 = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, balanced=True)
         elif policy == "VAR":
@@ -659,6 +661,16 @@ class AFN(DEN):
         else:
             return np.concatenate(self.importance_matrix_tuple, axis=1)  # shape = (T, |h|)
 
+    def _get_reduced_i_mat(self, task_id_or_ids):
+        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
+        if isinstance(task_id_or_ids, int):
+            i_mat = np.delete(i_mat, task_id_or_ids - 1, axis=0)
+        elif isinstance(task_id_or_ids, list):
+            i_mat = np.delete(i_mat, [tid - 1 for tid in task_id_or_ids], axis=0)
+        else:
+            raise TypeError
+        return i_mat
+
     def get_neurons_by_mixed_ein_and_lin(self, task_id, number_to_select, sparsity_coeff=0.7, balanced=False):
 
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
@@ -679,13 +691,7 @@ class AFN(DEN):
 
     def get_neurons_with_task_variance(self, task_id_or_ids, number_to_select, sparsity_coeff=0.2):
 
-        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
-        if isinstance(task_id_or_ids, int):
-            i_mat = np.delete(i_mat, task_id_or_ids - 1, axis=0)
-        elif isinstance(task_id_or_ids, list):
-            i_mat = np.delete(i_mat, [tid - 1 for tid in task_id_or_ids], axis=0)
-        else:
-            raise TypeError
+        i_mat = self._get_reduced_i_mat(task_id_or_ids)
         num_neurons = i_mat.shape[-1]
 
         li = self.get_li_value(task_id_or_ids)
@@ -714,14 +720,8 @@ class AFN(DEN):
         return ei
 
     def get_li_value(self, task_id_or_ids, balanced=False):
-        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
-        if isinstance(task_id_or_ids, int):
-            i_mat = np.delete(i_mat, task_id_or_ids - 1, axis=0)
-        elif isinstance(task_id_or_ids, list):
-            i_mat = np.delete(i_mat, [tid - 1 for tid in task_id_or_ids], axis=0)
-        else:
-            raise TypeError
 
+        i_mat = self._get_reduced_i_mat(task_id_or_ids)
         li = np.mean(i_mat, axis=0)
 
         if balanced:
@@ -741,6 +741,10 @@ class AFN(DEN):
 
         return li
 
+    def get_max_value(self, task_id_or_ids):
+        i_mat = self._get_reduced_i_mat(task_id_or_ids)
+        return np.max(i_mat, axis=0)
+
     # Inappropriate for T=2
     def get_exceptionally_important_neurons_for_t(self, task_id, number_to_select):
         ei = self.get_ei_value(task_id)
@@ -753,6 +757,21 @@ class AFN(DEN):
         li = self.get_li_value(task_id_or_ids, balanced)
         li_asc_sorted_idx = np.argsort(li)
         selected = li_asc_sorted_idx[:number_to_select]
+        divider = self.importance_matrix_tuple[0].shape[-1]
+        return selected[selected < divider], (selected[selected >= divider] - divider)
+
+    def get_neurons_with_maximum_importance(self, task_id_or_ids, number_to_select, mixing_coeff=0.75):
+
+        li = self.get_li_value(task_id_or_ids)
+        mi = self.get_max_value(task_id_or_ids)
+
+        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
+        num_tasks, num_neurons = i_mat.shape
+        sparsity = number_to_select / num_neurons
+        mixed = (1 - mixing_coeff) * mi + mixing_coeff * li
+
+        mi_asc_sorted_idx = np.argsort(mixed)
+        selected = mi_asc_sorted_idx[:number_to_select]
         divider = self.importance_matrix_tuple[0].shape[-1]
         return selected[selected < divider], (selected[selected >= divider] - divider)
 
