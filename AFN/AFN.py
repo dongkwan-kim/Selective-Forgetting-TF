@@ -451,6 +451,7 @@ class AFN(DEN):
     def draw_chart_summary(self, task_id, one_step_neuron=1, file_prefix=None, file_extension=".png", ylim=None):
 
         mean_acc_except_t = None
+        min_acc_except_t = None
         x_removed_neurons = None
 
         for policy, history in self.prediction_history.items():
@@ -469,18 +470,31 @@ class AFN(DEN):
 
             history_txn_except_t = np.delete(history_txn, task_id - 1, axis=0)
             history_n_mean_except_t = np.mean(history_txn_except_t, axis=0)
+            history_n_min_except_t = np.min(history_txn_except_t, axis=0)
 
             if mean_acc_except_t is None:
                 mean_acc_except_t = history_n_mean_except_t
+                min_acc_except_t = history_n_min_except_t
             else:
                 mean_acc_except_t = np.vstack((mean_acc_except_t, history_n_mean_except_t))
+                min_acc_except_t = np.vstack((min_acc_except_t, history_n_min_except_t))
 
         build_line_of_list(x=x_removed_neurons, y_list=mean_acc_except_t,
                            label_y_list=[policy for policy in self.prediction_history.keys()],
                            xlabel="Removed Neurons", ylabel="Mean Accuracy",
                            ylim=ylim or [0.7, 1],
                            title="Mean Accuracy Except Forgetting Task-{}".format(task_id),
-                           file_name="{}_{}_MeanAcc{}".format(self.importance_criteria.split("_")[0], file_prefix, file_extension))
+                           file_name="{}_{}_MeanAcc{}".format(
+                               self.importance_criteria.split("_")[0], file_prefix, file_extension
+                           ))
+        build_line_of_list(x=x_removed_neurons, y_list=min_acc_except_t,
+                           label_y_list=[policy for policy in self.prediction_history.keys()],
+                           xlabel="Removed Neurons", ylabel="Min Accuracy",
+                           ylim=ylim or [0.5, 1],
+                           title="Minimum Accuracy Except Forgetting Task-{}".format(task_id),
+                           file_name="{}_{}_MinAcc{}".format(
+                               self.importance_criteria.split("_")[0], file_prefix, file_extension
+                           ))
 
     # Adaptive forgetting
 
@@ -702,7 +716,7 @@ class AFN(DEN):
         li = self.get_li_value(task_id, balanced)
 
         sparsity = number_to_select / num_neurons
-        mixing_coeff = sparsity ** sparsity_coeff
+        mixing_coeff = sparsity ** sparsity_coeff  # 0.48
         mixed = (1 - mixing_coeff) * (num_tasks - 1) * minus_ei + mixing_coeff * li
 
         mixed_asc_sorted_idx = np.argsort(mixed)

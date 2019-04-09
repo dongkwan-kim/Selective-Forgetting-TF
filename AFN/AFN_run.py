@@ -32,7 +32,7 @@ flags.DEFINE_string("importance_criteria", "first_Taylor_approximation", "Criter
 flags.DEFINE_integer("retrain_max_iter_per_task", 150, "Epoch to re-train per one task")
 flags.DEFINE_integer("retrain_task_iter", 80, "Number of re-training one task with retrain_max_iter_per_task")
 
-MODE = "DEFAULT_RETRAIN"
+MODE = "DEFAULT_FORGET"
 
 if MODE.startswith("TEST"):
     flags.FLAGS.max_iter = 90
