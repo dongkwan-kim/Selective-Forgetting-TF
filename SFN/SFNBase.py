@@ -366,7 +366,7 @@ class SFN:
 
         return ni_1, ni_2
 
-    def selective_forget(self, task_to_forget, number_of_neurons, policy):
+    def selective_forget(self, task_to_forget, number_of_neurons, policy) -> tuple:
         raise NotImplementedError
 
     def sequentially_selective_forget_and_predict(self, task_to_forget, one_step_neurons, steps, policy):
@@ -385,7 +385,7 @@ class SFN:
     # Importance vectors
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
-    def get_importance_vector(self, task_id, importance_criteria: str, layer_separate=False):
+    def get_importance_vector(self, task_id, importance_criteria: str, layer_separate=False) -> tuple or np.ndarray:
         raise NotImplementedError
 
     # shape = (T, |h|) or (T, |h1|), (T, |h2|)

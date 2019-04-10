@@ -11,6 +11,13 @@ from utils_importance import *
 
 class SFDEN(SFN, DEN):
 
+    """
+    Selective Forgettable Dynamic Expandable Network
+
+    Yoon et al. "Lifelong Learning with Dynamically Expandable Networks"
+    International Conference on Learning Representations}. 2018.
+    """
+
     def __init__(self, config):
         SFN.__init__(self, config)
         DEN.__init__(self, config)
@@ -224,7 +231,7 @@ class SFDEN(SFN, DEN):
 
             self.sess.run(tf.assign(tensor_den, value_den))
 
-    def predict_only_after_training(self):
+    def predict_only_after_training(self) -> list:
         cprint("\n PREDICT ONLY AFTER " + ("TRAINING" if not self.retrained else "RE-TRAINING"), "yellow")
         temp_perfs = []
         for t in range(self.n_tasks):
@@ -257,7 +264,7 @@ class SFDEN(SFN, DEN):
 
     # Selective forgetting
 
-    def selective_forget(self, task_to_forget, number_of_neurons, policy):
+    def selective_forget(self, task_to_forget, number_of_neurons, policy) -> tuple:
 
         self.old_params_list.append(self.get_params())
 
@@ -301,7 +308,7 @@ class SFDEN(SFN, DEN):
     # Importance vectors
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
-    def get_importance_vector(self, task_id, importance_criteria: str, layer_separate=False):
+    def get_importance_vector(self, task_id, importance_criteria: str, layer_separate=False) -> tuple or np.ndarray:
         print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)
 
         X = tf.placeholder(tf.float32, [None, self.dims[0]])

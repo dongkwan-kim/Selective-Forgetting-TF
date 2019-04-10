@@ -67,7 +67,7 @@ class PermutedMNISTCoreset(ReusableObject):
                  sampling_ratio: float or List[float],
                  sampling_type: str = None,
                  seed: int = 42,
-                 load_file_name: str=None):
+                 load_file_name: str = None):
 
         if load_file_name and self.load(load_file_name):
             self.loaded = True
