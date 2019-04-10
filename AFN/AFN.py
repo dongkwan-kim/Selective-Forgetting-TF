@@ -242,31 +242,49 @@ class AFN(DEN):
 
     # Retrain after forgetting
 
-    def retrain_after_forgetting(self, flags, policy, coreset: PermutedMNISTCoreset = None):
+    def retrain_after_forgetting(self, flags, policy, coreset: PermutedMNISTCoreset = None,
+                                 epoches_to_print: list = None, is_verbose: bool = True):
         cprint("\n RETRAIN AFTER FORGETTING - {}".format(policy), "green")
         self.retrained = True
+        series_of_perfs = []
 
-        for t in range(flags.n_tasks):
+        # First, append perfs wo/ retraining
+        perfs = self.predict_only_after_training()
+        series_of_perfs.append(perfs)
 
-            if (t + 1) != flags.task_to_forget:
-                coreset_t = coreset[t] if coreset is not None else (self.trainXs[t], self.mnist.train.labels,
-                                                                    self.valXs[t], self.mnist.validation.labels,
-                                                                    self.testXs[t], self.mnist.test.labels)
+        for retrain_iter in range(flags.retrain_task_iter):
 
-                cprint("\n\n\tTASK %d RE-TRAINING\n" % (t + 1), "green")
-                self._retrain_at_task(t + 1, coreset_t, flags)
-                self._assign_retrained_value_to_tensor(t + 1)
+            cprint("\n\n\tRE-TRAINING at iteration %d\n" % retrain_iter, "green")
 
-                params = self.get_params()
-                self.clear()
-                self.sess = tf.Session()
-                self.load_params(params)
-                self.predict_only_after_training()
+            for t in range(flags.n_tasks):
+                if (t + 1) != flags.task_to_forget:
+                    coreset_t = coreset[t] if coreset is not None else (self.trainXs[t], self.mnist.train.labels,
+                                                                        self.valXs[t], self.mnist.validation.labels,
+                                                                        self.testXs[t], self.mnist.test.labels)
+                    if is_verbose:
+                        cprint("\n\n\tTASK %d RE-TRAINING at iteration %d\n" % (t + 1, retrain_iter), "green")
+                    self._retrain_at_task(t + 1, coreset_t, flags, is_verbose)
+                    self._assign_retrained_value_to_tensor(t + 1)
 
-            else:
-                cprint("\n\n\tTASK %d NO NEED TO RE-TRAINING" % (t + 1), "green")
+                    params = self.get_params()
+                    self.clear()
+                    self.sess = tf.Session()
+                    self.load_params(params)
+                else:
+                    if is_verbose:
+                        cprint("\n\n\tTASK %d NO NEED TO RE-TRAIN at iteration %d" % (t + 1, retrain_iter), "green")
 
-    def _retrain_at_task(self, task_id, data, retrain_flags):
+            perfs = self.predict_only_after_training()
+            series_of_perfs.append(perfs)
+
+        if epoches_to_print:
+            print("\t".join(str(t + 1) for t in range(self.n_tasks)))
+            for epo in epoches_to_print:
+                print("\t".join(str(round(acc, 4)) for acc in series_of_perfs[epo]))
+
+        return series_of_perfs
+
+    def _retrain_at_task(self, task_id, data, retrain_flags, is_verbose):
         """
         Note that this use afn_get_weight_and_bias_at_task with is_forgotten=True
         """
@@ -286,7 +304,8 @@ class AFN(DEN):
                 i, stamp, task_id, "retrain",
                 is_bottom=False, is_forgotten=True)
             bottom = tf.nn.relu(tf.matmul(bottom, afn_w) + afn_b)
-            print(' [*] task %d, shape of layer %d : %s' % (task_id, i, afn_w.get_shape().as_list()))
+            if is_verbose:
+                print(' [*] task %d, shape of layer %d : %s' % (task_id, i, afn_w.get_shape().as_list()))
 
         afn_w, afn_b = self.afn_get_weight_and_bias_at_task(
             self.n_layers, stamp, task_id, "retrain",
@@ -298,9 +317,9 @@ class AFN(DEN):
         train_step = tf.train.GradientDescentOptimizer(self.init_lr).minimize(loss)
 
         loss_window = collections.deque(maxlen=10)
-        print_iter, old_loss = int(retrain_flags.max_iter / 3), 999
+        old_loss = 999
         self.sess.run(tf.global_variables_initializer())
-        for epoch in range(retrain_flags.max_iter):
+        for epoch in range(retrain_flags.retrain_max_iter_per_task):
             self.initialize_batch()
             while True:
                 batch_x, batch_y = self.get_next_batch(train_xs_t, train_labels_t)
@@ -313,8 +332,9 @@ class AFN(DEN):
             mean_loss = np.mean(loss_window)
             val_perf = self.get_performance(val_preds, val_labels_t)
 
-            if epoch == 0 or epoch == retrain_flags.max_iter - 1 or (epoch + 1) % print_iter == 0:
-                print(" [*] iter: %d, val loss: %.4f, val perf: %.4f" % (epoch, val_loss_val, val_perf))
+            if epoch == 0 or epoch == retrain_flags.max_iter - 1:
+                if is_verbose:
+                    print(" [*] iter: %d, val loss: %.4f, val perf: %.4f" % (epoch, val_loss_val, val_perf))
                 if abs(old_loss - mean_loss) < 1e-6:
                     break
                 old_loss = mean_loss
@@ -324,7 +344,8 @@ class AFN(DEN):
         stamp = self.time_stamp['task%d' % task_id]
 
         # Get retrained values.
-        retrained_values_dict = self.afn_get_params(name_filter=lambda n: "t{}".format(task_id) in n and "retrain" in n)
+        retrained_values_dict = self.afn_get_params(name_filter=lambda n: "_t{}_".format(task_id) in n
+                                                                          and "retrain" in n)
 
         # get_zero_expanded_matrix.
         for name, retrained_value in list(retrained_values_dict.items()):
@@ -430,6 +451,7 @@ class AFN(DEN):
     def draw_chart_summary(self, task_id, one_step_neuron=1, file_prefix=None, file_extension=".png", ylim=None):
 
         mean_acc_except_t = None
+        min_acc_except_t = None
         x_removed_neurons = None
 
         for policy, history in self.prediction_history.items():
@@ -442,28 +464,42 @@ class AFN(DEN):
                                xlabel="Removed Neurons", ylabel="Accuracy",
                                ylim=ylim or [0.5, 1],
                                title="Accuracy by {} Neuron Deletion".format(policy),
-                               file_name="{}_{}{}".format(file_prefix, policy, file_extension),
+                               file_name="{}_{}_{}{}".format(
+                                   self.importance_criteria.split("_")[0], file_prefix, policy, file_extension),
                                highlight_yi=task_id - 1)
 
             history_txn_except_t = np.delete(history_txn, task_id - 1, axis=0)
             history_n_mean_except_t = np.mean(history_txn_except_t, axis=0)
+            history_n_min_except_t = np.min(history_txn_except_t, axis=0)
 
             if mean_acc_except_t is None:
                 mean_acc_except_t = history_n_mean_except_t
+                min_acc_except_t = history_n_min_except_t
             else:
                 mean_acc_except_t = np.vstack((mean_acc_except_t, history_n_mean_except_t))
+                min_acc_except_t = np.vstack((min_acc_except_t, history_n_min_except_t))
 
         build_line_of_list(x=x_removed_neurons, y_list=mean_acc_except_t,
                            label_y_list=[policy for policy in self.prediction_history.keys()],
                            xlabel="Removed Neurons", ylabel="Mean Accuracy",
                            ylim=ylim or [0.7, 1],
                            title="Mean Accuracy Except Forgetting Task-{}".format(task_id),
-                           file_name="{}_MeanAcc{}".format(file_prefix, file_extension))
+                           file_name="{}_{}_MeanAcc{}".format(
+                               self.importance_criteria.split("_")[0], file_prefix, file_extension
+                           ))
+        build_line_of_list(x=x_removed_neurons, y_list=min_acc_except_t,
+                           label_y_list=[policy for policy in self.prediction_history.keys()],
+                           xlabel="Removed Neurons", ylabel="Min Accuracy",
+                           ylim=ylim or [0.5, 1],
+                           title="Minimum Accuracy Except Forgetting Task-{}".format(task_id),
+                           file_name="{}_{}_MinAcc{}".format(
+                               self.importance_criteria.split("_")[0], file_prefix, file_extension
+                           ))
 
     # Adaptive forgetting
 
     def adaptive_forget(self, task_to_forget, number_of_neurons, policy):
-        assert policy in ["MIX", "VAR", "EIN", "LIN", "RANDOM", "ALL", "ALL_VAR"]
+        assert policy in ["BAL_MIX", "MIX", "MAX", "VAR", "EIN", "LIN", "BAL_LIN", "RANDOM", "ALL", "ALL_VAR"]
 
         cprint("\n ADAPTIVE FORGET {} task-{} from {}, neurons-{}".format(
             policy, task_to_forget, self.T, number_of_neurons), "green")
@@ -475,12 +511,18 @@ class AFN(DEN):
 
         if policy == "MIX":
             ni_1, ni_2 = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons)
+        elif policy == "MAX":
+            ni_1, ni_2 = self.get_neurons_with_maximum_importance(task_to_forget, number_of_neurons)
+        elif policy == "BAL_MIX":
+            ni_1, ni_2 = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, balanced=True)
         elif policy == "VAR":
             ni_1, ni_2 = self.get_neurons_with_task_variance(task_to_forget, number_of_neurons)
         elif policy == "EIN":
             ni_1, ni_2 = self.get_exceptionally_important_neurons_for_t(task_to_forget, number_of_neurons)
         elif policy == "LIN":
             ni_1, ni_2 = self.get_least_important_neurons_for_others(task_to_forget, number_of_neurons)
+        elif policy == "BAL_LIN":
+            ni_1, ni_2 = self.get_least_important_neurons_for_others(task_to_forget, number_of_neurons, balanced=True)
         elif policy == "RANDOM":
             ni_1, ni_2 = self.get_random_neurons(number_of_neurons)
         elif policy == "ALL":
@@ -624,7 +666,9 @@ class AFN(DEN):
         assert self.T > 0
 
         importance_matrix_1, importance_matrix_2 = None, None
+
         importance_criteria = importance_criteria or self.importance_criteria
+        self.importance_criteria = importance_criteria
 
         for t in reversed(range(1, self.T + 1)):
             iv_1, iv_2 = self.get_importance_vector(
@@ -652,17 +696,27 @@ class AFN(DEN):
         else:
             return np.concatenate(self.importance_matrix_tuple, axis=1)  # shape = (T, |h|)
 
-    def get_neurons_by_mixed_ein_and_lin(self, task_id, number_to_select, sparsity_coeff=0.7):
+    def _get_reduced_i_mat(self, task_id_or_ids):
+        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
+        if isinstance(task_id_or_ids, int):
+            i_mat = np.delete(i_mat, task_id_or_ids - 1, axis=0)
+        elif isinstance(task_id_or_ids, list):
+            i_mat = np.delete(i_mat, [tid - 1 for tid in task_id_or_ids], axis=0)
+        else:
+            raise TypeError
+        return i_mat
+
+    def get_neurons_by_mixed_ein_and_lin(self, task_id, number_to_select, sparsity_coeff=0.7, balanced=False):
 
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
         num_tasks, num_neurons = i_mat.shape
 
         ei = self.get_ei_value(task_id)
         minus_ei = - ei
-        li = self.get_li_value(task_id)
+        li = self.get_li_value(task_id, balanced)
 
         sparsity = number_to_select / num_neurons
-        mixing_coeff = sparsity ** sparsity_coeff
+        mixing_coeff = sparsity ** sparsity_coeff  # 0.48
         mixed = (1 - mixing_coeff) * (num_tasks - 1) * minus_ei + mixing_coeff * li
 
         mixed_asc_sorted_idx = np.argsort(mixed)
@@ -672,13 +726,7 @@ class AFN(DEN):
 
     def get_neurons_with_task_variance(self, task_id_or_ids, number_to_select, sparsity_coeff=0.2):
 
-        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
-        if isinstance(task_id_or_ids, int):
-            i_mat = np.delete(i_mat, task_id_or_ids - 1, axis=0)
-        elif isinstance(task_id_or_ids, list):
-            i_mat = np.delete(i_mat, [tid - 1 for tid in task_id_or_ids], axis=0)
-        else:
-            raise TypeError
+        i_mat = self._get_reduced_i_mat(task_id_or_ids)
         num_neurons = i_mat.shape[-1]
 
         li = self.get_li_value(task_id_or_ids)
@@ -706,18 +754,31 @@ class AFN(DEN):
 
         return ei
 
-    def get_li_value(self, task_id_or_ids):
-        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
-        if isinstance(task_id_or_ids, int):
-            i_mat = np.delete(i_mat, task_id_or_ids - 1, axis=0)
-        elif isinstance(task_id_or_ids, list):
-            i_mat = np.delete(i_mat, [tid - 1 for tid in task_id_or_ids], axis=0)
-        else:
-            raise TypeError
+    def get_li_value(self, task_id_or_ids, balanced=False):
 
+        i_mat = self._get_reduced_i_mat(task_id_or_ids)
         li = np.mean(i_mat, axis=0)
 
+        if balanced:
+            n_tasks_to_remove = 1 if isinstance(task_id_or_ids, int) else len(task_id_or_ids)
+            n_tasks = self.n_tasks - n_tasks_to_remove
+
+            time_stamps = [stamp for task_id, stamp in self.time_stamp.items()
+                           if (isinstance(task_id_or_ids, int) and task_id != "task{}".format(task_id_or_ids)) or
+                              (isinstance(task_id_or_ids, list) and task_id not in task_id_or_ids)]
+
+            prev_layer1, prev_layer2 = 0, 0
+            for (i, stamp) in enumerate(time_stamps):
+                _, layer1, layer2, _ = stamp
+                li[prev_layer1:layer1] *= n_tasks/(n_tasks - i)
+                li[prev_layer2:layer2] *= n_tasks/(n_tasks - i)
+                prev_layer1, prev_layer2 = layer1, layer2
+
         return li
+
+    def get_max_value(self, task_id_or_ids):
+        i_mat = self._get_reduced_i_mat(task_id_or_ids)
+        return np.max(i_mat, axis=0)
 
     # Inappropriate for T=2
     def get_exceptionally_important_neurons_for_t(self, task_id, number_to_select):
@@ -727,10 +788,25 @@ class AFN(DEN):
         divider = self.importance_matrix_tuple[0].shape[-1]
         return selected[selected < divider], (selected[selected >= divider] - divider)
 
-    def get_least_important_neurons_for_others(self, task_id_or_ids: int or list, number_to_select):
-        li = self.get_li_value(task_id_or_ids)
+    def get_least_important_neurons_for_others(self, task_id_or_ids: int or list, number_to_select, balanced=False):
+        li = self.get_li_value(task_id_or_ids, balanced)
         li_asc_sorted_idx = np.argsort(li)
         selected = li_asc_sorted_idx[:number_to_select]
+        divider = self.importance_matrix_tuple[0].shape[-1]
+        return selected[selected < divider], (selected[selected >= divider] - divider)
+
+    def get_neurons_with_maximum_importance(self, task_id_or_ids, number_to_select, mixing_coeff=0.75):
+
+        li = self.get_li_value(task_id_or_ids)
+        mi = self.get_max_value(task_id_or_ids)
+
+        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
+        num_tasks, num_neurons = i_mat.shape
+        sparsity = number_to_select / num_neurons
+        mixed = (1 - mixing_coeff) * mi + mixing_coeff * li
+
+        mi_asc_sorted_idx = np.argsort(mixed)
+        selected = mi_asc_sorted_idx[:number_to_select]
         divider = self.importance_matrix_tuple[0].shape[-1]
         return selected[selected < divider], (selected[selected >= divider] - divider)
 

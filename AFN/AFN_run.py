@@ -2,13 +2,14 @@ import tensorflow as tf
 
 import AFN
 from data import *
+from utils import build_line_of_list
 
 np.random.seed(1004)
 flags = tf.app.flags
 flags.DEFINE_integer("max_iter", 400, "Epoch to train")
 flags.DEFINE_float("lr", 0.001, "Learing rate(init) for train")
 flags.DEFINE_integer("batch_size", 256, "The size of batch for 1 iteration")
-flags.DEFINE_string("checkpoint_dir", "./checkpoints", "Directory path to save the checkpoints")
+flags.DEFINE_string("checkpoint_dir", "./checkpoints/default", "Directory path to save the checkpoints")
 flags.DEFINE_integer("dims0", 784, "Dimensions about input layer")
 flags.DEFINE_integer("dims1", 64, "Dimensions about 1st layer")
 flags.DEFINE_integer("dims2", 32, "Dimensions about 2nd layer")
@@ -28,8 +29,11 @@ flags.DEFINE_integer("task_to_forget", 6, 'Task to forget')
 flags.DEFINE_integer("one_step_neurons", 5, 'Number of neurons to forget in one step')
 flags.DEFINE_integer("steps_to_forget", 35, 'Total number of steps in forgetting')
 flags.DEFINE_string("importance_criteria", "first_Taylor_approximation", "Criteria to measure importance of neurons")
+flags.DEFINE_integer("retrain_max_iter_per_task", 150, "Epoch to re-train per one task")
+flags.DEFINE_integer("retrain_task_iter", 80, "Number of re-training one task with retrain_max_iter_per_task")
 
-MODE = "ELSE_FORGET"
+MODE = "DEFAULT_FORGET"
+
 if MODE.startswith("TEST"):
     flags.FLAGS.max_iter = 90
     flags.FLAGS.n_tasks = 2
@@ -42,6 +46,12 @@ elif MODE.startswith("SMALL"):
     flags.FLAGS.task_to_forget = 2
     flags.FLAGS.steps_to_forget = 14
     flags.FLAGS.checkpoint_dir = "./checkpoints/small"
+
+if MODE.endswith("RETRAIN"):
+    flags.FLAGS.steps_to_forget = flags.FLAGS.steps_to_forget - 12
+elif MODE.endswith("CRITERIA"):
+    flags.FLAGS.importance_criteria = "activation"
+    flags.FLAGS.checkpoint_dir += "/" + flags.FLAGS.importance_criteria
 
 FLAGS = flags.FLAGS
 
@@ -64,12 +74,29 @@ def experiment_forget(afn: AFN.AFN, flags, policies):
 
 
 def experiment_forget_and_retrain(afn: AFN.AFN, flags, policies, coreset=None):
+    one_shot_neurons = flags.one_step_neurons * flags.steps_to_forget
     for policy in policies:
         afn.sequentially_adaptive_forget_and_predict(
-            flags.task_to_forget, flags.one_step_neurons, flags.steps_to_forget,
+            flags.task_to_forget, one_shot_neurons, 1,
             policy=policy,
         )
-        afn.retrain_after_forgetting(flags, policy, coreset)
+        lst_of_perfs_at_epoch = afn.retrain_after_forgetting(
+            flags, policy, coreset,
+            epoches_to_print=[0, 1, -2, -1],
+            is_verbose=False,
+        )
+        build_line_of_list(x=list(i * flags.retrain_max_iter_per_task for i in range(len(lst_of_perfs_at_epoch))),
+                           y_list=np.transpose(lst_of_perfs_at_epoch),
+                           label_y_list=[t + 1 for t in range(flags.n_tasks)],
+                           xlabel="Re-training Epoches", ylabel="Accuracy", ylim=[0.9, 1],
+                           title="Accuracy By Retraining After Forgetting Task-{} ({})".format(
+                               flags.task_to_forget,
+                               policy,
+                           ),
+                           file_name="{}_task{}_RetrainAcc.png".format(
+                               afn.importance_criteria.split("_")[0],
+                               flags.task_to_forget,
+                           ))
         afn.clear_experiments()
 
 
@@ -92,8 +119,9 @@ if __name__ == '__main__':
     mnist_data, train_xs, val_xs, test_xs = get_permuted_mnist_datasets(FLAGS.n_tasks)
     mnist_coreset = PermutedMNISTCoreset(
         mnist_data, train_xs, val_xs, test_xs,
-        sampling_ratio=[0.00182, 1.0, 1.0],
+        sampling_ratio=[(250 / 55000), 1.0, 1.0],
         sampling_type="k-center",
+        load_file_name="AFN/pmc_tasks_{}_size_250.pkl".format(FLAGS.n_tasks),
     )
 
     model = AFN.AFN(FLAGS)
@@ -104,11 +132,12 @@ if __name__ == '__main__':
         model.get_importance_matrix()
         model.save()
 
-    policies_for_expr = ["MIX", "VAR", "LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
-
-    if MODE.endswith("FORGET"):
+    if MODE.endswith("FORGET") or MODE.endswith("CRITERIA"):
+        policies_for_expr = ["MIX", "MAX", "VAR", "LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
         experiment_forget(model, FLAGS, policies_for_expr)
     elif MODE.endswith("RETRAIN"):
+        policies_for_expr = ["MIX"]
         experiment_forget_and_retrain(model, FLAGS, policies_for_expr, mnist_coreset)
     elif MODE.endswith("BO"):
+        policies_for_expr = ["MIX"]
         experiment_bayesian_optimization(model, FLAGS, policies_for_expr, mnist_coreset)
