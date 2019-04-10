@@ -8,7 +8,7 @@ from termcolor import cprint
 from reject.ReusableObject import ReusableObject
 
 
-def get_permuted_mnist_datasets(n_tasks: int, mnist_dir: str = "./MNIST_data", base_seed=42) -> tuple:
+def get_permuted_mnist_datasets(n_tasks: int, mnist_dir: str = "../MNIST_data", base_seed=42) -> tuple:
     mnist = input_data.read_data_sets(mnist_dir, one_hot=True)
     train_x = mnist.train.images
     val_x = mnist.validation.images
@@ -67,7 +67,7 @@ class PermutedMNISTCoreset(ReusableObject):
                  sampling_ratio: float or List[float],
                  sampling_type: str = None,
                  seed: int = 42,
-                 load_file_name: str=None):
+                 load_file_name: str = None):
 
         if load_file_name and self.load(load_file_name):
             self.loaded = True
@@ -149,7 +149,7 @@ class PermutedMNISTCoreset(ReusableObject):
 
 if __name__ == '__main__':
     t, s = 10, 5000
-    file_name = "pmc_tasks_{}_size_{}.pkl".format(t, s)
+    file_name = "../MNIST_coreset/pmc_tasks_{}_size_{}.pkl".format(t, s)
     c = PermutedMNISTCoreset(*get_permuted_mnist_datasets(t, "../MNIST_data"),
                              sampling_ratio=[(1 / 55000) * s, 1.0, 1.0],
                              sampling_type="k-center",
@@ -164,5 +164,5 @@ if __name__ == '__main__':
         for s in [5000, 2500, 1000, 500, 250, 100]:
             if not (t == 10 and s == 1000):
                 c.reduce_xs(s)
-                c.dump("pmc_tasks_{}_size_{}.pkl".format(t, s))
+                c.dump("../MNIST_coreset/pmc_tasks_{}_size_{}.pkl".format(t, s))
         c = deepcopy(cc)
