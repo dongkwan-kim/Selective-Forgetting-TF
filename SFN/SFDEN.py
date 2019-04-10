@@ -12,11 +12,11 @@ from DEN.utils import print_all_vars
 from data import PermutedMNISTCoreset
 from utils import build_line_of_list, get_zero_expanded_matrix, parse_var_name
 from utils_importance import *
-from AFNBO import plot_gp
+from SFN_bo import plot_gp
 from bayes_opt import BayesianOptimization
 
 
-class AFN(DEN):
+class SFDEN(DEN):
 
     def __init__(self, config):
         super().__init__(config)

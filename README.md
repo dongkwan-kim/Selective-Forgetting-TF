@@ -1,5 +1,5 @@
-# Adaptive-Forgetting
-Adaptive Forgetting to Reduce Model Size for Continual Learning
+# Selective-Forgetting
+Selective Forgetting to Reduce Model Capacity for Multitask Learning
 
 ## References
 - [Yoon, Jaehong, et al. "Lifelong Learning with Dynamically Expandable Networks." (2018)](https://github.com/jaehong-yoon93/DEN)
