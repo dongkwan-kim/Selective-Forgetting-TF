@@ -58,7 +58,7 @@ FLAGS = flags.FLAGS
 
 def experiment_forget(sfn, flags, policies):
     for policy in policies:
-        sfn.sequentially_adaptive_forget_and_predict(
+        sfn.sequentially_selective_forget_and_predict(
             flags.task_to_forget, flags.one_step_neurons, flags.steps_to_forget,
             policy=policy,
         )
@@ -66,7 +66,7 @@ def experiment_forget(sfn, flags, policies):
 
     sfn.print_summary(flags.task_to_forget, flags.one_step_neurons)
     sfn.draw_chart_summary(flags.task_to_forget, flags.one_step_neurons,
-                           file_prefix="task{}_step{}_total{}".format(
+                           file_prefix="../task{}_step{}_total{}".format(
                                flags.task_to_forget,
                                flags.one_step_neurons,
                                str(int(flags.steps_to_forget) * int(flags.one_step_neurons)),
@@ -76,7 +76,7 @@ def experiment_forget(sfn, flags, policies):
 def experiment_forget_and_retrain(sfn, flags, policies, coreset=None):
     one_shot_neurons = flags.one_step_neurons * flags.steps_to_forget
     for policy in policies:
-        sfn.sequentially_adaptive_forget_and_predict(
+        sfn.sequentially_selective_forget_and_predict(
             flags.task_to_forget, one_shot_neurons, 1,
             policy=policy,
         )
@@ -93,7 +93,7 @@ def experiment_forget_and_retrain(sfn, flags, policies, coreset=None):
                                flags.task_to_forget,
                                policy,
                            ),
-                           file_name="{}_task{}_RetrainAcc.png".format(
+                           file_name="../{}_task{}_RetrainAcc.png".format(
                                sfn.importance_criteria.split("_")[0],
                                flags.task_to_forget,
                            ))
@@ -105,7 +105,7 @@ def experiment_bayesian_optimization(sfn, flags, policies, coreset=None, retrain
         optimal_number_of_neurons = sfn.optimize_number_of_neurons(
             flags.task_to_forget, policy, **kwargs,
         )
-        sfn.sequentially_adaptive_forget_and_predict(
+        sfn.sequentially_selective_forget_and_predict(
             flags.task_to_forget, optimal_number_of_neurons, 1,
             policy=policy,
         )
@@ -138,6 +138,3 @@ if __name__ == '__main__':
     elif MODE.endswith("RETRAIN"):
         policies_for_expr = ["MIX"]
         experiment_forget_and_retrain(model, FLAGS, policies_for_expr, mnist_coreset)
-    elif MODE.endswith("BO"):
-        policies_for_expr = ["MIX"]
-        experiment_bayesian_optimization(model, FLAGS, policies_for_expr, mnist_coreset)
