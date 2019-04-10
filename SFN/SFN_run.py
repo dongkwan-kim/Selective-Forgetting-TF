@@ -66,7 +66,7 @@ def experiment_forget(sfn, flags, policies):
 
     sfn.print_summary(flags.task_to_forget, flags.one_step_neurons)
     sfn.draw_chart_summary(flags.task_to_forget, flags.one_step_neurons,
-                           file_prefix="../task{}_step{}_total{}".format(
+                           file_prefix="../figs/task{}_step{}_total{}".format(
                                flags.task_to_forget,
                                flags.one_step_neurons,
                                str(int(flags.steps_to_forget) * int(flags.one_step_neurons)),
@@ -93,7 +93,7 @@ def experiment_forget_and_retrain(sfn, flags, policies, coreset=None):
                                flags.task_to_forget,
                                policy,
                            ),
-                           file_name="../{}_task{}_RetrainAcc.png".format(
+                           file_name="../figs/{}_task{}_RetrainAcc.png".format(
                                sfn.importance_criteria.split("_")[0],
                                flags.task_to_forget,
                            ))
