@@ -1,7 +1,10 @@
 from copy import deepcopy
+from termcolor import cprint
+from pprint import pprint
 
 import matplotlib.pyplot as plt
 import numpy as np
+import tensorflow as tf
 import re
 
 
@@ -15,6 +18,20 @@ def sum_set(s: set, *args):
 def parse_var_name(var_name):
     p = re.compile("(.+)_t(\d+)_layer(\d)/(.+):0")
     return [x if not x.isnumeric() else int(x) for x in p.findall(var_name)[0]]
+
+
+def print_all_vars(prefix: str = None, color=None):
+    all_variables = tf.get_collection_ref(tf.GraphKeys.GLOBAL_VARIABLES)
+    if prefix:
+        cprint(prefix, color)
+    pprint(all_variables)
+
+
+def print_ckpt_vars(model_path, prefix: str = None, color=None):
+    vars_in_checkpoint = tf.train.list_variables(model_path)
+    if prefix:
+        cprint(prefix, color)
+    pprint(vars_in_checkpoint)
 
 
 # Matrix utils

@@ -5,11 +5,10 @@ import pickle
 
 import numpy as np
 import tensorflow as tf
-from DEN.utils import print_all_vars
 from termcolor import cprint
 
 from data import PermutedMNISTCoreset
-from utils import build_line_of_list
+from utils import build_line_of_list, print_all_vars
 
 
 class SFN:
