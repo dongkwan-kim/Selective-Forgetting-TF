@@ -1,6 +1,7 @@
 import tensorflow as tf
 
 from SFN.SFDEN import SFDEN
+from SFN.SFHPS import SFHPS
 from data import *
 from utils import build_line_of_list
 
@@ -35,7 +36,7 @@ flags.DEFINE_integer("retrain_task_iter", 80, "Number of re-training one task wi
 MODE = {
     "SIZE": "DEFAULT",
     "EXPERIMENT": "FORGET",
-    "MODEL": SFDEN,
+    "MODEL": SFHPS,
 }
 
 if MODE["SIZE"] == "TEST":
@@ -70,7 +71,8 @@ def experiment_forget(sfn, flags, policies):
 
     sfn.print_summary(flags.task_to_forget, flags.one_step_neurons)
     sfn.draw_chart_summary(flags.task_to_forget, flags.one_step_neurons,
-                           file_prefix="../figs/task{}_step{}_total{}".format(
+                           file_prefix="../figs/{}_task{}_step{}_total{}".format(
+                               sfn.__class__.__name__,
                                flags.task_to_forget,
                                flags.one_step_neurons,
                                str(int(flags.steps_to_forget) * int(flags.one_step_neurons)),
@@ -97,7 +99,8 @@ def experiment_forget_and_retrain(sfn, flags, policies, coreset=None):
                                flags.task_to_forget,
                                policy,
                            ),
-                           file_name="../figs/{}_task{}_RetrainAcc.png".format(
+                           file_name="../figs/{}_{}_task{}_RetrainAcc.png".format(
+                               sfn.__class__.__name__,
                                sfn.importance_criteria.split("_")[0],
                                flags.task_to_forget,
                            ))
@@ -132,7 +135,7 @@ if __name__ == '__main__':
     model.add_dataset(mnist_data, train_xs, val_xs, test_xs)
 
     if not model.restore():
-        model.train_den(FLAGS)
+        model.initial_train()
         model.get_importance_matrix()
         model.save()
 

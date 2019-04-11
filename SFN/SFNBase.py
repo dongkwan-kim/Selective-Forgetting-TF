@@ -51,6 +51,9 @@ class SFN:
     def predict_only_after_training(self) -> list:
         raise NotImplementedError
 
+    def initial_train(self):
+        raise NotImplementedError
+
     # Variable, params, ... attributes Manipulation
 
     def sfn_create_variable(self, scope, name, shape=None, trainable=True, initializer=None):

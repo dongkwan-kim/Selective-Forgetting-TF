@@ -104,11 +104,11 @@ class SFDEN(SFN, DEN):
 
     # Train DEN: code from github.com/dongkwan-kim/DEN/blob/master/DEN/DEN_run.py
 
-    def train_den(self, flags):
+    def initial_train(self):
         params = dict()
         avg_perf = []
 
-        for t in range(flags.n_tasks):
+        for t in range(self.n_tasks):
             data = (self.trainXs[t], self.mnist.train.labels,
                     self.valXs[t], self.mnist.validation.labels,
                     self.testXs[t], self.mnist.test.labels)
@@ -134,7 +134,7 @@ class SFDEN(SFN, DEN):
             avg_perf.append(sum(temp_perfs) / float(t + 1))
             print("   [*] avg_perf: %.4f" % avg_perf[t])
 
-            if t != flags.n_tasks - 1:
+            if t != self.n_tasks - 1:
                 self.clear()
 
     # Retrain after forgetting
