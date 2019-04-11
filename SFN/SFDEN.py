@@ -31,7 +31,7 @@ class SFDEN(SFN, DEN):
 
     # Save & Restore
 
-    def reconstruct_model(self):
+    def create_model_variables(self):
         tf.reset_default_graph()
         last_task_dims = self.time_stamp["task{}".format(self.n_tasks)]
         for i in range(self.n_layers - 1):
@@ -127,11 +127,11 @@ class SFDEN(SFN, DEN):
             self.load_params(params)
 
             print('\n OVERALL EVALUATION')
-            temp_perfs = []
+            overall_perfs = []
             for j in range(t + 1):
                 temp_perf = self.predict_perform(j + 1, self.testXs[j], self.mnist.test.labels)
-                temp_perfs.append(temp_perf)
-            avg_perf.append(sum(temp_perfs) / float(t + 1))
+                overall_perfs.append(temp_perf)
+            avg_perf.append(sum(overall_perfs) / float(t + 1))
             print("   [*] avg_perf: %.4f" % avg_perf[t])
 
             if t != self.n_tasks - 1:

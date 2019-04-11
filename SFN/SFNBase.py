@@ -51,7 +51,7 @@ class SFN:
     def predict_only_after_training(self) -> list:
         raise NotImplementedError
 
-    def initial_train(self):
+    def initial_train(self, *args):
         raise NotImplementedError
 
     # Variable, params, ... attributes Manipulation
@@ -120,8 +120,8 @@ class SFN:
             # Attribute Restore
             self.restore_attr(model_name)
 
-            # Model Reconstruction
-            self.reconstruct_model()
+            # Recreate variables
+            self.create_model_variables()
 
             # Model Restore
             self.sess = tf.Session()
@@ -145,7 +145,7 @@ class SFN:
         for a in attr_dict.keys():
             print("\t - {}".format(a))
 
-    def reconstruct_model(self):
+    def create_model_variables(self):
         raise NotImplementedError
 
     # Data batch
@@ -161,7 +161,6 @@ class SFN:
         return r
 
     # Data visualization
-    # TODO: use pycm
 
     def print_history(self, one_step_neuron=1):
         for policy, history in self.prediction_history.items():
@@ -471,5 +470,5 @@ class SFN:
     def _assign_retrained_value_to_tensor(self, task_id):
         raise NotImplementedError
 
-    def assign_new_session(self):
+    def assign_new_session(self, *args):
         raise NotImplementedError
