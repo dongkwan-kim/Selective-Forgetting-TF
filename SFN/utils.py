@@ -34,6 +34,12 @@ def print_ckpt_vars(model_path, prefix: str = None, color=None):
     pprint(vars_in_checkpoint)
 
 
+def get_dims_from_config(config, dims_key="dims") -> list:
+    dims_config = sorted([(k, v) for k, v in config.flag_values_dict().items() if dims_key in k],
+                         key=lambda t: t[0])
+    return [v for _, v in dims_config]
+
+
 # Matrix utils
 
 def get_zero_expanded_matrix(base_matrix: np.ndarray, indexes_to_zero, add_rows=False):

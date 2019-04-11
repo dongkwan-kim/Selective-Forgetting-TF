@@ -58,6 +58,12 @@ elif MODE["EXPERIMENT"] == "CRITERIA":
     flags.FLAGS.importance_criteria = "activation"
     flags.FLAGS.checkpoint_dir += "/" + flags.FLAGS.importance_criteria
 
+if MODE["MODEL"] == SFHPS:
+    flags.FLAGS.max_iter = 1
+    flags.FLAGS.dims1 += 10 * flags.FLAGS.n_tasks
+    flags.FLAGS.dims2 += 10 * flags.FLAGS.n_tasks
+    flags.FLAGS.retrain_task_iter = 400
+
 FLAGS = flags.FLAGS
 
 
@@ -94,8 +100,8 @@ def experiment_forget_and_retrain(sfn, flags, policies, coreset=None):
         build_line_of_list(x=list(i * flags.retrain_max_iter_per_task for i in range(len(lst_of_perfs_at_epoch))),
                            y_list=np.transpose(lst_of_perfs_at_epoch),
                            label_y_list=[t + 1 for t in range(flags.n_tasks)],
-                           xlabel="Re-training Epoches", ylabel="Accuracy", ylim=[0.9, 1],
-                           title="Accuracy By Retraining After Forgetting Task-{} ({})".format(
+                           xlabel="Re-training Epoches", ylabel="AUROC", ylim=[0.9, 1],
+                           title="AUROC By Retraining After Forgetting Task-{} ({})".format(
                                flags.task_to_forget,
                                policy,
                            ),
