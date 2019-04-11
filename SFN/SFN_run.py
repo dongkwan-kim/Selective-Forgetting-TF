@@ -32,24 +32,28 @@ flags.DEFINE_string("importance_criteria", "first_Taylor_approximation", "Criter
 flags.DEFINE_integer("retrain_max_iter_per_task", 150, "Epoch to re-train per one task")
 flags.DEFINE_integer("retrain_task_iter", 80, "Number of re-training one task with retrain_max_iter_per_task")
 
-MODE = "DEFAULT_FORGET"
+MODE = {
+    "SIZE": "DEFAULT",
+    "EXPERIMENT": "FORGET",
+    "MODEL": SFDEN,
+}
 
-if MODE.startswith("TEST"):
+if MODE["SIZE"] == "TEST":
     flags.FLAGS.max_iter = 90
     flags.FLAGS.n_tasks = 2
     flags.FLAGS.task_to_forget = 1
     flags.FLAGS.steps_to_forget = 6
     flags.FLAGS.checkpoint_dir = "../checkpoints/test"
-elif MODE.startswith("SMALL"):
+elif MODE["SIZE"] == "SMALL":
     flags.FLAGS.max_iter = 200
     flags.FLAGS.n_tasks = 4
     flags.FLAGS.task_to_forget = 2
     flags.FLAGS.steps_to_forget = 14
     flags.FLAGS.checkpoint_dir = "../checkpoints/small"
 
-if MODE.endswith("RETRAIN"):
+if MODE["EXPERIMENT"] == "RETRAIN":
     flags.FLAGS.steps_to_forget = flags.FLAGS.steps_to_forget - 12
-elif MODE.endswith("CRITERIA"):
+elif MODE["EXPERIMENT"] == "CRITERIA":
     flags.FLAGS.importance_criteria = "activation"
     flags.FLAGS.checkpoint_dir += "/" + flags.FLAGS.importance_criteria
 
@@ -124,7 +128,7 @@ if __name__ == '__main__':
         load_file_name="../MNIST_coreset/pmc_tasks_{}_size_250.pkl".format(FLAGS.n_tasks),
     )
 
-    model = SFDEN(FLAGS)
+    model = MODE["MODEL"](FLAGS)
     model.add_dataset(mnist_data, train_xs, val_xs, test_xs)
 
     if not model.restore():
@@ -132,9 +136,9 @@ if __name__ == '__main__':
         model.get_importance_matrix()
         model.save()
 
-    if MODE.endswith("FORGET") or MODE.endswith("CRITERIA"):
+    if MODE["EXPERIMENT"] == "FORGET" or MODE["EXPERIMENT"] == "CRITERIA":
         policies_for_expr = ["MIX", "MAX", "VAR", "LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
         experiment_forget(model, FLAGS, policies_for_expr)
-    elif MODE.endswith("RETRAIN"):
+    elif MODE["EXPERIMENT"] == "RETRAIN":
         policies_for_expr = ["MIX"]
         experiment_forget_and_retrain(model, FLAGS, policies_for_expr, mnist_coreset)
