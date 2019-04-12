@@ -1,3 +1,4 @@
+import os
 import tensorflow as tf
 
 from SFN.SFDEN import SFDEN
@@ -58,6 +59,7 @@ elif MODE["EXPERIMENT"] == "CRITERIA":
     flags.FLAGS.importance_criteria = "activation"
     flags.FLAGS.checkpoint_dir += "/" + flags.FLAGS.importance_criteria
 
+flags.FLAGS.checkpoint_dir = os.path.join(flags.FLAGS.checkpoint_dir, MODE["MODEL"].__name__)
 if MODE["MODEL"] == SFHPS:
     flags.FLAGS.max_iter = 1
     flags.FLAGS.dims1 += 10 * flags.FLAGS.n_tasks
