@@ -4,6 +4,7 @@ from pprint import pprint
 import tensorflow as tf
 import numpy as np
 from DEN.ops import ROC_AUC
+from termcolor import cprint
 
 from SFN.SFNBase import SFN
 from utils import get_dims_from_config, print_all_vars
@@ -35,8 +36,16 @@ class SFHPS(SFN):
         if not os.path.isdir(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
 
+        self.yhat_list = []
+        self.loss_list = []
+
         self.create_model_variables()
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
+
+    def restore(self, model_name=None):
+        ret = super().restore(model_name)
+        self.build_model()
+        return ret
 
     def create_variable(self, scope, name, shape, trainable=True):
         with tf.variable_scope(scope):
@@ -53,18 +62,25 @@ class SFHPS(SFN):
     def get_performance(self, p, y):
         perf_list = []
         for _i in range(self.n_classes):
-            roc, perf = ROC_AUC(p[:, _i], y[:, _i])
+            roc, perf = ROC_AUC(p[:, _i], y[:, _i])  # TODO: remove DEN dependency
             perf_list.append(perf)
         return float(np.mean(perf_list))
 
-    def predict_perform(self, task_id, xs, ys, X, yhat):
+    def predict_perform(self, task_id, xs, ys):
+        X = tf.get_default_graph().get_tensor_by_name("X:0")
+        yhat = self.yhat_list[task_id - 1]
         test_preds = self.sess.run(yhat, feed_dict={X: xs})
         test_perf = self.get_performance(test_preds, ys)
         print(" [*] Evaluation, Task:%s, test perf: %.4f" % (str(task_id), test_perf))
         return test_perf
 
     def predict_only_after_training(self) -> list:
-        pass
+        cprint("\n PREDICT ONLY AFTER " + ("TRAINING" if not self.retrained else "RE-TRAINING"), "yellow")
+        temp_perfs = []
+        for t in range(self.n_tasks):
+            temp_perf = self.predict_perform(t + 1, self.testXs[t], self.mnist.test.labels)
+            temp_perfs.append(temp_perf)
+        return temp_perfs
 
     def create_model_variables(self):
         tf.reset_default_graph()
@@ -80,11 +96,10 @@ class SFHPS(SFN):
             b = self.create_variable('layer%d' % self.n_layers, 'biases_%d' % t, [self.dims[-1]])
 
     def build_model(self):
+
         X = tf.placeholder(tf.float32, [None, self.dims[0]], name="X")
         Y_list = [tf.placeholder(tf.float32, [None, self.n_classes], name="Y_%d" % (t + 1))
                   for t in range(self.n_tasks)]
-        yhat_list = []
-        loss_list = []
 
         bottom = X
         for i in range(1, self.n_layers):
@@ -100,25 +115,25 @@ class SFHPS(SFN):
             yhat = tf.nn.sigmoid(y)
             loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y_list[t-1]))
 
-            yhat_list.append(yhat)
-            loss_list.append(loss)
+            self.yhat_list.append(yhat)
+            self.loss_list.append(loss)
 
-        return X, Y_list, yhat_list, loss_list
+        return X, Y_list
 
     def initial_train(self, print_iter=100):
 
-        X, Y_list, yhat_list, loss_list = self.build_model()
+        X, Y_list = self.build_model()
 
         # Add L2 loss regularizer
-        for i in range(len(loss_list)):
+        for i in range(len(self.loss_list)):
             l2_losses = []
             for var in tf.trainable_variables():
                 if "_" not in var.name or "_{}:".format(i+1) in var.name:
                     l2_losses.append(tf.nn.l2_loss(var))
-            loss_list[i] += self.l2_lambda * tf.reduce_sum(l2_losses)
+            self.loss_list[i] += self.l2_lambda * tf.reduce_sum(l2_losses)
 
         opt_list = [tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt%d" % (i+1)).minimize(loss)
-                    for i, loss in enumerate(loss_list)]
+                    for i, loss in enumerate(self.loss_list)]
 
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
@@ -135,7 +150,7 @@ class SFHPS(SFN):
                         self.mnist.train.labels[start_train_idx:next_train_idx],
                         self.valXs[t], self.mnist.validation.labels,
                         self.testXs[t], self.mnist.test.labels)
-                self._train_at_task(X, Y_list[t], loss_list[t], opt_list[t], data)
+                self._train_at_task(X, Y_list[t], self.loss_list[t], opt_list[t], data)
 
             start_train_idx = next_train_idx % len(self.trainXs[0])
 
@@ -143,7 +158,7 @@ class SFHPS(SFN):
                 print('\n OVERALL EVALUATION at ITERATION {}'.format(task_iter))
                 overall_perfs = []
                 for t in range(self.n_tasks):
-                    temp_perf = self.predict_perform(t + 1, self.testXs[t], self.mnist.test.labels, X, yhat_list[t])
+                    temp_perf = self.predict_perform(t + 1, self.testXs[t], self.mnist.test.labels)
                     overall_perfs.append(temp_perf)
                 avg_perfs.append(sum(overall_perfs) / float(self.n_tasks))
                 print("   [*] avg_perf: %.4f" % avg_perfs[-1])
