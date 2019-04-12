@@ -10,7 +10,6 @@ from utils_importance import *
 
 
 class SFDEN(SFN, DEN):
-
     """
     Selective Forgettable Dynamic Expandable Network
 
@@ -271,14 +270,14 @@ class SFDEN(SFN, DEN):
         if not self.importance_matrix_tuple:
             self.get_importance_matrix()
 
-        ni_1, ni_2 = self.get_selective_forget_neurons(task_to_forget, number_of_neurons, policy)
+        neuron_indexes = self.get_selective_forget_neurons(task_to_forget, number_of_neurons, policy)
 
-        self._remove_neurons("layer1", ni_1)
-        self._remove_neurons("layer2", ni_2)
+        for i, ni in enumerate(neuron_indexes):
+            self._remove_neurons("layer{}".format(i + 1), ni)
 
         self.assign_new_session()
 
-        return ni_1, ni_2
+        return neuron_indexes
 
     def _remove_neurons(self, scope, indexes: np.ndarray):
         """Zeroing columns of target indexes"""
@@ -341,8 +340,7 @@ class SFDEN(SFN, DEN):
         self.sess.run(tf.global_variables_initializer())
 
         h_length_list = [h.get_shape().as_list()[-1] for h in hidden_layer_list]
-        importance_vector_1 = np.zeros(shape=(0, h_length_list[0]))
-        importance_vector_2 = np.zeros(shape=(0, h_length_list[1]))
+        importance_vectors = [np.zeros(shape=(0, h_length)) for h_length in h_length_list]
 
         self.initialize_batch()
         while True:
@@ -352,37 +350,37 @@ class SFDEN(SFN, DEN):
 
             # shape = (batch_size, |h|)
             if importance_criteria == "first_Taylor_approximation":
-                batch_importance_vector_1, batch_importance_vector_2 = get_1st_taylor_approximation_based(self.sess, {
+                batch_importance_vectors = get_1st_taylor_approximation_based(self.sess, {
                     "hidden_layers": hidden_layer_list,
                     "gradients": gradient_list,
                 }, {X: batch_x, Y: batch_y})
 
             elif importance_criteria == "activation":
-                batch_importance_vector_1, batch_importance_vector_2 = get_activation_based(self.sess, {
+                batch_importance_vectors = get_activation_based(self.sess, {
                     "hidden_layers": hidden_layer_list,
                 }, {X: batch_x, Y: batch_y})
 
             elif importance_criteria == "magnitude":
-                batch_importance_vector_1, batch_importance_vector_2 = get_magnitude_based(self.sess, {
+                batch_importance_vectors = get_magnitude_based(self.sess, {
                     "weights": weight_list,
                     "biases": bias_list,
                 }, {X: batch_x, Y: batch_y})
 
             elif importance_criteria == "gradient":
-                batch_importance_vector_1, batch_importance_vector_2 = get_gradient_based(self.sess, {
+                batch_importance_vectors = get_gradient_based(self.sess, {
                     "gradients": gradient_list,
                 }, {X: batch_x, Y: batch_y})
 
             else:
                 raise NotImplementedError
 
-            importance_vector_1 = np.vstack((importance_vector_1, batch_importance_vector_1))
-            importance_vector_2 = np.vstack((importance_vector_2, batch_importance_vector_2))
+            for i, batch_i_vector in enumerate(batch_importance_vectors):
+                importance_vectors[i] = np.vstack((importance_vectors[i], batch_i_vector))
 
-        importance_vector_1 = importance_vector_1.sum(axis=0)
-        importance_vector_2 = importance_vector_2.sum(axis=0)
+        for i in range(len(importance_vectors)):
+            importance_vectors[i] = importance_vectors[i].sum(axis=0)
 
         if layer_separate:
-            return importance_vector_1, importance_vector_2  # (|h1|,), (|h2|,)
+            return tuple(importance_vectors)  # (|h1|,), (|h2|,)
         else:
-            return np.concatenate((importance_vector_1, importance_vector_2))  # shape = (|h|,)
+            return np.concatenate(importance_vectors)  # shape = (|h|,)
