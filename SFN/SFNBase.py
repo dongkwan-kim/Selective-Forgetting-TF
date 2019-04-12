@@ -109,7 +109,7 @@ class SFN:
         for a in attr:
             print("\t - {}".format(a))
 
-    def restore(self, model_name=None):
+    def restore(self, model_name=None) -> bool:
         model_name = model_name or str(self)
         model_path = os.path.join(self.checkpoint_dir, "{}.ckpt".format(model_name))
 
@@ -340,32 +340,32 @@ class SFN:
 
     # Selective forgetting
 
-    def get_selective_forget_neurons(self, task_to_forget, number_of_neurons, policy, **kwargs):
+    def get_selective_forget_neurons(self, task_to_forget, number_of_neurons, policy, **kwargs) -> tuple:
         assert policy in ["MIX", "MAX", "VAR", "EIN", "LIN", "RANDOM", "ALL", "ALL_VAR"]
 
         cprint("\n SELECTIVE FORGET {} task-{} from {}, neurons-{}".format(
             policy, task_to_forget, self.n_tasks, number_of_neurons), "green")
 
         if policy == "MIX":
-            ni_1, ni_2 = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, **kwargs)
+            neuron_index_tuple = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, **kwargs)
         elif policy == "MAX":
-            ni_1, ni_2 = self.get_neurons_with_maximum_importance(task_to_forget, number_of_neurons, **kwargs)
+            neuron_index_tuple = self.get_neurons_with_maximum_importance(task_to_forget, number_of_neurons, **kwargs)
         elif policy == "VAR":
-            ni_1, ni_2 = self.get_neurons_with_task_variance(task_to_forget, number_of_neurons, **kwargs)
+            neuron_index_tuple = self.get_neurons_with_task_variance(task_to_forget, number_of_neurons, **kwargs)
         elif policy == "EIN":
-            ni_1, ni_2 = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, mixing_coeff=0)
+            neuron_index_tuple = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, mixing_coeff=0)
         elif policy == "LIN":
-            ni_1, ni_2 = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, mixing_coeff=1)
+            neuron_index_tuple = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, mixing_coeff=1)
         elif policy == "RANDOM":
-            ni_1, ni_2 = self.get_random_neurons(number_of_neurons)
+            neuron_index_tuple = self.get_random_neurons(number_of_neurons)
         elif policy == "ALL":
-            ni_1, ni_2 = self.get_neurons_by_mixed_ein_and_lin([], number_of_neurons, mixing_coeff=1)
+            neuron_index_tuple = self.get_neurons_by_mixed_ein_and_lin([], number_of_neurons, mixing_coeff=1)
         elif policy == "ALL_VAR":
-            ni_1, ni_2 = self.get_neurons_with_task_variance([], number_of_neurons, **kwargs)
+            neuron_index_tuple = self.get_neurons_with_task_variance([], number_of_neurons, **kwargs)
         else:
             raise NotImplementedError
 
-        return ni_1, ni_2
+        return neuron_index_tuple
 
     def selective_forget(self, task_to_forget, number_of_neurons, policy) -> tuple:
         raise NotImplementedError
@@ -393,32 +393,30 @@ class SFN:
     def get_importance_matrix(self, layer_separate=False, importance_criteria=None):
 
         # TODO: handle more than two layer networks
-        importance_matrix_1, importance_matrix_2 = None, None
+        importance_matrices = []
 
         importance_criteria = importance_criteria or self.importance_criteria
         self.importance_criteria = importance_criteria
 
         for t in reversed(range(1, self.n_tasks + 1)):
-            iv_1, iv_2 = self.get_importance_vector(
+            i_vector_tuple = self.get_importance_vector(
                 task_id=t,
                 layer_separate=True,
                 importance_criteria=importance_criteria,
             )
 
             if t == self.n_tasks:
-                importance_matrix_1 = np.zeros(shape=(0, iv_1.shape[0]))
-                importance_matrix_2 = np.zeros(shape=(0, iv_2.shape[0]))
+                for iv in i_vector_tuple:
+                    importance_matrices.append(np.zeros(shape=(0, iv.shape[0])))
 
-            importance_matrix_1 = np.vstack((
-                np.pad(iv_1, (0, importance_matrix_1.shape[-1] - iv_1.shape[0]), 'constant', constant_values=(0, 0)),
-                importance_matrix_1,
-            ))
-            importance_matrix_2 = np.vstack((
-                np.pad(iv_2, (0, importance_matrix_2.shape[-1] - iv_2.shape[0]), 'constant', constant_values=(0, 0)),
-                importance_matrix_2,
-            ))
+            for i, iv in enumerate(i_vector_tuple):
+                imat = importance_matrices[i]
+                importance_matrices[i] = np.vstack((
+                    np.pad(iv, (0, imat.shape[-1] - iv.shape[0]), 'constant', constant_values=(0, 0)),
+                    imat,
+                ))
 
-        self.importance_matrix_tuple = importance_matrix_1, importance_matrix_2
+        self.importance_matrix_tuple = tuple(importance_matrices)
         if layer_separate:
             return self.importance_matrix_tuple  # (T, |h1|), (T, |h2|)
         else:
