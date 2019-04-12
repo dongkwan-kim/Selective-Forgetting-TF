@@ -9,6 +9,7 @@ from termcolor import cprint
 
 from data import PermutedMNISTCoreset
 from utils import build_line_of_list, print_all_vars
+from utils_importance import *
 
 
 class SFN:
@@ -384,10 +385,68 @@ class SFN:
                 self.recover_recent_params()
 
     # Importance vectors
-
-    # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
     def get_importance_vector(self, task_id, importance_criteria: str, layer_separate=False) -> tuple or np.ndarray:
+        """
+        :param task_id:
+        :param importance_criteria:
+        :param layer_separate:
+            - layer_separate = True: tuple of ndarray of shape (|h1|,), (|h2|,) or
+            - layer_separate = False: ndarray of shape (|h|,)
+
+        First construct the model, then pass tf vars to get_importance_vector_from_tf_vars
+
+        :return: The return value of get_importance_vector_from_tf_vars
+        """
         raise NotImplementedError
+
+    def get_importance_vector_from_tf_vars(self, task_id, importance_criteria,
+                                           h_length_list, hidden_layer_list, gradient_list, weight_list, bias_list,
+                                           X, Y, layer_separate=False) -> tuple or np.ndarray:
+
+        importance_vectors = [np.zeros(shape=(0, h_length)) for h_length in h_length_list]
+
+        self.initialize_batch()
+        while True:
+            batch_x, batch_y = self.get_next_batch(self.trainXs[task_id - 1], self.mnist.train.labels)
+            if len(batch_x) == 0:
+                break
+
+            # shape = (batch_size, |h|)
+            if importance_criteria == "first_Taylor_approximation":
+                batch_importance_vectors = get_1st_taylor_approximation_based(self.sess, {
+                    "hidden_layers": hidden_layer_list,
+                    "gradients": gradient_list,
+                }, {X: batch_x, Y: batch_y})
+
+            elif importance_criteria == "activation":
+                batch_importance_vectors = get_activation_based(self.sess, {
+                    "hidden_layers": hidden_layer_list,
+                }, {X: batch_x, Y: batch_y})
+
+            elif importance_criteria == "magnitude":
+                batch_importance_vectors = get_magnitude_based(self.sess, {
+                    "weights": weight_list,
+                    "biases": bias_list,
+                }, {X: batch_x, Y: batch_y})
+
+            elif importance_criteria == "gradient":
+                batch_importance_vectors = get_gradient_based(self.sess, {
+                    "gradients": gradient_list,
+                }, {X: batch_x, Y: batch_y})
+
+            else:
+                raise NotImplementedError
+
+            for i, batch_i_vector in enumerate(batch_importance_vectors):
+                importance_vectors[i] = np.vstack((importance_vectors[i], batch_i_vector))
+
+        for i in range(len(importance_vectors)):
+            importance_vectors[i] = importance_vectors[i].sum(axis=0)
+
+        if layer_separate:
+            return tuple(importance_vectors)  # (|h1|,), (|h2|,)
+        else:
+            return np.concatenate(importance_vectors)  # shape = (|h|,)
 
     # shape = (T, |h|) or (T, |h1|), (T, |h2|)
     def get_importance_matrix(self, layer_separate=False, importance_criteria=None):

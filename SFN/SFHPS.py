@@ -8,7 +8,6 @@ from termcolor import cprint
 
 from SFN.SFNBase import SFN
 from utils import get_dims_from_config, print_all_vars
-from utils_importance import *
 
 
 class SFHPS(SFN):
@@ -200,60 +199,28 @@ class SFHPS(SFN):
         y = tf.matmul(bottom, sfn_w) + sfn_b
         yhat = tf.nn.sigmoid(y)
         loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y))
-        train_step = tf.train.GradientDescentOptimizer(self.init_lr).minimize(loss)
+        _ = tf.train.GradientDescentOptimizer(self.init_lr).minimize(loss)
 
         gradient_list = [tf.gradients(loss, h) for h in hidden_layer_list]
-
         h_length_list = [h.get_shape().as_list()[-1] for h in hidden_layer_list]
-        importance_vectors = [np.zeros(shape=(0, h_length)) for h_length in h_length_list]
 
-        self.initialize_batch()
-        while True:
-            batch_x, batch_y = self.get_next_batch(self.trainXs[task_id - 1], self.mnist.train.labels)
-            if len(batch_x) == 0:
-                break
-
-            # shape = (batch_size, |h|)
-            if importance_criteria == "first_Taylor_approximation":
-                batch_importance_vectors = get_1st_taylor_approximation_based(self.sess, {
-                    "hidden_layers": hidden_layer_list,
-                    "gradients": gradient_list,
-                }, {X: batch_x, Y: batch_y})
-
-            elif importance_criteria == "activation":
-                batch_importance_vectors = get_activation_based(self.sess, {
-                    "hidden_layers": hidden_layer_list,
-                }, {X: batch_x, Y: batch_y})
-
-            elif importance_criteria == "magnitude":
-                batch_importance_vectors = get_magnitude_based(self.sess, {
-                    "weights": weight_list,
-                    "biases": bias_list,
-                }, {X: batch_x, Y: batch_y})
-
-            elif importance_criteria == "gradient":
-                batch_importance_vectors = get_gradient_based(self.sess, {
-                    "gradients": gradient_list,
-                }, {X: batch_x, Y: batch_y})
-
-            else:
-                raise NotImplementedError
-
-            for i, batch_i_vector in enumerate(batch_importance_vectors):
-                importance_vectors[i] = np.vstack((importance_vectors[i], batch_i_vector))
-
-        for i in range(len(importance_vectors)):
-            importance_vectors[i] = importance_vectors[i].sum(axis=0)
-
-        if layer_separate:
-            return tuple(importance_vectors)  # (|h1|,), (|h2|,)
-        else:
-            return np.concatenate(importance_vectors)  # shape = (|h|,)
-
-    def recover_params(self, idx):
-        pass
+        # layer_separate = True: tuple of ndarray of shape (|h1|,), (|h2|,) or
+        # layer_separate = False: ndarray of shape (|h|,)
+        return self.get_importance_vector_from_tf_vars(
+            task_id, importance_criteria,
+            h_length_list=h_length_list,
+            hidden_layer_list=hidden_layer_list,
+            gradient_list=gradient_list,
+            weight_list=weight_list,
+            bias_list=bias_list,
+            X=X, Y=Y,
+            layer_separate=layer_separate,
+        )
 
     def selective_forget(self, task_to_forget, number_of_neurons, policy) -> tuple:
+        pass
+
+    def recover_params(self, idx):
         pass
 
     def _retrain_at_task(self, task_id, data, retrain_flags, is_verbose):
