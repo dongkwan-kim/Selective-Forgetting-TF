@@ -58,7 +58,7 @@ class SFN:
 
     # Variable, params, ... attributes Manipulation
 
-    def get_params(self):
+    def get_params(self) -> dict:
         raise NotImplementedError
 
     def load_params(self, params, *args, **kwargs):
@@ -67,10 +67,10 @@ class SFN:
     def recover_params(self, idx):
         raise NotImplementedError
 
-    def create_variable(self, scope, name, shape, trainable=True):
+    def create_variable(self, scope, name, shape, trainable=True) -> tf.Variable:
         raise NotImplementedError
 
-    def get_variable(self, scope, name, trainable=True):
+    def get_variable(self, scope, name, trainable=True) -> tf.Variable:
         raise NotImplementedError
 
     def assign_new_session(self, idx_to_load_params=None):

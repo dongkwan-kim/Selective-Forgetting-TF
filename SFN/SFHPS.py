@@ -45,19 +45,19 @@ class SFHPS(SFN):
         self.build_model()
         return ret
 
-    def create_variable(self, scope, name, shape, trainable=True):
+    def create_variable(self, scope, name, shape, trainable=True) -> tf.Variable:
         with tf.variable_scope(scope):
             w = tf.get_variable(name, shape, trainable=trainable)
             self.params[w.name] = w
         return w
 
-    def get_variable(self, scope, name, trainable=True):
+    def get_variable(self, scope, name, trainable=True) -> tf.Variable:
         with tf.variable_scope(scope, reuse=True):
             w = tf.get_variable(name, trainable=trainable)
             self.params[w.name] = w
         return w
 
-    def get_params(self):
+    def get_params(self) -> dict:
         """ Access the parameters """
         params = dict()
         for scope_name, param in self.params.items():
