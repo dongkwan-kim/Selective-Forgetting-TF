@@ -32,6 +32,7 @@ class SFN:
         self.batch_idx = 0
         self.retrained = False
 
+        self.params = {}
         self.sfn_params = {}
         self.old_params_list = []
 
@@ -56,6 +57,33 @@ class SFN:
         raise NotImplementedError
 
     # Variable, params, ... attributes Manipulation
+
+    def get_params(self):
+        raise NotImplementedError
+
+    def load_params(self, params, *args, **kwargs):
+        raise NotImplementedError
+
+    def recover_params(self, idx):
+        raise NotImplementedError
+
+    def create_variable(self, scope, name, shape, trainable=True):
+        raise NotImplementedError
+
+    def get_variable(self, scope, name, trainable=True):
+        raise NotImplementedError
+
+    def assign_new_session(self, idx_to_load_params=None):
+        """
+        :param idx_to_load_params: if idx_to_load_params is None, use current params
+                                   else use self.old_params_list[idx_to_load_params]
+        :return:
+        """
+        raise NotImplementedError
+
+    def clear(self):
+        tf.reset_default_graph()
+        self.sess.close()
 
     def sfn_create_variable(self, scope, name, shape=None, trainable=True, initializer=None):
         with tf.variable_scope(scope):
@@ -239,9 +267,6 @@ class SFN:
         print("\n RECOVER OLD PARAMS")
         self.recover_params(0)
 
-    def recover_params(self, idx):
-        raise NotImplementedError
-
     # Pruning strategies
 
     def _get_reduced_i_mat(self, task_id_or_ids):
@@ -341,35 +366,68 @@ class SFN:
 
     # Selective forgetting
 
-    def get_selective_forget_neurons(self, task_to_forget, number_of_neurons, policy, **kwargs) -> tuple:
+    def selective_forget(self, task_to_forget, number_of_neurons, policy, **kwargs) -> tuple:
+
         assert policy in ["MIX", "MAX", "VAR", "EIN", "LIN", "RANDOM", "ALL", "ALL_VAR"]
+
+        self.old_params_list.append(self.get_params())
+
+        if not self.importance_matrix_tuple:
+            self.get_importance_matrix()
 
         cprint("\n SELECTIVE FORGET {} task-{} from {}, neurons-{}".format(
             policy, task_to_forget, self.n_tasks, number_of_neurons), "green")
 
         if policy == "MIX":
-            neuron_index_tuple = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, **kwargs)
+            neuron_indexes = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, **kwargs)
         elif policy == "MAX":
-            neuron_index_tuple = self.get_neurons_with_maximum_importance(task_to_forget, number_of_neurons, **kwargs)
+            neuron_indexes = self.get_neurons_with_maximum_importance(task_to_forget, number_of_neurons, **kwargs)
         elif policy == "VAR":
-            neuron_index_tuple = self.get_neurons_with_task_variance(task_to_forget, number_of_neurons, **kwargs)
+            neuron_indexes = self.get_neurons_with_task_variance(task_to_forget, number_of_neurons, **kwargs)
         elif policy == "EIN":
-            neuron_index_tuple = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, mixing_coeff=0)
+            neuron_indexes = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, mixing_coeff=0)
         elif policy == "LIN":
-            neuron_index_tuple = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, mixing_coeff=1)
+            neuron_indexes = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, mixing_coeff=1)
         elif policy == "RANDOM":
-            neuron_index_tuple = self.get_random_neurons(number_of_neurons)
+            neuron_indexes = self.get_random_neurons(number_of_neurons)
         elif policy == "ALL":
-            neuron_index_tuple = self.get_neurons_by_mixed_ein_and_lin([], number_of_neurons, mixing_coeff=1)
+            neuron_indexes = self.get_neurons_by_mixed_ein_and_lin([], number_of_neurons, mixing_coeff=1)
         elif policy == "ALL_VAR":
-            neuron_index_tuple = self.get_neurons_with_task_variance([], number_of_neurons, **kwargs)
+            neuron_indexes = self.get_neurons_with_task_variance([], number_of_neurons, **kwargs)
         else:
             raise NotImplementedError
 
-        return neuron_index_tuple
+        for i, ni in enumerate(neuron_indexes):
+            self._remove_neurons("layer{}".format(i + 1), ni)
 
-    def selective_forget(self, task_to_forget, number_of_neurons, policy) -> tuple:
-        raise NotImplementedError
+        self.assign_new_session()
+
+        return neuron_indexes
+
+    def _remove_neurons(self, scope, indexes: np.ndarray):
+        """Zeroing columns of target indexes"""
+
+        if len(indexes) == 0:
+            return
+
+        print("\n REMOVE NEURONS {} ({}) - {}".format(scope, len(indexes), indexes))
+        self.layer_to_removed_neuron_set[scope].update(set(indexes))
+
+        w: tf.Variable = self.get_variable(scope, "weight", False)
+        b: tf.Variable = self.get_variable(scope, "biases", False)
+
+        val_w = w.eval(session=self.sess)
+        val_b = b.eval(session=self.sess)
+
+        for i in indexes:
+            val_w[:, i] = 0
+            val_b[i] = 0
+
+        self.sess.run(tf.assign(w, val_w))
+        self.sess.run(tf.assign(b, val_b))
+
+        self.params[w.name] = w
+        self.params[b.name] = b
 
     def sequentially_selective_forget_and_predict(self, task_to_forget, one_step_neurons, steps, policy):
 
@@ -525,7 +583,4 @@ class SFN:
         raise NotImplementedError
 
     def _assign_retrained_value_to_tensor(self, task_id):
-        raise NotImplementedError
-
-    def assign_new_session(self, *args):
         raise NotImplementedError

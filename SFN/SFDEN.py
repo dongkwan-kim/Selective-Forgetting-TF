@@ -10,7 +10,7 @@ import numpy as np
 from utils import build_line_of_list, get_zero_expanded_matrix, parse_var_name
 
 
-class SFDEN(SFN, DEN):
+class SFDEN(DEN, SFN):
     """
     Selective Forgettable Dynamic Expandable Network
 
@@ -23,13 +23,7 @@ class SFDEN(SFN, DEN):
         DEN.__init__(self, config)
         self.attr_to_save += ["T", "time_stamp"]
 
-    def assign_new_session(self):
-        params = self.get_params()
-        self.clear()
-        self.sess = tf.Session()
-        self.load_params(params)
-
-    # Save & Restore
+    # Variable, params, ... attributes Manipulation
 
     def create_model_variables(self):
         tf.reset_default_graph()
@@ -43,7 +37,14 @@ class SFDEN(SFN, DEN):
                                  [last_task_dims[-2], self.n_classes], True)
             self.create_variable('layer%d' % self.n_layers, 'biases_%d' % task_id, [self.n_classes], True)
 
-    # Variable, params, ... attributes Manipulation
+    def assign_new_session(self, idx=None):
+        if idx is None:
+            params = self.get_params()
+        else:
+            params = self.old_params_list[idx]
+        self.clear()
+        self.sess = tf.Session()
+        self.load_params(params)
 
     def sfden_get_weight_and_bias_at_task(self, layer_id: int, stamp: list, task_id: int, var_prefix: str,
                                           is_bottom=False, is_forgotten=False):
@@ -97,10 +98,6 @@ class SFDEN(SFN, DEN):
     def get_removed_neurons_of_layer(self, layer_id, stamp=None) -> list:
         return [neuron for neuron in self.layer_to_removed_neuron_set["layer%d" % layer_id]
                 if stamp is None or neuron < stamp[layer_id]]
-
-    def clear(self):
-        self.destroy_graph()
-        self.sess.close()
 
     # Train DEN: code from github.com/dongkwan-kim/DEN/blob/master/DEN/DEN_run.py
 
@@ -253,57 +250,9 @@ class SFDEN(SFN, DEN):
                 original_shape[0] -= len(removed_neurons_prev)
             return original_shape
 
-    # Utils for sequential experiments
-
     def recover_params(self, idx):
-        self.params = self.old_params_list[idx]
-        self.clear()
-        self.sess = tf.Session()
-        self.load_params(self.params)
+        self.assign_new_session(idx)
         self.sess.run(tf.global_variables_initializer())
-
-    # Selective forgetting
-
-    def selective_forget(self, task_to_forget, number_of_neurons, policy) -> tuple:
-
-        self.old_params_list.append(self.get_params())
-
-        if not self.importance_matrix_tuple:
-            self.get_importance_matrix()
-
-        neuron_indexes = self.get_selective_forget_neurons(task_to_forget, number_of_neurons, policy)
-
-        for i, ni in enumerate(neuron_indexes):
-            self._remove_neurons("layer{}".format(i + 1), ni)
-
-        self.assign_new_session()
-
-        return neuron_indexes
-
-    def _remove_neurons(self, scope, indexes: np.ndarray):
-        """Zeroing columns of target indexes"""
-
-        if len(indexes) == 0:
-            return
-
-        print("\n REMOVE NEURONS {} ({}) - {}".format(scope, len(indexes), indexes))
-        self.layer_to_removed_neuron_set[scope].update(set(indexes))
-
-        w: tf.Variable = self.get_variable(scope, "weight", False)
-        b: tf.Variable = self.get_variable(scope, "biases", False)
-
-        val_w = w.eval(session=self.sess)
-        val_b = b.eval(session=self.sess)
-
-        for i in indexes:
-            val_w[:, i] = 0
-            val_b[i] = 0
-
-        self.sess.run(tf.assign(w, val_w))
-        self.sess.run(tf.assign(b, val_b))
-
-        self.params[w.name] = w
-        self.params[b.name] = b
 
     # Importance vectors
 

@@ -31,7 +31,6 @@ class SFHPS(SFN):
         self.l1_lambda = config.l1_lambda
         self.l2_lambda = config.l2_lambda
         self.checkpoint_dir = config.checkpoint_dir
-        self.params = {}
         if not os.path.isdir(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
 
@@ -57,6 +56,23 @@ class SFHPS(SFN):
             w = tf.get_variable(name, trainable=trainable)
             self.params[w.name] = w
         return w
+
+    def get_params(self):
+        """ Access the parameters """
+        params = dict()
+        for scope_name, param in self.params.items():
+            w = self.sess.run(param)
+            params[scope_name] = w
+        return params
+
+    def load_params(self, params, *args, **kwargs):
+        """ params: it contains weight parameters used in network, like ckpt """
+        self.params = dict()
+        for scope_name, param in params.items():
+            scope_name = scope_name.split(':')[0]
+            w = tf.get_variable(scope_name, initializer=param, trainable=True)
+            self.params[w.name] = w
+        return self.params
 
     def get_performance(self, p, y):
         perf_list = []
@@ -217,17 +233,24 @@ class SFHPS(SFN):
             layer_separate=layer_separate,
         )
 
-    def selective_forget(self, task_to_forget, number_of_neurons, policy) -> tuple:
-        pass
-
     def recover_params(self, idx):
-        pass
+        self.assign_new_session(idx)
+
+    def assign_new_session(self, idx=None):
+        if idx is None:
+            params = self.get_params()
+        else:
+            params = self.old_params_list[idx]
+        self.clear()
+        self.sess = tf.Session()
+        self.load_params(params)
+        self.sess.run(tf.global_variables_initializer())
+        self.loss_list = []
+        self.yhat_list = []
+        self.build_model()
 
     def _retrain_at_task(self, task_id, data, retrain_flags, is_verbose):
         pass
 
     def _assign_retrained_value_to_tensor(self, task_id):
-        pass
-
-    def assign_new_session(self):
         pass
