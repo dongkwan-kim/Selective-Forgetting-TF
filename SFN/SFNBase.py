@@ -20,7 +20,7 @@ class SFN:
 
         self.batch_size = config.batch_size
         self.checkpoint_dir = config.checkpoint_dir
-        self.mnist, self.trainXs, self.valXs, self.testXs = None, None, None, None
+        self.data_labels, self.trainXs, self.valXs, self.testXs = None, None, None, None
         self.n_tasks = config.n_tasks
         self.dims = None
 
@@ -47,8 +47,8 @@ class SFN:
     def __repr__(self):
         return "{}_{}_{}".format(self.__class__.__name__, self.n_tasks, "_".join(map(str, self.dims)))
 
-    def add_dataset(self, mnist, train_xs, val_xs, test_xs):
-        self.mnist, self.trainXs, self.valXs, self.testXs = mnist, train_xs, val_xs, test_xs
+    def add_dataset(self, data_labels, train_xs, val_xs, test_xs):
+        self.data_labels, self.trainXs, self.valXs, self.testXs = data_labels, train_xs, val_xs, test_xs
 
     def predict_only_after_training(self) -> list:
         raise NotImplementedError
@@ -465,7 +465,7 @@ class SFN:
 
         self.initialize_batch()
         while True:
-            batch_x, batch_y = self.get_next_batch(self.trainXs[task_id - 1], self.mnist.train.labels)
+            batch_x, batch_y = self.get_next_batch(self.trainXs[task_id - 1], self.data_labels.train_labels)
             if len(batch_x) == 0:
                 break
 
@@ -557,9 +557,10 @@ class SFN:
 
             for t in range(flags.n_tasks):
                 if (t + 1) != flags.task_to_forget:
-                    coreset_t = coreset[t] if coreset is not None else (self.trainXs[t], self.mnist.train.labels,
-                                                                        self.valXs[t], self.mnist.validation.labels,
-                                                                        self.testXs[t], self.mnist.test.labels)
+                    coreset_t = coreset[t] if coreset is not None \
+                                           else (self.trainXs[t], self.data_labels.train_labels,
+                                                 self.valXs[t], self.data_labels.validation_labels,
+                                                 self.testXs[t], self.data_labels.test_labels)
                     if is_verbose:
                         cprint("\n\n\tTASK %d RE-TRAINING at iteration %d\n" % (t + 1, retrain_iter), "green")
                     self._retrain_at_task(t + 1, coreset_t, flags, is_verbose)

@@ -38,7 +38,7 @@ flags.DEFINE_integer("coreset_size", 250, "Size of coreset")
 MODE = {
     "SIZE": "DEFAULT",
     "EXPERIMENT": "FORGET",
-    "MODEL": SFHPS,
+    "MODEL": SFDEN,
     "DTYPE": "PERMUTED_MNIST",
 }
 
@@ -120,7 +120,7 @@ def experiment_forget_and_retrain(sfn, _flags, _policies, _coreset=None):
 def get_dataset(dtype: str, _flags) -> tuple:
 
     if dtype == "PERMUTED_MNIST":
-        _data, _train_xs, _val_xs, _test_xs = get_permuted_datasets(_flags.n_tasks, data_dir="../MNIST_data")
+        _data, _train_xs, _val_xs, _test_xs = get_permuted_datasets(dtype, _flags.n_tasks, data_dir="../MNIST_data")
         train_sz = _train_xs[0].shape[0]
         _coreset = PermutedCoreset(
             _data, _train_xs, _val_xs, _test_xs,

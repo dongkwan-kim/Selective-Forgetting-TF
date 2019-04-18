@@ -1,7 +1,10 @@
 from copy import deepcopy
-from typing import List
+from typing import List, Callable, Tuple
+from collections import namedtuple
 
-from tensorflow.examples.tutorials.mnist import input_data
+import tensorflow_datasets as tfds
+from sklearn.preprocessing import LabelBinarizer
+
 import numpy as np
 from termcolor import cprint
 from tqdm import trange
@@ -9,12 +12,82 @@ from tqdm import trange
 from reject.ReusableObject import ReusableObject
 
 
-def get_permuted_datasets(n_tasks: int, data_dir: str, base_seed=42) -> tuple:
-    data = input_data.read_data_sets(data_dir, one_hot=True)
-    train_x = data.train.images
-    val_x = data.validation.images
-    test_x = data.test.images
+def dtype_to_name(dtype: str):
+    return dtype.lower().split("_")[-1]
 
+
+def name_to_train_and_val_num(name: str) -> tuple:
+    if name == "mnist":
+        return 55000, 5000
+    else:
+        raise ValueError
+
+
+def get_to_one_hot(num_class: int) -> Callable:
+    lb = LabelBinarizer()
+    lb.fit(range(num_class))
+    return lb.transform
+
+
+def preprocess_x(name: str, xs: List[np.ndarray]) -> tuple:
+    if name == "mnist":
+        return tuple(x / 255 for x in xs)
+    else:
+        raise ValueError
+
+
+def get_tfds(dtype: str, data_dir: str, to_2d: bool):
+
+    name = dtype_to_name(dtype)
+    assert name in tfds.list_builders()
+
+    # https://www.tensorflow.org/datasets/datasets
+    loaded, info = tfds.load(
+        name=name,
+        split=["train", "test"],
+        data_dir=data_dir,
+        batch_size=-1,
+        with_info=True,
+    )
+
+    # Get numpy matrix
+    train_and_validation, test = tfds.as_numpy(loaded)
+
+    # Reshaping
+    _, w, h, _ = train_and_validation["image"].shape
+    train_and_validation_x = train_and_validation["image"]
+    if to_2d:
+        train_and_validation_x = train_and_validation_x.reshape(-1, w * h)
+        test_x = test["image"].reshape(-1, w * h)
+    else:
+        train_and_validation_x = train_and_validation_x.reshape(-1, w, h)
+        test_x = test["image"].reshape(-1, w, h)
+
+    # Preprocess
+    train_and_validation_x, test_x = preprocess_x(name, [train_and_validation_x, test_x])
+
+    # Training Validation Separation
+    # this is necessary because tfds does not support validation separation.
+    train_num = name_to_train_and_val_num(name)[0]
+    train_x = train_and_validation_x[:train_num]
+    val_x = train_and_validation_x[train_num:]
+
+    # One hot labeling
+    to_one_hot = get_to_one_hot(info.features["label"].num_classes)
+    DataLabel = namedtuple("DataLabel", "train_labels, validation_labels, test_labels")
+    data_label = DataLabel(
+        train_labels=to_one_hot(train_and_validation["label"][:train_num]),
+        validation_labels=to_one_hot(train_and_validation["label"][train_num:]),
+        test_labels=to_one_hot(test["label"]),
+    )
+    return data_label, train_x, val_x, test_x
+
+
+def get_permuted_datasets(dtype: str, n_tasks: int, data_dir: str, base_seed=42, to_2d=True) -> tuple:
+
+    data_label, train_x, val_x, test_x = get_tfds(dtype, data_dir, to_2d)
+
+    # Pixel Permuting
     task_permutation = []
     for task in range(n_tasks):
         np.random.seed(task + base_seed)
@@ -26,7 +99,7 @@ def get_permuted_datasets(n_tasks: int, data_dir: str, base_seed=42) -> tuple:
         _val_xs.append(val_x[:, task_permutation[task]])
         _test_xs.append(test_x[:, task_permutation[task]])
 
-    return data, _train_xs, _val_xs, _test_xs
+    return data_label, _train_xs, _val_xs, _test_xs
 
 
 def sample_indices(sz, ratio):
@@ -64,7 +137,7 @@ def slice_xs(xs, indices):
 
 class PermutedCoreset(ReusableObject):
 
-    def __init__(self, data, train_xs, val_xs, test_xs,
+    def __init__(self, data_labels, train_xs, val_xs, test_xs,
                  sampling_ratio: float or List[float],
                  sampling_type: str = None,
                  seed: int = 42,
@@ -109,9 +182,9 @@ class PermutedCoreset(ReusableObject):
         self.val_xs = slice_xs(val_xs, val_sampled_idx)
         self.test_xs = slice_xs(test_xs, test_sampled_idx)
 
-        self.train_labels = data.train.labels[train_sampled_idx]
-        self.val_labels = data.validation.labels[val_sampled_idx]
-        self.test_labels = data.test.labels[test_sampled_idx]
+        self.train_labels = data_labels.train_labels[train_sampled_idx]
+        self.val_labels = data_labels.validation_labels[val_sampled_idx]
+        self.test_labels = data_labels.test_labels[test_sampled_idx]
 
         self.num_tasks = len(self.train_xs)
 
@@ -149,9 +222,9 @@ class PermutedCoreset(ReusableObject):
 
 
 if __name__ == '__main__':
-    t, s = 10, 5000
+    t, s = 10, 1000
     file_name = "../MNIST_coreset/pmc_tasks_{}_size_{}.pkl".format(t, s)
-    c = PermutedCoreset(*get_permuted_datasets(t, "../MNIST_data"),
+    c = PermutedCoreset(*get_permuted_datasets("PERMUTED_MNIST", t, "../MNIST_data"),
                         sampling_ratio=[(s / 55000), 1.0, 1.0],
                         sampling_type="k-center",
                         load_file_name=file_name)
@@ -162,7 +235,7 @@ if __name__ == '__main__':
     cc = deepcopy(c)
     for t in [10, 4, 2]:
         c.reduce_tasks(t)
-        for s in [5000, 2500, 1000, 500, 250, 100]:
+        for s in [1000, 500, 250, 100]:
             if not (t == 10 and s == 1000):
                 c.reduce_xs(s)
                 c.dump("../MNIST_coreset/pmc_tasks_{}_size_{}.pkl".format(t, s))
