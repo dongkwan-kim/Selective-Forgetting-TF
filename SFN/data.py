@@ -1,3 +1,4 @@
+import os
 from copy import deepcopy
 from typing import List, Callable, Tuple
 from collections import namedtuple
@@ -41,6 +42,8 @@ def get_tfds(dtype: str, data_dir: str, to_2d: bool):
     name = dtype_to_name(dtype)
     assert name in tfds.list_builders()
 
+    data_dir = data_dir or os.path.join("..", "{}_data".format(name.upper()))  # e.g. ../MNIST_data
+
     # https://www.tensorflow.org/datasets/datasets
     loaded, info = tfds.load(
         name=name,
@@ -83,7 +86,7 @@ def get_tfds(dtype: str, data_dir: str, to_2d: bool):
     return data_label, train_x, val_x, test_x
 
 
-def get_permuted_datasets(dtype: str, n_tasks: int, data_dir: str, base_seed=42, to_2d=True) -> tuple:
+def get_permuted_datasets(dtype: str, n_tasks: int, data_dir=None, base_seed=42, to_2d=True) -> tuple:
 
     data_label, train_x, val_x, test_x = get_tfds(dtype, data_dir, to_2d)
 

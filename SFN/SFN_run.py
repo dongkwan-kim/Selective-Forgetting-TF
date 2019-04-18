@@ -39,7 +39,7 @@ MODE = {
     "SIZE": "DEFAULT",
     "EXPERIMENT": "FORGET",
     "MODEL": SFDEN,
-    "DTYPE": "PERMUTED_MNIST",
+    "DTYPE": "PERMUTED_MNIST",  # PERMUTED_MNIST, CIFAR100
 }
 
 if MODE["SIZE"] == "TEST":
@@ -119,8 +119,9 @@ def experiment_forget_and_retrain(sfn, _flags, _policies, _coreset=None):
 
 def get_dataset(dtype: str, _flags) -> tuple:
 
+    _data, _train_xs, _val_xs, _test_xs = get_permuted_datasets(dtype, _flags.n_tasks)
+
     if dtype == "PERMUTED_MNIST":
-        _data, _train_xs, _val_xs, _test_xs = get_permuted_datasets(dtype, _flags.n_tasks, data_dir="../MNIST_data")
         train_sz = _train_xs[0].shape[0]
         _coreset = PermutedCoreset(
             _data, _train_xs, _val_xs, _test_xs,
