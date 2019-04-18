@@ -2,6 +2,7 @@ import os
 from copy import deepcopy
 from typing import List, Callable, Tuple
 from collections import namedtuple
+from functools import reduce
 
 import tensorflow_datasets as tfds
 from sklearn.preprocessing import LabelBinarizer
@@ -20,6 +21,8 @@ def dtype_to_name(dtype: str):
 def name_to_train_and_val_num(name: str) -> tuple:
     if name == "mnist":
         return 55000, 5000
+    elif name == "cifar100":
+        return 45000, 5000
     else:
         raise ValueError
 
@@ -30,14 +33,30 @@ def get_to_one_hot(num_class: int) -> Callable:
     return lb.transform
 
 
-def preprocess_x(name: str, xs: List[np.ndarray]) -> tuple:
+def preprocess_xs(name: str, xs: List[np.ndarray], is_for_cnn=None) -> tuple:
+
+    def reshape_xs():
+        _xs = []
+        for x in xs:
+            _, *whd = x.shape
+            # (-1, w * h * d) if not is_for_cnn else (-1, w, h, d)
+            x = x.reshape((-1, reduce(lambda i, j: i*j, whd))) if not is_for_cnn else x.reshape((-1, *whd))
+            _xs.append(x)
+        return _xs
+
     if name == "mnist":
-        return tuple(x / 255 for x in xs)
+        is_for_cnn = is_for_cnn or False
+        reshaped_xs = reshape_xs()
+        return tuple(x / 255 for x in reshaped_xs)
+    elif name == "cifar100":
+        is_for_cnn = is_for_cnn or True
+        reshaped_xs = reshape_xs()
+        return tuple(x / 255 for x in reshaped_xs)
     else:
         raise ValueError
 
 
-def get_tfds(dtype: str, data_dir: str, to_2d: bool):
+def get_tfds(dtype: str, data_dir: str = None, x_name="image", y_name="label", is_verbose=True, **kwargs):
 
     name = dtype_to_name(dtype)
     assert name in tfds.list_builders()
@@ -52,22 +71,18 @@ def get_tfds(dtype: str, data_dir: str, to_2d: bool):
         batch_size=-1,
         with_info=True,
     )
+    if is_verbose:
+        print(info)
 
     # Get numpy matrix
     train_and_validation, test = tfds.as_numpy(loaded)
 
-    # Reshaping
-    _, w, h, _ = train_and_validation["image"].shape
-    train_and_validation_x = train_and_validation["image"]
-    if to_2d:
-        train_and_validation_x = train_and_validation_x.reshape(-1, w * h)
-        test_x = test["image"].reshape(-1, w * h)
-    else:
-        train_and_validation_x = train_and_validation_x.reshape(-1, w, h)
-        test_x = test["image"].reshape(-1, w, h)
-
-    # Preprocess
-    train_and_validation_x, test_x = preprocess_x(name, [train_and_validation_x, test_x])
+    # Preprocess & Reshape
+    train_and_validation_x, test_x = preprocess_xs(
+        name,
+        [train_and_validation[x_name], test[x_name]],
+        **kwargs,
+    )
 
     # Training Validation Separation
     # this is necessary because tfds does not support validation separation.
@@ -76,19 +91,19 @@ def get_tfds(dtype: str, data_dir: str, to_2d: bool):
     val_x = train_and_validation_x[train_num:]
 
     # One hot labeling
-    to_one_hot = get_to_one_hot(info.features["label"].num_classes)
+    to_one_hot = get_to_one_hot(info.features[y_name].num_classes)
     DataLabel = namedtuple("DataLabel", "train_labels, validation_labels, test_labels")
     data_label = DataLabel(
-        train_labels=to_one_hot(train_and_validation["label"][:train_num]),
-        validation_labels=to_one_hot(train_and_validation["label"][train_num:]),
-        test_labels=to_one_hot(test["label"]),
+        train_labels=to_one_hot(train_and_validation[y_name][:train_num]),
+        validation_labels=to_one_hot(train_and_validation[y_name][train_num:]),
+        test_labels=to_one_hot(test[y_name]),
     )
     return data_label, train_x, val_x, test_x
 
 
-def get_permuted_datasets(dtype: str, n_tasks: int, data_dir=None, base_seed=42, to_2d=True) -> tuple:
+def get_permuted_datasets(dtype: str, n_tasks: int, data_dir=None, base_seed=42, **kwargs) -> tuple:
 
-    data_label, train_x, val_x, test_x = get_tfds(dtype, data_dir, to_2d)
+    data_label, train_x, val_x, test_x = get_tfds(dtype, data_dir, **kwargs)
 
     # Pixel Permuting
     task_permutation = []

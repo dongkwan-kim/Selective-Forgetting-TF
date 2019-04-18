@@ -39,7 +39,7 @@ MODE = {
     "SIZE": "DEFAULT",
     "EXPERIMENT": "FORGET",
     "MODEL": SFDEN,
-    "DTYPE": "PERMUTED_MNIST",  # PERMUTED_MNIST, CIFAR100
+    "DTYPE": "COARSE_CIFAR100",  # PERMUTED_MNIST, COARSE_CIFAR100
 }
 
 if MODE["SIZE"] == "TEST":
@@ -60,6 +60,9 @@ if MODE["EXPERIMENT"] == "RETRAIN":
 elif MODE["EXPERIMENT"] == "CRITERIA":
     flags.FLAGS.importance_criteria = "activation"
     flags.FLAGS.checkpoint_dir += "/" + flags.FLAGS.importance_criteria
+
+if MODE["DTYPE"] == "COARSE_CIFAR100":
+    flags.FLAGS.n_classes = 20
 
 flags.FLAGS.checkpoint_dir = os.path.join(flags.FLAGS.checkpoint_dir, MODE["MODEL"].__name__)
 if MODE["MODEL"] == SFHPS:
@@ -117,14 +120,13 @@ def experiment_forget_and_retrain(sfn, _flags, _policies, _coreset=None):
         sfn.clear_experiments()
 
 
-def get_dataset(dtype: str, _flags) -> tuple:
-
-    _data, _train_xs, _val_xs, _test_xs = get_permuted_datasets(dtype, _flags.n_tasks)
+def get_dataset(dtype: str, _flags, **kwargs) -> tuple:
 
     if dtype == "PERMUTED_MNIST":
+        _labels, _train_xs, _val_xs, _test_xs = get_permuted_datasets(dtype, _flags.n_tasks, **kwargs)
         train_sz = _train_xs[0].shape[0]
         _coreset = PermutedCoreset(
-            _data, _train_xs, _val_xs, _test_xs,
+            _labels, _train_xs, _val_xs, _test_xs,
             sampling_ratio=[(_flags.coreset_size / train_sz), 1.0, 1.0],
             sampling_type="k-center",
             load_file_name=os.path.join("../MNIST_coreset", "pmc_tasks_{}_size_{}.pkl".format(
@@ -132,7 +134,10 @@ def get_dataset(dtype: str, _flags) -> tuple:
                 _flags.coreset_size,
             )),
         )
-        return _data, _train_xs, _val_xs, _test_xs, _coreset
+        return _labels, _train_xs, _val_xs, _test_xs, _coreset
+
+    elif dtype == "COARSE_CIFAR100":
+        _labels, _train_xs, _val_xs, _test_xs = get_tfds(dtype, y_name="coarse_label", **kwargs)
 
     else:
         raise ValueError
@@ -140,10 +145,10 @@ def get_dataset(dtype: str, _flags) -> tuple:
 
 if __name__ == '__main__':
 
-    data, train_xs, val_xs, test_xs, coreset = get_dataset(MODE["DTYPE"], FLAGS)
+    labels, train_xs, val_xs, test_xs, coreset = get_dataset(MODE["DTYPE"], FLAGS)
 
     model = MODE["MODEL"](FLAGS)
-    model.add_dataset(data, train_xs, val_xs, test_xs)
+    model.add_dataset(labels, train_xs, val_xs, test_xs)
 
     if not model.restore():
         model.initial_train()
