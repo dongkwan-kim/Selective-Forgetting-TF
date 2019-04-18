@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 from termcolor import cprint
 
-from data import PermutedMNISTCoreset
+from data import PermutedCoreset
 from utils import build_line_of_list, print_all_vars
 from utils_importance import *
 
@@ -541,7 +541,7 @@ class SFN:
 
     # Retrain after forgetting
 
-    def retrain_after_forgetting(self, flags, policy, coreset: PermutedMNISTCoreset = None,
+    def retrain_after_forgetting(self, flags, policy, coreset: PermutedCoreset = None,
                                  epoches_to_print: list = None, is_verbose: bool = True):
         cprint("\n RETRAIN AFTER FORGETTING - {}".format(policy), "green")
         self.retrained = True

@@ -33,11 +33,13 @@ flags.DEFINE_integer("steps_to_forget", 35, 'Total number of steps in forgetting
 flags.DEFINE_string("importance_criteria", "first_Taylor_approximation", "Criteria to measure importance of neurons")
 flags.DEFINE_integer("retrain_max_iter_per_task", 150, "Epoch to re-train per one task")
 flags.DEFINE_integer("retrain_task_iter", 80, "Number of re-training one task with retrain_max_iter_per_task")
+flags.DEFINE_integer("coreset_size", 250, "Size of coreset")
 
 MODE = {
     "SIZE": "DEFAULT",
     "EXPERIMENT": "FORGET",
     "MODEL": SFHPS,
+    "DTYPE": "PERMUTED_MNIST",
 }
 
 if MODE["SIZE"] == "TEST":
@@ -69,78 +71,78 @@ if MODE["MODEL"] == SFHPS:
 FLAGS = flags.FLAGS
 
 
-def experiment_forget(sfn, flags, policies):
-    for policy in policies:
+def experiment_forget(sfn, _flags, _policies):
+    for policy in _policies:
         sfn.sequentially_selective_forget_and_predict(
-            flags.task_to_forget, flags.one_step_neurons, flags.steps_to_forget,
+            _flags.task_to_forget, _flags.one_step_neurons, _flags.steps_to_forget,
             policy=policy,
         )
         sfn.recover_old_params()
 
-    sfn.print_summary(flags.task_to_forget, flags.one_step_neurons)
-    sfn.draw_chart_summary(flags.task_to_forget, flags.one_step_neurons,
+    sfn.print_summary(_flags.task_to_forget, _flags.one_step_neurons)
+    sfn.draw_chart_summary(_flags.task_to_forget, _flags.one_step_neurons,
                            file_prefix="../figs/{}_task{}_step{}_total{}".format(
                                sfn.__class__.__name__,
-                               flags.task_to_forget,
-                               flags.one_step_neurons,
-                               str(int(flags.steps_to_forget) * int(flags.one_step_neurons)),
+                               _flags.task_to_forget,
+                               _flags.one_step_neurons,
+                               str(int(_flags.steps_to_forget) * int(_flags.one_step_neurons)),
                            ))
 
 
-def experiment_forget_and_retrain(sfn, flags, policies, coreset=None):
-    one_shot_neurons = flags.one_step_neurons * flags.steps_to_forget
-    for policy in policies:
+def experiment_forget_and_retrain(sfn, _flags, _policies, _coreset=None):
+    one_shot_neurons = _flags.one_step_neurons * _flags.steps_to_forget
+    for policy in _policies:
         sfn.sequentially_selective_forget_and_predict(
-            flags.task_to_forget, one_shot_neurons, 1,
+            _flags.task_to_forget, one_shot_neurons, 1,
             policy=policy,
         )
         lst_of_perfs_at_epoch = sfn.retrain_after_forgetting(
-            flags, policy, coreset,
+            _flags, policy, _coreset,
             epoches_to_print=[0, 1, -2, -1],
             is_verbose=False,
         )
-        build_line_of_list(x=list(i * flags.retrain_max_iter_per_task for i in range(len(lst_of_perfs_at_epoch))),
+        build_line_of_list(x=list(i * _flags.retrain_max_iter_per_task for i in range(len(lst_of_perfs_at_epoch))),
                            y_list=np.transpose(lst_of_perfs_at_epoch),
-                           label_y_list=[t + 1 for t in range(flags.n_tasks)],
+                           label_y_list=[t + 1 for t in range(_flags.n_tasks)],
                            xlabel="Re-training Epoches", ylabel="AUROC", ylim=[0.9, 1],
                            title="AUROC By Retraining After Forgetting Task-{} ({})".format(
-                               flags.task_to_forget,
+                               _flags.task_to_forget,
                                policy,
                            ),
                            file_name="../figs/{}_{}_task{}_RetrainAcc.png".format(
                                sfn.__class__.__name__,
                                sfn.importance_criteria.split("_")[0],
-                               flags.task_to_forget,
+                               _flags.task_to_forget,
                            ))
         sfn.clear_experiments()
 
 
-def experiment_bayesian_optimization(sfn, flags, policies, coreset=None, retraining=True, **kwargs):
-    for policy in policies:
-        optimal_number_of_neurons = sfn.optimize_number_of_neurons(
-            flags.task_to_forget, policy, **kwargs,
+def get_dataset(dtype: str, _flags) -> tuple:
+
+    if dtype == "PERMUTED_MNIST":
+        _data, _train_xs, _val_xs, _test_xs = get_permuted_datasets(_flags.n_tasks, data_dir="../MNIST_data")
+        train_sz = _train_xs[0].shape[0]
+        _coreset = PermutedCoreset(
+            _data, _train_xs, _val_xs, _test_xs,
+            sampling_ratio=[(_flags.coreset_size / train_sz), 1.0, 1.0],
+            sampling_type="k-center",
+            load_file_name=os.path.join("../MNIST_coreset", "pmc_tasks_{}_size_{}.pkl".format(
+                _flags.n_tasks,
+                _flags.coreset_size,
+            )),
         )
-        sfn.sequentially_selective_forget_and_predict(
-            flags.task_to_forget, optimal_number_of_neurons, 1,
-            policy=policy,
-        )
-        if retraining:
-            sfn.retrain_after_forgetting(flags, policy, coreset)
-        sfn.clear_experiments()
+        return _data, _train_xs, _val_xs, _test_xs, _coreset
+
+    else:
+        raise ValueError
 
 
 if __name__ == '__main__':
 
-    mnist_data, train_xs, val_xs, test_xs = get_permuted_mnist_datasets(FLAGS.n_tasks)
-    mnist_coreset = PermutedMNISTCoreset(
-        mnist_data, train_xs, val_xs, test_xs,
-        sampling_ratio=[(250 / 55000), 1.0, 1.0],
-        sampling_type="k-center",
-        load_file_name="../MNIST_coreset/pmc_tasks_{}_size_250.pkl".format(FLAGS.n_tasks),
-    )
+    data, train_xs, val_xs, test_xs, coreset = get_dataset(MODE["DTYPE"], FLAGS)
 
     model = MODE["MODEL"](FLAGS)
-    model.add_dataset(mnist_data, train_xs, val_xs, test_xs)
+    model.add_dataset(data, train_xs, val_xs, test_xs)
 
     if not model.restore():
         model.initial_train()
@@ -152,4 +154,4 @@ if __name__ == '__main__':
         experiment_forget(model, FLAGS, policies_for_expr)
     elif MODE["EXPERIMENT"] == "RETRAIN":
         policies_for_expr = ["MIX"]
-        experiment_forget_and_retrain(model, FLAGS, policies_for_expr, mnist_coreset)
+        experiment_forget_and_retrain(model, FLAGS, policies_for_expr, coreset)
