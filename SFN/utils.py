@@ -16,7 +16,7 @@ def sum_set(s: set, *args):
 
 
 def parse_var_name(var_name):
-    p = re.compile("(.+)_t(\d+)_layer(\d)/(.+):0")
+    p = re.compile("(.+)_t(\\d+)_layer(\\d)/(.+):0")
     return [x if not x.isnumeric() else int(x) for x in p.findall(var_name)[0]]
 
 
@@ -34,10 +34,13 @@ def print_ckpt_vars(model_path, prefix: str = None, color=None):
     pprint(vars_in_checkpoint)
 
 
-def get_dims_from_config(config, dims_key="dims") -> list:
-    dims_config = sorted([(k, v) for k, v in config.flag_values_dict().items() if dims_key in k],
+def get_dims_from_config(config, search="dims", with_key=False) -> list:
+    dims_config = sorted([(k, v) for k, v in config.flag_values_dict().items() if search in k],
                          key=lambda t: t[0])
-    return [v for _, v in dims_config]
+    if not with_key:
+        return [v for _, v in dims_config]
+    else:
+        return dims_config
 
 
 # Matrix utils
