@@ -1,7 +1,6 @@
 import os
 from copy import deepcopy
 from typing import List, Callable, Tuple
-from collections import namedtuple
 from functools import reduce
 
 import tensorflow_datasets as tfds
@@ -12,6 +11,32 @@ from termcolor import cprint
 from tqdm import trange
 
 from reject.ReusableObject import ReusableObject
+from enums import LabelType
+
+
+class DataLabel:
+
+    def __init__(self, train_labels, validation_labels, test_labels, label_type):
+        self.train_labels: np.ndarray or tuple = train_labels
+        self.validation_labels: np.ndarray or tuple = validation_labels
+        self.test_labels: np.ndarray or tuple = test_labels
+        self.label_type: LabelType = label_type
+
+    def get_train_labels(self, task_id) -> np.ndarray:
+        return self.get_labels(self.train_labels, task_id)
+
+    def get_validation_labels(self, task_id) -> np.ndarray:
+        return self.get_labels(self.validation_labels, task_id)
+
+    def get_test_labels(self, task_id) -> np.ndarray:
+        return self.get_labels(self.test_labels, task_id)
+
+    def get_labels(self, labels, task_id) -> np.ndarray:
+        if self.label_type == LabelType.ONE_LABELS_TO_ALL_TASK:
+            return labels
+        elif self.label_type == LabelType.ONE_LABEL_TO_ONE_CLASS:
+            assert task_id is not None and task_id > 0
+            return np.asarray([labels[0][task_id - 1] for _ in range(labels[1][task_id - 1])])
 
 
 def dtype_to_name(dtype: str):
@@ -92,16 +117,17 @@ def get_tfds(dtype: str, data_dir: str = None, x_name="image", y_name="label", i
 
     # One hot labeling
     to_one_hot = get_to_one_hot(info.features[y_name].num_classes)
-    DataLabel = namedtuple("DataLabel", "train_labels, validation_labels, test_labels")
     data_label = DataLabel(
         train_labels=to_one_hot(train_and_validation[y_name][:train_num]),
         validation_labels=to_one_hot(train_and_validation[y_name][train_num:]),
         test_labels=to_one_hot(test[y_name]),
+        label_type=LabelType.ONE_LABELS_TO_ALL_TASK,
     )
     return data_label, train_x, val_x, test_x
 
 
-def get_permuted_datasets(dtype: str, n_tasks: int, data_dir=None, base_seed=42, **kwargs) -> tuple:
+def get_permuted_datasets(dtype: str, n_tasks: int, data_dir=None, base_seed=42,
+                          **kwargs) -> Tuple[DataLabel, list, list, list]:
 
     data_label, train_x, val_x, test_x = get_tfds(dtype, data_dir, **kwargs)
 
@@ -117,6 +143,37 @@ def get_permuted_datasets(dtype: str, n_tasks: int, data_dir=None, base_seed=42,
         _val_xs.append(val_x[:, task_permutation[task]])
         _test_xs.append(test_x[:, task_permutation[task]])
 
+    return data_label, _train_xs, _val_xs, _test_xs
+
+
+def get_class_as_task_datasets(dtype: str, n_tasks: int, data_dir=None,
+                               **kwargs) -> Tuple[DataLabel, list, list, list]:
+
+    data_label, train_x, val_x, test_x = get_tfds(dtype, data_dir, **kwargs)
+
+    train_not_one_hot_label = np.argmax(data_label.train_labels, axis=1)
+    validation_not_one_hot_label = np.argmax(data_label.validation_labels, axis=1)
+    test_not_one_hot_label = np.argmax(data_label.test_labels, axis=1)
+
+    # Class Dividing
+    _train_xs, _val_xs, _test_xs = [], [], []
+    for cls_id in range(n_tasks):
+        train_indexes_of_cls = train_not_one_hot_label == cls_id
+        validation_indexes_of_cls = validation_not_one_hot_label == cls_id
+        test_indexes_of_cls = test_not_one_hot_label == cls_id
+
+        _train_xs.append(train_x[train_indexes_of_cls])
+        _val_xs.append(val_x[validation_indexes_of_cls])
+        _test_xs.append(test_x[test_indexes_of_cls])
+
+    # Construct labels
+    to_one_hot = get_to_one_hot(n_tasks)
+    data_label = DataLabel(
+        train_labels=(to_one_hot(list(range(n_tasks))), [len(x) for x in _train_xs]),
+        validation_labels=(to_one_hot(list(range(n_tasks))), [len(x) for x in _val_xs]),
+        test_labels=(to_one_hot(list(range(n_tasks))), [len(x) for x in _test_xs]),
+        label_type=LabelType.ONE_LABEL_TO_ONE_CLASS
+    )
     return data_label, _train_xs, _val_xs, _test_xs
 
 
