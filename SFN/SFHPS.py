@@ -93,7 +93,7 @@ class SFHPS(SFN):
         cprint("\n PREDICT ONLY AFTER " + ("TRAINING" if not self.retrained else "RE-TRAINING"), "yellow")
         temp_perfs = []
         for t in range(self.n_tasks):
-            temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.test_labels)
+            temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.get_test_labels(t + 1))
             temp_perfs.append(temp_perf)
         return temp_perfs
 
@@ -162,9 +162,11 @@ class SFHPS(SFN):
 
             for t in range(self.n_tasks):
                 data = (self.trainXs[t][start_train_idx:next_train_idx],
-                        self.data_labels.train_labels[start_train_idx:next_train_idx],
-                        self.valXs[t], self.data_labels.validation_labels,
-                        self.testXs[t], self.data_labels.test_labels)
+                        self.data_labels.get_train_labels(t + 1)[start_train_idx:next_train_idx],
+                        self.valXs[t],
+                        self.data_labels.get_validation_labels(t + 1),
+                        self.testXs[t],
+                        self.data_labels.get_test_labels(t + 1))
                 self._train_at_task(X, Y_list[t], self.loss_list[t], opt_list[t], data)
 
             start_train_idx = next_train_idx % len(self.trainXs[0])
@@ -173,7 +175,7 @@ class SFHPS(SFN):
                 print('\n OVERALL EVALUATION at ITERATION {}'.format(task_iter))
                 overall_perfs = []
                 for t in range(self.n_tasks):
-                    temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.test_labels)
+                    temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.get_test_labels(t + 1))
                     overall_perfs.append(temp_perf)
                 avg_perfs.append(sum(overall_perfs) / float(self.n_tasks))
                 print("   [*] avg_perf: %.4f" % avg_perfs[-1])

@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 from termcolor import cprint
 
-from data import PermutedCoreset
+from data import PermutedCoreset, DataLabel
 from utils import build_line_of_list, print_all_vars
 from utils_importance import *
 
@@ -20,7 +20,8 @@ class SFN:
 
         self.batch_size = config.batch_size
         self.checkpoint_dir = config.checkpoint_dir
-        self.data_labels, self.trainXs, self.valXs, self.testXs = None, None, None, None
+        self.data_labels: DataLabel = None
+        self.trainXs, self.valXs, self.testXs = None, None, None
         self.n_tasks = config.n_tasks
         self.dims = None
 
@@ -465,7 +466,10 @@ class SFN:
 
         self.initialize_batch()
         while True:
-            batch_x, batch_y = self.get_next_batch(self.trainXs[task_id - 1], self.data_labels.train_labels)
+            batch_x, batch_y = self.get_next_batch(
+                self.trainXs[task_id - 1],
+                self.data_labels.get_train_labels(task_id),
+            )
             if len(batch_x) == 0:
                 break
 
@@ -558,9 +562,9 @@ class SFN:
             for t in range(flags.n_tasks):
                 if (t + 1) != flags.task_to_forget:
                     coreset_t = coreset[t] if coreset is not None \
-                                           else (self.trainXs[t], self.data_labels.train_labels,
-                                                 self.valXs[t], self.data_labels.validation_labels,
-                                                 self.testXs[t], self.data_labels.test_labels)
+                                           else (self.trainXs[t], self.data_labels.get_train_labels(t + 1),
+                                                 self.valXs[t], self.data_labels.get_validation_labels(t + 1),
+                                                 self.testXs[t], self.data_labels.get_test_labels(t + 1))
                     if is_verbose:
                         cprint("\n\n\tTASK %d RE-TRAINING at iteration %d\n" % (t + 1, retrain_iter), "green")
                     self._retrain_at_task(t + 1, coreset_t, flags, is_verbose)

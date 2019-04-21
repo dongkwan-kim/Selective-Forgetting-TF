@@ -23,20 +23,38 @@ class DataLabel:
         self.label_type: LabelType = label_type
 
     def get_train_labels(self, task_id) -> np.ndarray:
-        return self.get_labels(self.train_labels, task_id)
+        return self._get_labels(self.train_labels, task_id)
 
     def get_validation_labels(self, task_id) -> np.ndarray:
-        return self.get_labels(self.validation_labels, task_id)
+        return self._get_labels(self.validation_labels, task_id)
 
     def get_test_labels(self, task_id) -> np.ndarray:
-        return self.get_labels(self.test_labels, task_id)
+        return self._get_labels(self.test_labels, task_id)
 
-    def get_labels(self, labels, task_id) -> np.ndarray:
+    def _get_labels(self, labels, task_id) -> np.ndarray:
         if self.label_type == LabelType.ONE_LABELS_TO_ALL_TASK:
             return labels
         elif self.label_type == LabelType.ONE_LABEL_TO_ONE_CLASS:
             assert task_id is not None and task_id > 0
             return np.asarray([labels[0][task_id - 1] for _ in range(labels[1][task_id - 1])])
+
+    def slice_train_labels(self, indexes: np.ndarray or List[np.ndarray]):
+        self.train_labels = self._slice_labels(self.train_labels, indexes)
+
+    def slice_validation_labels(self, indexes: np.ndarray or List[np.ndarray]):
+        self.validation_labels = self._slice_labels(self.validation_labels, indexes)
+
+    def slice_test_labels(self, indexes: np.ndarray or List[np.ndarray]):
+        self.test_labels = self._slice_labels(self.test_labels, indexes)
+
+    def _slice_labels(self, labels, indexes: np.ndarray or List[np.ndarray]):
+        if self.label_type == LabelType.ONE_LABELS_TO_ALL_TASK:
+            return labels[indexes]
+        elif self.label_type == LabelType.ONE_LABEL_TO_ONE_CLASS:
+            real_labels, cls_sz = labels
+            sliced_cls_sz = [len(indexes_of_cls) for indexes_of_cls in indexes]
+            assert len(cls_sz) == len(sliced_cls_sz)
+            return real_labels, sliced_cls_sz
 
 
 def dtype_to_name(dtype: str):
@@ -212,7 +230,9 @@ def slice_xs(xs, indices):
 
 class PermutedCoreset(ReusableObject):
 
-    def __init__(self, data_labels, train_xs, val_xs, test_xs,
+    def __init__(self,
+                 data_labels: DataLabel,
+                 train_xs, val_xs, test_xs,
                  sampling_ratio: float or List[float],
                  sampling_type: str = None,
                  seed: int = 42,
@@ -257,9 +277,10 @@ class PermutedCoreset(ReusableObject):
         self.val_xs = slice_xs(val_xs, val_sampled_idx)
         self.test_xs = slice_xs(test_xs, test_sampled_idx)
 
-        self.train_labels = data_labels.train_labels[train_sampled_idx]
-        self.val_labels = data_labels.validation_labels[val_sampled_idx]
-        self.test_labels = data_labels.test_labels[test_sampled_idx]
+        data_labels.slice_train_labels(train_sampled_idx)
+        data_labels.slice_validation_labels(val_sampled_idx)
+        data_labels.slice_test_labels(test_sampled_idx)
+        self.data_labels = data_labels
 
         self.num_tasks = len(self.train_xs)
 
@@ -279,15 +300,23 @@ class PermutedCoreset(ReusableObject):
         }), "blue")
 
     def __getitem__(self, item):
-        return self.train_xs[item], self.train_labels, \
-               self.val_xs[item], self.val_labels, \
-               self.test_xs[item], self.test_labels
+        return self.train_xs[item], self.get_train_labels(item + 1), \
+               self.val_xs[item], self.get_validation_labels(item + 1), \
+               self.test_xs[item], self.get_test_labels(item + 1)
+    
+    def get_train_labels(self, task_id):
+        return self.data_labels.get_train_labels(task_id)
+    
+    def get_validation_labels(self, task_id):
+        return self.data_labels.get_validation_labels(task_id)
+    
+    def get_test_labels(self, task_id):
+        return self.data_labels.get_test_labels(task_id)
 
     def reduce_xs(self, small_sz: int):
-        assert small_sz <= len(self.train_labels)
         small_indices = np.arange(small_sz)
         self.train_xs = slice_xs(self.train_xs, small_indices)
-        self.train_labels = self.train_labels[small_indices]
+        self.data_labels.slice_train_labels(small_indices)
 
     def reduce_tasks(self, small_num_tasks: int):
         assert small_num_tasks <= len(self.train_xs)

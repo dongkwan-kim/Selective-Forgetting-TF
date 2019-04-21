@@ -106,9 +106,9 @@ class SFDEN(DEN, SFN):
         avg_perf = []
 
         for t in range(self.n_tasks):
-            data = (self.trainXs[t], self.data_labels.train_labels,
-                    self.valXs[t], self.data_labels.validation_labels,
-                    self.testXs[t], self.data_labels.test_labels)
+            data = (self.trainXs[t], self.data_labels.get_train_labels(t + 1),
+                    self.valXs[t], self.data_labels.get_validation_labels(t + 1),
+                    self.testXs[t], self.data_labels.get_test_labels(t + 1))
 
             self.sess = tf.Session()
 
@@ -126,7 +126,7 @@ class SFDEN(DEN, SFN):
             print('\n OVERALL EVALUATION')
             overall_perfs = []
             for j in range(t + 1):
-                temp_perf = self.predict_perform(j + 1, self.testXs[j], self.data_labels.test_labels)
+                temp_perf = self.predict_perform(j + 1, self.testXs[j], self.data_labels.get_test_labels(j + 1))
                 overall_perfs.append(temp_perf)
             avg_perf.append(sum(overall_perfs) / float(t + 1))
             print("   [*] avg_perf: %.4f" % avg_perf[t])
@@ -232,7 +232,7 @@ class SFDEN(DEN, SFN):
         cprint("\n PREDICT ONLY AFTER " + ("TRAINING" if not self.retrained else "RE-TRAINING"), "yellow")
         temp_perfs = []
         for t in range(self.n_tasks):
-            temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.test_labels)
+            temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.get_test_labels(t + 1))
             temp_perfs.append(temp_perf)
         return temp_perfs
 
