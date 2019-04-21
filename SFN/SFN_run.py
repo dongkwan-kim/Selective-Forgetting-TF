@@ -3,6 +3,7 @@ import tensorflow as tf
 
 from SFN.SFDEN import SFDEN
 from SFN.SFHPS import SFHPS
+from SFN.SFLCL import SFLCL
 from data import *
 from utils import build_line_of_list
 
@@ -12,7 +13,7 @@ flags.DEFINE_integer("max_iter", 400, "Epoch to train")
 flags.DEFINE_float("lr", 0.001, "Learning rate(init) for train")
 flags.DEFINE_integer("batch_size", 256, "The size of batch for 1 iteration")
 flags.DEFINE_string("checkpoint_dir", "../checkpoints/default", "Directory path to save the checkpoints")
-flags.DEFINE_integer("dims0", 784, "Dimensions about input layer")
+flags.DEFINE_integer("dims0", 784, "Dimensions about input layer of fully connect layers")
 flags.DEFINE_integer("dims1", 64, "Dimensions about 1st layer")
 flags.DEFINE_integer("dims2", 32, "Dimensions about 2nd layer")
 flags.DEFINE_integer("dims3", 10, "Dimensions about output layer")
@@ -36,9 +37,9 @@ flags.DEFINE_integer("retrain_task_iter", 80, "Number of re-training one task wi
 flags.DEFINE_integer("coreset_size", 250, "Size of coreset")
 
 MODE = {
-    "SIZE": "DEFAULT",
-    "EXPERIMENT": "FORGET",
-    "MODEL": SFDEN,
+    "SIZE": "DEFAULT",  # TEST, SMALL, DEFAULT
+    "EXPERIMENT": "FORGET",  # FORGET, RETRAIN, CRITERIA
+    "MODEL": SFLCL,  # SFDEN, SFHPS, SFLCL
     "DTYPE": "COARSE_CIFAR100",  # PERMUTED_MNIST, COARSE_CIFAR100
 }
 
@@ -63,6 +64,23 @@ elif MODE["EXPERIMENT"] == "CRITERIA":
 
 if MODE["DTYPE"] == "COARSE_CIFAR100":
     flags.FLAGS.n_classes = 20
+    flags.DEFINE_integer("conv0_filters", 3, "Number of filters in input")
+    flags.DEFINE_integer("conv0_size", 32, "Size of input")
+    flags.DEFINE_integer("conv1_filters", 64, "Number of filters in conv1")
+    flags.DEFINE_integer("conv1_size", 5, "Size of kernel in conv1")
+    flags.DEFINE_integer("pool1_ksize", 2, "Size of pooling window for xy direction of images")
+    flags.DEFINE_integer("conv2_filters", 64, "Number of filters in conv2")
+    flags.DEFINE_integer("conv2_size", 5, "Size of kernel in conv2")
+    flags.DEFINE_integer("pool2_ksize", 2, "Size of pooling window for xy direction of images")
+    flags.DEFINE_integer("conv3_filters", 128, "Number of filters in conv3")
+    flags.DEFINE_integer("conv3_size", 3, "Size of kernel in conv3")
+    flags.DEFINE_integer("conv4_filters", 128, "Number of filters in conv4")
+    flags.DEFINE_integer("conv4_size", 3, "Size of kernel in conv4")
+    flags.DEFINE_integer("conv5_filters", 128, "Number of filters in conv5")
+    flags.DEFINE_integer("conv5_size", 3, "Size of kernel in conv5")
+    flags.DEFINE_integer("fc0", 8*8*128, "Dimensions about input layer of fully connect layers")
+    flags.DEFINE_integer("fc1", 128, "Dimensions about 1st layer")
+    flags.DEFINE_integer("fc2", flags.FLAGS.n_classes, "Dimensions of output layer")
 
 flags.FLAGS.checkpoint_dir = os.path.join(flags.FLAGS.checkpoint_dir, MODE["MODEL"].__name__)
 if MODE["MODEL"] == SFHPS:
@@ -70,6 +88,9 @@ if MODE["MODEL"] == SFHPS:
     flags.FLAGS.dims1 += 10 * flags.FLAGS.n_tasks
     flags.FLAGS.dims2 += 10 * flags.FLAGS.n_tasks
     flags.FLAGS.retrain_task_iter = 400
+elif MODE["MODEL"] == SFLCL:
+    flags.FLAGS.max_iter = 800
+    flags.FLAGS.n_tasks = flags.FLAGS.n_classes
 
 FLAGS = flags.FLAGS
 
@@ -137,7 +158,10 @@ def get_dataset(dtype: str, _flags, **kwargs) -> tuple:
         return _labels, _train_xs, _val_xs, _test_xs, _coreset
 
     elif dtype == "COARSE_CIFAR100":
-        _labels, _train_xs, _val_xs, _test_xs = get_tfds(dtype, y_name="coarse_label", **kwargs)
+        _labels, _train_xs, _val_xs, _test_xs = get_class_as_task_datasets(dtype, _flags.n_tasks,
+                                                                           y_name="coarse_label", **kwargs)
+        _coreset = None  # TODO
+        return _labels, _train_xs, _val_xs, _test_xs,_coreset
 
     else:
         raise ValueError
