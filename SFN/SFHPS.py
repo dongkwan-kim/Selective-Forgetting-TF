@@ -41,9 +41,10 @@ class SFHPS(SFN):
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
 
     def restore(self, model_name=None):
-        ret = super().restore(model_name)
-        self.build_model()
-        return ret
+        restored = super().restore(model_name)
+        if restored:
+            self.build_model()
+        return restored
 
     def create_variable(self, scope, name, shape, trainable=True) -> tf.Variable:
         with tf.variable_scope(scope):
