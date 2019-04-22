@@ -32,6 +32,8 @@ class SFN:
 
         self.prediction_history: Dict[str, List] = defaultdict(list)
         self.layer_to_removed_neuron_set: Dict[str, set] = defaultdict(set)
+        self.layer_types: List[str] = []
+
         self.batch_idx = 0
         self.retrained = False
 
@@ -45,10 +47,15 @@ class SFN:
             "old_params_list",
             "layer_to_removed_neuron_set",
             "n_tasks",
+            "layer_types",
         ]
 
     def __repr__(self):
         return "{}_{}_{}".format(self.__class__.__name__, self.n_tasks, "_".join(map(str, self.dims)))
+
+    def set_layer_types(self, *args, **kwargs):
+        """Set self.layer_types, the list of types (prefix of scope) (e.g. layer, conv, fc, ...)"""
+        raise NotImplementedError
 
     def add_dataset(self, data_labels, train_xs, val_xs, test_xs):
         self.data_labels, self.trainXs, self.valXs, self.testXs = data_labels, train_xs, val_xs, test_xs
@@ -305,7 +312,20 @@ class SFN:
         i_mat = self._get_reduced_i_mat(task_id_or_ids)
         return np.max(i_mat, axis=0)
 
-    def get_neurons_by_mixed_ein_and_lin(self, task_id, number_to_select, mixing_coeff=0.45):
+    def get_selected_by_layers(self, selected_indexes: np.ndarray) -> tuple:
+        selected_by_layers_list = []
+        prev_divider = 0
+        for i_mat in self.importance_matrix_tuple:
+            divider = prev_divider + i_mat.shape[-1]
+            selected_by_layers_list.append(
+                selected_indexes[(selected_indexes >= prev_divider) &
+                                 (selected_indexes < divider)]
+                - prev_divider
+            )
+            prev_divider = divider
+        return tuple(selected_by_layers_list)
+
+    def get_neurons_by_mixed_ein_and_lin(self, task_id, number_to_select, mixing_coeff=0.45) -> tuple:
 
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
         num_tasks, num_neurons = i_mat.shape
@@ -323,8 +343,7 @@ class SFN:
 
         mixed_asc_sorted_idx = np.argsort(mixed)
         selected = mixed_asc_sorted_idx[:number_to_select]
-        divider = self.importance_matrix_tuple[0].shape[-1]
-        return selected[selected < divider], (selected[selected >= divider] - divider)
+        return self.get_selected_by_layers(selected)
 
     def get_neurons_with_task_variance(self, task_id_or_ids, number_to_select, mixing_coeff=0.65):
 
@@ -339,8 +358,7 @@ class SFN:
 
         mixed_asc_sorted_idx = np.argsort(mixed)
         selected = mixed_asc_sorted_idx[:number_to_select]
-        divider = self.importance_matrix_tuple[0].shape[-1]
-        return selected[selected < divider], (selected[selected >= divider] - divider)
+        return self.get_selected_by_layers(selected)
 
     def get_neurons_with_maximum_importance(self, task_id_or_ids, number_to_select, mixing_coeff=0.65):
 
@@ -355,8 +373,7 @@ class SFN:
 
         mi_asc_sorted_idx = np.argsort(mixed)
         selected = mi_asc_sorted_idx[:number_to_select]
-        divider = self.importance_matrix_tuple[0].shape[-1]
-        return selected[selected < divider], (selected[selected >= divider] - divider)
+        return self.get_selected_by_layers(selected)
 
     def get_random_neurons(self, number_to_select):
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
@@ -364,8 +381,7 @@ class SFN:
         np.random.seed(i_mat.shape[-1])
         np.random.shuffle(indexes)
         selected = indexes[:number_to_select]
-        divider = self.importance_matrix_tuple[0].shape[-1]
-        return selected[selected < divider], (selected[selected >= divider] - divider)
+        return self.get_selected_by_layers(selected)
 
     # Selective forgetting
 
@@ -400,8 +416,15 @@ class SFN:
         else:
             raise NotImplementedError
 
-        for i, ni in enumerate(neuron_indexes):
-            self._remove_neurons("layer{}".format(i + 1), ni)
+        # e.g. ['conv', 'conv', 'fc', 'fc', 'fc'] -> [0, 1, 0, 1, 2]
+        scope_postfixes = []
+        scope_counted = {scope_prefix: 0 for scope_prefix in set(self.layer_types)}
+        for scope_prefix in self.layer_types:
+            scope_postfixes.append(scope_counted[scope_prefix])
+            scope_counted[scope_prefix] += 1
+
+        for i, ni, layer_type in zip(scope_postfixes, neuron_indexes, self.layer_types):
+            self._remove_neurons("{}{}".format(layer_type, i + 1), ni)
 
         self.assign_new_session()
 
@@ -422,7 +445,7 @@ class SFN:
         val_w = w.eval(session=self.sess)
         val_b = b.eval(session=self.sess)
 
-        for i in indexes:
+        for i in indexes:  # TODO: filter pruning
             val_w[:, i] = 0
             val_b[i] = 0
 
@@ -500,8 +523,19 @@ class SFN:
             else:
                 raise NotImplementedError
 
+            # importance_vectors[i].shape = (\sum N_{batch-1}, |h|)
+            # if h is fc:
+            #   batch_i_vector.shape = (N_{batch}, |h|)
+            # elif h is conv:
+            #   batch_i_vector.shape = (N_{batch}, ksz, ksz, |h|)
             for i, batch_i_vector in enumerate(batch_importance_vectors):
-                importance_vectors[i] = np.vstack((importance_vectors[i], batch_i_vector))
+                if len(batch_i_vector.shape) == 2:  # fc
+                    importance_vectors[i] = np.vstack((importance_vectors[i], batch_i_vector))
+                elif len(batch_i_vector.shape) == 4:  # conv2d
+                    reduced_i_vector = np.mean(batch_i_vector, axis=(1, 2))
+                    importance_vectors[i] = np.vstack((importance_vectors[i], reduced_i_vector))
+                else:
+                    raise ValueError("i_vector.shape is 2 or 4")
 
         for i in range(len(importance_vectors)):
             importance_vectors[i] = importance_vectors[i].sum(axis=0)
