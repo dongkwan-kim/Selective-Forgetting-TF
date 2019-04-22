@@ -1,8 +1,11 @@
 import collections
 from typing import Dict, List, Callable
 from termcolor import cprint
+import math
 
 from DEN.DEN import DEN
+from tqdm import trange
+
 from SFN.SFNBase import SFN
 
 import tensorflow as tf
@@ -173,10 +176,9 @@ class SFDEN(DEN, SFN):
         self.sess.run(tf.global_variables_initializer())
         for epoch in range(retrain_flags.retrain_max_iter_per_task):
             self.initialize_batch()
-            while True:
+            num_batches = int(math.ceil(len(train_xs_t) / self.batch_size))
+            for _ in trange(num_batches):
                 batch_x, batch_y = self.get_next_batch(train_xs_t, train_labels_t)
-                if len(batch_x) == 0:
-                    break
                 _, loss_val = self.sess.run([train_step, loss], feed_dict={X: batch_x, Y: batch_y})
 
             val_preds, val_loss_val = self.sess.run([yhat, loss], feed_dict={X: val_xs_t, Y: val_labels_t})

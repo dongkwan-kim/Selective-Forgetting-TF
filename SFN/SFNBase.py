@@ -2,10 +2,12 @@ from collections import defaultdict
 from typing import Dict, List, Callable
 import os
 import pickle
+import math
 
 import numpy as np
 import tensorflow as tf
 from termcolor import cprint
+from tqdm import trange
 
 from data import PermutedCoreset, DataLabel
 from utils import build_line_of_list, print_all_vars
@@ -465,13 +467,12 @@ class SFN:
         importance_vectors = [np.zeros(shape=(0, h_length)) for h_length in h_length_list]
 
         self.initialize_batch()
-        while True:
+        num_batches = int(math.ceil(len(self.trainXs[task_id - 1]) / self.batch_size))
+        for _ in trange(num_batches):
             batch_x, batch_y = self.get_next_batch(
                 self.trainXs[task_id - 1],
                 self.data_labels.get_train_labels(task_id),
             )
-            if len(batch_x) == 0:
-                break
 
             # shape = (batch_size, |h|)
             if importance_criteria == "first_Taylor_approximation":
@@ -513,7 +514,6 @@ class SFN:
     # shape = (T, |h|) or (T, |h1|), (T, |h2|)
     def get_importance_matrix(self, layer_separate=False, importance_criteria=None):
 
-        # TODO: handle more than two layer networks
         importance_matrices = []
 
         importance_criteria = importance_criteria or self.importance_criteria
