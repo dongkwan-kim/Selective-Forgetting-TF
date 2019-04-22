@@ -140,13 +140,18 @@ class SFHPS(SFN):
 
         X, Y_list = self.build_model()
 
-        # Add L2 loss regularizer
+        # Add L1 & L2 loss regularizer
+        l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(
+            scale_l1=self.l1_lambda,
+            scale_l2=self.l2_lambda,
+        )
         for i in range(len(self.loss_list)):
-            l2_losses = []
+            vars_of_task = []
             for var in tf.trainable_variables():
-                if "_" not in var.name or "_{}:".format(i+1) in var.name:
-                    l2_losses.append(tf.nn.l2_loss(var))
-            self.loss_list[i] += self.l2_lambda * tf.reduce_sum(l2_losses)
+                if "_" not in var.name or "_{}:".format(i + 1) in var.name:
+                    vars_of_task.append(var)
+            regularization_loss = tf.contrib.layers.apply_regularization(l1_l2_regularizer, vars_of_task)
+            self.loss_list[i] += regularization_loss
 
         opt_list = [tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt%d" % (i+1)).minimize(loss)
                     for i, loss in enumerate(self.loss_list)]
