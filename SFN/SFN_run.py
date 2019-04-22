@@ -88,6 +88,9 @@ if MODE["MODEL"] == SFHPS:
     flags.FLAGS.dims1 += 10 * flags.FLAGS.n_tasks
     flags.FLAGS.dims2 += 10 * flags.FLAGS.n_tasks
     flags.FLAGS.retrain_task_iter = 1000
+    flags.FLAGS.one_step_neurons = 7
+    flags.FLAGS.l1_lambda = 0.00001
+    flags.FLAGS.l2_lambda = 0.0
 elif MODE["MODEL"] == SFLCL:
     flags.FLAGS.max_iter = 800
     flags.FLAGS.n_tasks = flags.FLAGS.n_classes
@@ -161,7 +164,7 @@ def get_dataset(dtype: str, _flags, **kwargs) -> tuple:
         _labels, _train_xs, _val_xs, _test_xs = get_class_as_task_datasets(dtype, _flags.n_tasks,
                                                                            y_name="coarse_label", **kwargs)
         _coreset = None  # TODO
-        return _labels, _train_xs, _val_xs, _test_xs,_coreset
+        return _labels, _train_xs, _val_xs, _test_xs, _coreset
 
     else:
         raise ValueError
