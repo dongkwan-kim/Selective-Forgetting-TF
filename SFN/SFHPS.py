@@ -6,7 +6,6 @@ import tensorflow as tf
 import numpy as np
 from DEN.ops import ROC_AUC
 from termcolor import cprint
-from tqdm import trange
 
 from SFN.SFNBase import SFN
 from utils import get_dims_from_config, print_all_vars
@@ -193,7 +192,7 @@ class SFHPS(SFN):
         for epoch in range(self.max_iter):
             self.initialize_batch()
             num_batches = int(math.ceil(len(train_xs_t) / self.batch_size))
-            for _ in trange(num_batches):
+            for _ in range(num_batches):
                 batch_x, batch_y = self.get_next_batch(train_xs_t, train_labels_t)
                 _, loss_val = self.sess.run([train_step, loss], feed_dict={X: batch_x, Y: batch_y})
 

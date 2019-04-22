@@ -4,7 +4,6 @@ from termcolor import cprint
 import math
 
 from DEN.DEN import DEN
-from tqdm import trange
 
 from SFN.SFNBase import SFN
 
@@ -177,7 +176,7 @@ class SFDEN(DEN, SFN):
         for epoch in range(retrain_flags.retrain_max_iter_per_task):
             self.initialize_batch()
             num_batches = int(math.ceil(len(train_xs_t) / self.batch_size))
-            for _ in trange(num_batches):
+            for _ in range(num_batches):
                 batch_x, batch_y = self.get_next_batch(train_xs_t, train_labels_t)
                 _, loss_val = self.sess.run([train_step, loss], feed_dict={X: batch_x, Y: batch_y})
 
