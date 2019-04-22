@@ -40,7 +40,7 @@ MODE = {
     "SIZE": "DEFAULT",  # TEST, SMALL, DEFAULT
     "EXPERIMENT": "FORGET",  # FORGET, RETRAIN, CRITERIA
     "MODEL": SFLCL,  # SFDEN, SFHPS, SFLCL
-    "DTYPE": "COARSE_CIFAR100",  # PERMUTED_MNIST, COARSE_CIFAR100
+    "DTYPE": "MNIST",  # PERMUTED_MNIST, COARSE_CIFAR100, MNIST
 }
 
 if MODE["SIZE"] == "TEST":
@@ -81,6 +81,15 @@ if MODE["DTYPE"] == "COARSE_CIFAR100":
     flags.DEFINE_integer("fc0", 8*8*128, "Dimensions about input layer of fully connect layers")
     flags.DEFINE_integer("fc1", 128, "Dimensions about 1st layer")
     flags.DEFINE_integer("fc2", flags.FLAGS.n_classes, "Dimensions of output layer")
+elif MODE["DTYPE"] == "MNIST":
+    flags.DEFINE_integer("conv0_filters", 1, "Number of filters in input")
+    flags.DEFINE_integer("conv0_size", 28, "Size of input")
+    flags.DEFINE_integer("conv1_filters", 3, "Number of filters in conv1")
+    flags.DEFINE_integer("conv1_size", 5, "Size of kernel in conv1")
+    flags.DEFINE_integer("pool1_ksize", 2, "Size of pooling window for xy direction of images")
+    flags.DEFINE_integer("fc0", 14*14*3, "Dimensions about input layer of fully connect layers")
+    flags.DEFINE_integer("fc1", 128, "Dimensions about 1st layer")
+    flags.DEFINE_integer("fc2", flags.FLAGS.n_classes, "Dimensions of output layer")
 
 flags.FLAGS.checkpoint_dir = os.path.join(flags.FLAGS.checkpoint_dir, MODE["MODEL"].__name__)
 if MODE["MODEL"] == SFHPS:
@@ -94,6 +103,7 @@ if MODE["MODEL"] == SFHPS:
 elif MODE["MODEL"] == SFLCL:
     flags.FLAGS.max_iter = 800
     flags.FLAGS.n_tasks = flags.FLAGS.n_classes
+
 
 FLAGS = flags.FLAGS
 
@@ -163,6 +173,12 @@ def get_dataset(dtype: str, _flags, **kwargs) -> tuple:
     elif dtype == "COARSE_CIFAR100":
         _labels, _train_xs, _val_xs, _test_xs = get_class_as_task_datasets(dtype, _flags.n_tasks,
                                                                            y_name="coarse_label", **kwargs)
+        _coreset = None  # TODO
+        return _labels, _train_xs, _val_xs, _test_xs, _coreset
+
+    elif dtype == "MNIST":
+        _labels, _train_xs, _val_xs, _test_xs = get_class_as_task_datasets(dtype, _flags.n_tasks,
+                                                                           is_for_cnn=True, **kwargs)
         _coreset = None  # TODO
         return _labels, _train_xs, _val_xs, _test_xs, _coreset
 

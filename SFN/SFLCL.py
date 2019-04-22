@@ -142,8 +142,8 @@ class SFLCL(SFN):
             b_conv = self.get_variable("conv%d" % (i // 2), "biases", True)
             h_conv = tf.nn.relu(tf.nn.conv2d(h_conv, w_conv, strides=[1, 1, 1, 1], padding="SAME") + b_conv)
 
-            if conv_num in self.pool_pos_to_dims:
-                pool_dim = self.pool_pos_to_dims[conv_num]
+            if conv_num + 1 in self.pool_pos_to_dims:
+                pool_dim = self.pool_pos_to_dims[conv_num + 1]
                 pool_ksize = [1, pool_dim, pool_dim, 1]
                 h_conv = tf.nn.max_pool(h_conv, ksize=pool_ksize, strides=[1, 2, 2, 1], padding="SAME")
 
@@ -151,14 +151,17 @@ class SFLCL(SFN):
         for i in range(1, len(self.dims)):
             w_fc = self.get_variable("fc%d" % i, "weight", True)
             b_fc = self.get_variable("fc%d" % i, "biases", True)
-            h_fc = tf.nn.relu(tf.matmul(h_fc, w_fc) + b_fc)
+            h_fc = tf.matmul(h_fc, w_fc) + b_fc
+
+            if i < len(self.dims) - 1:  # Do not activate the last layer.
+                h_fc = tf.nn.relu(h_fc)
 
         self.yhat = tf.nn.sigmoid(h_fc)
         self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=h_fc, labels=Y))
 
         return X, Y
 
-    def initial_train(self, print_iter=100, *args):
+    def initial_train(self, print_iter=10, *args):
 
         X, Y = self.build_model()
 
@@ -226,11 +229,11 @@ class SFLCL(SFN):
             b_conv = self.get_variable("conv%d" % (i // 2), "biases", True)
             h_conv = tf.nn.relu(tf.nn.conv2d(h_conv, w_conv, strides=[1, 1, 1, 1], padding="SAME") + b_conv)
 
-            print(' [*] class %d, shape of conv %d : %s' % (task_id, conv_num, h_conv.get_shape().as_list()))
+            print(' [*] class %d, shape of conv %d : %s' % (task_id, conv_num + 1, h_conv.get_shape().as_list()))
             hidden_layer_list.append(h_conv)  # e.g. shape = (32, 32, 64),
 
-            if conv_num in self.pool_pos_to_dims:
-                pool_dim = self.pool_pos_to_dims[conv_num]
+            if conv_num + 1 in self.pool_pos_to_dims:
+                pool_dim = self.pool_pos_to_dims[conv_num + 1]
                 pool_ksize = [1, pool_dim, pool_dim, 1]
                 h_conv = tf.nn.max_pool(h_conv, ksize=pool_ksize, strides=[1, 2, 2, 1], padding="SAME")
 
@@ -238,10 +241,12 @@ class SFLCL(SFN):
         for i in range(1, len(self.dims)):
             w_fc = self.get_variable("fc%d" % i, "weight", True)
             b_fc = self.get_variable("fc%d" % i, "biases", True)
-            h_fc = tf.nn.relu(tf.matmul(h_fc, w_fc) + b_fc)
+            h_fc = tf.matmul(h_fc, w_fc) + b_fc
 
-            if i != len(self.dims) - 1:
-                print(' [*] class %d, shape of conv %d : %s' % (task_id, i, h_fc.get_shape().as_list()))
+            if i < len(self.dims) - 1:  # Do not activate the last layer.
+                h_fc = tf.nn.relu(h_fc)
+
+                print(' [*] class %d, shape of fc %d : %s' % (task_id, i, h_fc.get_shape().as_list()))
                 hidden_layer_list.append(h_fc)  # e.g. shape = (128,)
 
         loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=h_fc, labels=Y))
