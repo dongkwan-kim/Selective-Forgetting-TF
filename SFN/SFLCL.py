@@ -89,7 +89,7 @@ class SFLCL(SFN):
             perf_list.append(perf)
         return [float(p) for p in perf_list]
 
-    def predict_perform(self, xs, ys) -> list:
+    def predict_perform(self, xs, ys, number_to_print=6) -> list:
         X = tf.get_default_graph().get_tensor_by_name("X:0")
         test_preds_list = []
 
@@ -100,16 +100,24 @@ class SFLCL(SFN):
             test_preds_list.append(self.sess.run(self.yhat, feed_dict={X: partial_xs}))
         test_preds = np.concatenate(test_preds_list)
 
-        test_perf = self.get_performance(test_preds, ys)
+        half_number_to_print = int(number_to_print / 2)
         print(" [*] Evaluation, ")
-        for i, p in enumerate(test_perf):
-            print("\t Class: %s, test perf: %.4f" % (str(i + 1), p))
+        test_perf = self.get_performance(test_preds, ys)
+        for rank, idx in enumerate(reversed(np.argsort(test_perf))):
+            if rank < half_number_to_print:
+                print("\t Class: %s, test perf: %.4f" % (str(idx), test_perf[idx]))
+            elif rank >= len(test_perf) - half_number_to_print:
+                print("\t Class: %s, test perf: %.4f" % (str(idx), test_perf[idx]))
+
+            if rank == half_number_to_print and len(test_perf) > 2 * half_number_to_print:
+                print("\t ...")
+
         return test_perf
 
-    def predict_only_after_training(self) -> list:
+    def predict_only_after_training(self, **kwargs) -> list:
         cprint("\n PREDICT ONLY AFTER " + ("TRAINING" if not self.retrained else "RE-TRAINING"), "yellow")
         _, _, _, _, test_x, test_labels = self.get_data_stream_from_task_as_class_data(shuffle=False)
-        return self.predict_perform(test_x, test_labels)
+        return self.predict_perform(test_x, test_labels, **kwargs)
 
     def create_model_variables(self):
         tf.reset_default_graph()
