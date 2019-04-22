@@ -2,11 +2,13 @@ import os
 import re
 from pprint import pprint
 from typing import Tuple
+import math
 
 import tensorflow as tf
 import numpy as np
 from DEN.ops import ROC_AUC
 from termcolor import cprint
+from tqdm import trange
 
 from SFN.SFNBase import SFN
 from utils import get_dims_from_config, print_all_vars
@@ -89,7 +91,15 @@ class SFLCL(SFN):
 
     def predict_perform(self, xs, ys) -> list:
         X = tf.get_default_graph().get_tensor_by_name("X:0")
-        test_preds = self.sess.run(self.yhat, feed_dict={X: xs})
+        test_preds_list = []
+
+        # (10000, 32, 32, 3) is too big, so divide to batches.
+        test_batch_size = len(xs) // 5
+        for i in range(5):
+            partial_xs = xs[i*test_batch_size:(i+1)*test_batch_size]
+            test_preds_list.append(self.sess.run(self.yhat, feed_dict={X: partial_xs}))
+        test_preds = np.concatenate(test_preds_list)
+
         test_perf = self.get_performance(test_preds, ys)
         print(" [*] Evaluation, ")
         for i, p in enumerate(test_perf):
@@ -160,10 +170,9 @@ class SFLCL(SFN):
 
         for epoch in range(self.max_iter):
             self.initialize_batch()
-            while True:
+            num_batches = int(math.ceil(len(train_x) / self.batch_size))
+            for _ in trange(num_batches):
                 batch_x, batch_y = self.get_next_batch(train_x, train_labels)
-                if len(batch_x) == 0:
-                    break
                 _, loss_val = self.sess.run([opt, self.loss], feed_dict={X: batch_x, Y: batch_y})
 
             if epoch % print_iter == 0 or epoch == self.max_iter - 1:
@@ -192,8 +201,69 @@ class SFLCL(SFN):
         # train_x, train_labels, val_x, validation_labels, test_x, test_labels
         return tuple(x_and_label_list)
 
+    # shape = (|h|+|f|,) or tuple of (|f1|), (|f2|), (|h1|,), (|h2|,)
     def get_importance_vector(self, task_id, importance_criteria: str, layer_separate=False) -> tuple or np.ndarray:
-        pass
+        print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)
+
+        X = tf.get_default_graph().get_tensor_by_name("X:0")
+        Y = tf.get_default_graph().get_tensor_by_name("Y:0")
+
+        # weight_list = []  TODO
+        # bias_list = []  TODO
+        hidden_layer_list = []
+
+        h_conv = X
+        for conv_num, i in enumerate(range(2, len(self.conv_dims), 2)):
+            w_conv = self.get_variable("conv%d" % (i // 2), "weight", True)
+            b_conv = self.get_variable("conv%d" % (i // 2), "biases", True)
+            h_conv = tf.nn.relu(tf.nn.conv2d(h_conv, w_conv, strides=[1, 1, 1, 1], padding="SAME") + b_conv)
+
+            print(' [*] class %d, shape of conv %d : %s' % (task_id, conv_num, h_conv.get_shape().as_list()))
+            hidden_layer_list.append(h_conv)  # e.g. shape = (32, 32, 64),
+
+            if conv_num in self.pool_pos_to_dims:
+                pool_dim = self.pool_pos_to_dims[conv_num]
+                pool_ksize = [1, pool_dim, pool_dim, 1]
+                h_conv = tf.nn.max_pool(h_conv, ksize=pool_ksize, strides=[1, 2, 2, 1], padding="SAME")
+
+        h_fc = tf.reshape(h_conv, (-1, self.dims[0]))
+        for i in range(1, len(self.dims)):
+            w_fc = self.get_variable("fc%d" % i, "weight", True)
+            b_fc = self.get_variable("fc%d" % i, "biases", True)
+            h_fc = tf.nn.relu(tf.matmul(h_fc, w_fc) + b_fc)
+
+            if i != len(self.dims) - 1:
+                print(' [*] class %d, shape of conv %d : %s' % (task_id, i, h_fc.get_shape().as_list()))
+                hidden_layer_list.append(h_fc)  # e.g. shape = (128,)
+
+        loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=h_fc, labels=Y))
+        _ = tf.train.GradientDescentOptimizer(self.init_lr).minimize(loss)
+
+        gradient_list = [tf.gradients(loss, h) for h in hidden_layer_list]
+        h_length_list = [h.get_shape().as_list()[-1] for h in hidden_layer_list]
+
+        iv_tuple_from_vars = self.get_importance_vector_from_tf_vars(
+            task_id, importance_criteria,
+            h_length_list=h_length_list,
+            hidden_layer_list=hidden_layer_list,
+            gradient_list=gradient_list,
+            weight_list=None,
+            bias_list=None,
+            X=X, Y=Y,
+            layer_separate=True,  # Note that this is True.
+        )
+        importance_vectors = []
+        for i, iv in enumerate(iv_tuple_from_vars):
+            if i < len(self.conv_dims):  # Filter-wise IV: e.g. (32, 32, 64) -> (64,)
+                reduced_iv = tf.reduce_mean(iv, axis=[0, 1])
+                importance_vectors.append(reduced_iv)
+            else:  # Neuron-wise IV: e.g. (128,) -> (128,)
+                importance_vectors.append(iv)
+
+        if layer_separate:
+            return tuple(importance_vectors)   # tuple of (|f1|), (|f2|), (|h1|,), (|h2|,)
+        else:
+            return np.concatenate(importance_vectors)  # ndarray of shape = (|h|+|f|,)
 
     def recover_params(self, idx):
         self.assign_new_session(idx)
