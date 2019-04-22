@@ -24,8 +24,14 @@ class SFDEN(DEN, SFN):
         SFN.__init__(self, config)
         DEN.__init__(self, config)
         self.attr_to_save += ["T", "time_stamp"]
+        self.set_layer_types()
 
     # Variable, params, ... attributes Manipulation
+
+    def set_layer_types(self):
+        for i in range(self.n_layers - 1):
+            self.layer_types.append("layer")
+        self.layer_types.append("layer")
 
     def create_model_variables(self):
         tf.reset_default_graph()

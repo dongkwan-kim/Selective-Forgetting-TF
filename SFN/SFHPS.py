@@ -39,6 +39,7 @@ class SFHPS(SFN):
         self.loss_list = []
 
         self.create_model_variables()
+        self.set_layer_types()
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
 
     def restore(self, model_name=None):
@@ -98,6 +99,11 @@ class SFHPS(SFN):
             temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.get_test_labels(t + 1))
             temp_perfs.append(temp_perf)
         return temp_perfs
+
+    def set_layer_types(self):
+        for i in range(self.n_layers - 1):
+            self.layer_types.append("layer")
+        self.layer_types.append("layer")
 
     def create_model_variables(self):
         tf.reset_default_graph()

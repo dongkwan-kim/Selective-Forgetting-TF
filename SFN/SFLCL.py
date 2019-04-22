@@ -51,6 +51,7 @@ class SFLCL(SFN):
         self.loss = None
 
         self.create_model_variables()
+        self.set_layer_types()
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
 
     def create_variable(self, scope, name, shape, trainable=True) -> tf.Variable:
@@ -118,6 +119,12 @@ class SFLCL(SFN):
         cprint("\n PREDICT ONLY AFTER " + ("TRAINING" if not self.retrained else "RE-TRAINING"), "yellow")
         _, _, _, _, test_x, test_labels = self.get_data_stream_from_task_as_class_data(shuffle=False)
         return self.predict_perform(test_x, test_labels, **kwargs)
+
+    def set_layer_types(self):
+        for i in range(2, len(self.conv_dims), 2):
+            self.layer_types.append("conv")
+        for i in range(1, len(self.dims)):
+            self.layer_types.append("fc")
 
     def create_model_variables(self):
         tf.reset_default_graph()
@@ -255,7 +262,7 @@ class SFLCL(SFN):
         gradient_list = [tf.gradients(loss, h) for h in hidden_layer_list]
         h_length_list = [h.get_shape().as_list()[-1] for h in hidden_layer_list]
 
-        iv_tuple_from_vars = self.get_importance_vector_from_tf_vars(
+        return self.get_importance_vector_from_tf_vars(
             task_id, importance_criteria,
             h_length_list=h_length_list,
             hidden_layer_list=hidden_layer_list,
@@ -263,20 +270,8 @@ class SFLCL(SFN):
             weight_list=None,
             bias_list=None,
             X=X, Y=Y,
-            layer_separate=True,  # Note that this is True.
+            layer_separate=layer_separate,
         )
-        importance_vectors = []
-        for i, iv in enumerate(iv_tuple_from_vars):
-            if i < len(self.conv_dims):  # Filter-wise IV: e.g. (32, 32, 64) -> (64,)
-                reduced_iv = tf.reduce_mean(iv, axis=[0, 1])
-                importance_vectors.append(reduced_iv)
-            else:  # Neuron-wise IV: e.g. (128,) -> (128,)
-                importance_vectors.append(iv)
-
-        if layer_separate:
-            return tuple(importance_vectors)   # tuple of (|f1|), (|f2|), (|h1|,), (|h2|,)
-        else:
-            return np.concatenate(importance_vectors)  # ndarray of shape = (|h|+|f|,)
 
     def recover_params(self, idx):
         self.assign_new_session(idx)
