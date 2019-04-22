@@ -104,7 +104,7 @@ def get_tfds(dtype: str, data_dir: str = None, x_name="image", y_name="label", i
     name = dtype_to_name(dtype)
     assert name in tfds.list_builders()
 
-    data_dir = data_dir or os.path.join("..", "{}_data".format(name.upper()))  # e.g. ../MNIST_data
+    data_dir = data_dir or os.path.join("~", "tfds", "{}_data".format(name.upper()))  # e.g. ~/tfds/MNIST_data
 
     # https://www.tensorflow.org/datasets/datasets
     loaded, info = tfds.load(
@@ -327,8 +327,8 @@ class PermutedCoreset(ReusableObject):
 
 if __name__ == '__main__':
     t, s = 10, 1000
-    file_name = "../MNIST_coreset/pmc_tasks_{}_size_{}.pkl".format(t, s)
-    c = PermutedCoreset(*get_permuted_datasets("PERMUTED_MNIST", t, "../MNIST_data"),
+    file_name = "~/tfds/MNIST_coreset/pmc_tasks_{}_size_{}.pkl".format(t, s)
+    c = PermutedCoreset(*get_permuted_datasets("PERMUTED_MNIST", t, "~/tfds/MNIST_data"),
                         sampling_ratio=[(s / 55000), 1.0, 1.0],
                         sampling_type="k-center",
                         load_file_name=file_name)
@@ -342,5 +342,5 @@ if __name__ == '__main__':
         for s in [1000, 500, 250, 100]:
             if not (t == 10 and s == 1000):
                 c.reduce_xs(s)
-                c.dump("../MNIST_coreset/pmc_tasks_{}_size_{}.pkl".format(t, s))
+                c.dump("~/tfds/MNIST_coreset/pmc_tasks_{}_size_{}.pkl".format(t, s))
         c = deepcopy(cc)

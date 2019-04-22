@@ -87,7 +87,7 @@ if MODE["MODEL"] == SFHPS:
     flags.FLAGS.max_iter = 1
     flags.FLAGS.dims1 += 10 * flags.FLAGS.n_tasks
     flags.FLAGS.dims2 += 10 * flags.FLAGS.n_tasks
-    flags.FLAGS.retrain_task_iter = 400
+    flags.FLAGS.retrain_task_iter = 1000
 elif MODE["MODEL"] == SFLCL:
     flags.FLAGS.max_iter = 800
     flags.FLAGS.n_tasks = flags.FLAGS.n_classes
@@ -150,7 +150,7 @@ def get_dataset(dtype: str, _flags, **kwargs) -> tuple:
             _labels, _train_xs, _val_xs, _test_xs,
             sampling_ratio=[(_flags.coreset_size / train_sz), 1.0, 1.0],
             sampling_type="k-center",
-            load_file_name=os.path.join("../MNIST_coreset", "pmc_tasks_{}_size_{}.pkl".format(
+            load_file_name=os.path.join("~/tfds/MNIST_coreset", "pmc_tasks_{}_size_{}.pkl".format(
                 _flags.n_tasks,
                 _flags.coreset_size,
             )),
