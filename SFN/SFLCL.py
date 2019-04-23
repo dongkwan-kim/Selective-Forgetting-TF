@@ -21,10 +21,12 @@ def parse_pool_key(pool_name):
 
 class SFLCL(SFN):
     """
-    Selective Forgettable LeNet Variant for Large Class Learning
+    Selective Forgettable AlexNet Variant for Large Class Learning
 
-    LeCun et al. "Gradient-based learning applied to document recognition"
-    Proceedings of the IEEE. 1998.
+    Krizhevsky et al. "ImageNet Classification with Deep Convolutional Neural Networks"
+    Advances in Neural Information Processing Systems 2015.
+
+    ref. https://kratzert.github.io/2017/02/24/finetuning-alexnet-with-tensorflow.html
     """
 
     def __init__(self, config):
@@ -174,7 +176,7 @@ class SFLCL(SFN):
 
         return X, Y
 
-    def initial_train(self, print_iter=10, *args):
+    def initial_train(self, print_iter=50, *args):
 
         X, Y = self.build_model()
 
