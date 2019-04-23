@@ -54,6 +54,12 @@ class SFLCL(SFN):
         self.set_layer_types()
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
 
+    def restore(self, model_name=None):
+        restored = super().restore(model_name)
+        if restored:
+            self.build_model()
+        return restored
+
     def create_variable(self, scope, name, shape, trainable=True) -> tf.Variable:
         with tf.variable_scope(scope):
             w = tf.get_variable(name, shape, trainable=trainable)
