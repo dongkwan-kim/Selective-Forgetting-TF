@@ -172,12 +172,17 @@ class SFLCL(SFN):
 
         X, Y = self.build_model()
 
-        # Add L2 loss regularizer
-        l2_losses = []
+        # Add L1 & L2 loss regularizer
+        l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(
+            scale_l1=self.l1_lambda,
+            scale_l2=self.l2_lambda,
+        )
+        vars_of_task = []
         for var in tf.trainable_variables():
             if "conv" in var.name or "fc" in var.name:
-                l2_losses.append(tf.nn.l2_loss(var))
-        self.loss += self.l2_lambda * tf.reduce_sum(l2_losses)
+                vars_of_task.append(var)
+        regularization_loss = tf.contrib.layers.apply_regularization(l1_l2_regularizer, vars_of_task)
+        self.loss += regularization_loss
 
         opt = tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt").minimize(self.loss)
 
