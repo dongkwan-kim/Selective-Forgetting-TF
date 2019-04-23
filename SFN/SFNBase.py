@@ -424,13 +424,13 @@ class SFN:
             scope_counted[scope_prefix] += 1
 
         for i, ni, layer_type in zip(scope_postfixes, neuron_indexes, self.layer_types):
-            self._remove_neurons("{}{}".format(layer_type, i + 1), ni)
+            self._remove_pruning_units("{}{}".format(layer_type, i + 1), ni)
 
         self.assign_new_session()
 
         return neuron_indexes
 
-    def _remove_neurons(self, scope, indexes: np.ndarray):
+    def _remove_pruning_units(self, scope, indexes: np.ndarray):
         """Zeroing columns of target indexes"""
 
         if len(indexes) == 0:
@@ -445,8 +445,11 @@ class SFN:
         val_w = w.eval(session=self.sess)
         val_b = b.eval(session=self.sess)
 
-        for i in indexes:  # TODO: filter pruning
-            val_w[:, i] = 0
+        for i in indexes:
+            if len(val_w.shape) == 2:  # fc layer
+                val_w[:, i] = 0
+            elif len(val_w.shape) == 4:  # conv2d layer
+                val_w[:, :, :, i] = 0
             val_b[i] = 0
 
         self.sess.run(tf.assign(w, val_w))
