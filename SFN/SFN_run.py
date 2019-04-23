@@ -1,9 +1,9 @@
 import os
 import tensorflow as tf
 
-from SFN.SFDEN import SFDEN
-from SFN.SFHPS import SFHPS
-from SFN.SFLCL import SFLCL
+from SFDEN import SFDEN
+from SFHPS import SFHPS
+from SFLCL import SFLCL
 from data import *
 from utils import build_line_of_list
 

@@ -5,7 +5,7 @@ import math
 
 from DEN.DEN import DEN
 
-from SFN.SFNBase import SFN
+from SFNBase import SFN
 
 import tensorflow as tf
 import numpy as np

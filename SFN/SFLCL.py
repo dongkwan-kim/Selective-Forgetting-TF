@@ -10,7 +10,7 @@ from DEN.ops import ROC_AUC
 from termcolor import cprint
 from tqdm import trange
 
-from SFN.SFNBase import SFN
+from SFNBase import SFN
 from utils import get_dims_from_config, print_all_vars
 
 
