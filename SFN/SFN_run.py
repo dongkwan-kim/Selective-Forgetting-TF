@@ -6,7 +6,7 @@ from SFHPS import SFHPS
 from SFLCL import SFLCL
 from params import MyParams, check_params, to_yaml_path
 from data import *
-from utils import build_line_of_list
+from utils import build_line_of_list, get_project_dir
 
 np.random.seed(1004)
 
@@ -32,7 +32,7 @@ def get_load_params() -> MyParams:
                 "SFLCL": SFLCL,
             }[p.model],
             "checkpoint_dir": lambda p: os.path.join(
-                p.checkpoint_dir, p.model, p.mtype,
+                get_project_dir(), p.checkpoint_dir, p.model, p.mtype,
             ),
         })
     check_params(loaded_params)
@@ -50,11 +50,14 @@ def experiment_forget(sfn, _flags, _policies):
 
     sfn.print_summary(_flags.task_to_forget, _flags.one_step_neurons)
     sfn.draw_chart_summary(_flags.task_to_forget, _flags.one_step_neurons,
-                           file_prefix="../figs/{}_task{}_step{}_total{}".format(
-                               sfn.__class__.__name__,
-                               _flags.task_to_forget,
-                               _flags.one_step_neurons,
-                               str(int(_flags.steps_to_forget) * int(_flags.one_step_neurons)),
+                           file_prefix=os.path.join(
+                               get_project_dir(),
+                               "figs/{}_task{}_step{}_total{}".format(
+                                   sfn.__class__.__name__,
+                                   _flags.task_to_forget,
+                                   _flags.one_step_neurons,
+                                   str(int(_flags.steps_to_forget) * int(_flags.one_step_neurons)),
+                               ),
                            ))
 
 
@@ -78,10 +81,13 @@ def experiment_forget_and_retrain(sfn, _flags, _policies, _coreset=None):
                                _flags.task_to_forget,
                                policy,
                            ),
-                           file_name="../figs/{}_{}_task{}_RetrainAcc.png".format(
-                               sfn.__class__.__name__,
-                               sfn.importance_criteria.split("_")[0],
-                               _flags.task_to_forget,
+                           file_name=os.path.join(
+                               get_project_dir(),
+                               "figs/{}_{}_task{}_RetrainAcc.png".format(
+                                   sfn.__class__.__name__,
+                                   sfn.importance_criteria.split("_")[0],
+                                   _flags.task_to_forget,
+                               ),
                            ))
         sfn.clear_experiments()
 

@@ -1,5 +1,5 @@
 basic: &BASIC
-  checkpoint_dir: ../checkpoints/
+  checkpoint_dir: checkpoints/
   lr: 0.001
   batch_size: 256
   l1_lambda: 1e-05

@@ -7,6 +7,8 @@ from ruamel.yaml import YAML
 from tensorflow.contrib.training import HParams
 from termcolor import cprint
 
+from utils import get_project_dir
+
 
 class MyParams(HParams):
     """
@@ -68,15 +70,15 @@ def check_params(params):
 
 
 def to_yaml_path(yaml_name):
-    yaml_dir = os.path.abspath(os.path.join(os.path.join(__file__), os.pardir, os.pardir, "yamls"))
+    yaml_dir = os.path.join(get_project_dir(), "yamls")
     return os.path.join(yaml_dir, yaml_name)
 
 
 if __name__ == '__main__':
 
     my_params = MyParams({
-        "../yamls/experiment.yaml": "SFDEN_FORGET",
-        "../yamls/models.yaml": "SMALL_FC_MNIST",
+        to_yaml_path("experiment.yaml"): "SFDEN_FORGET",
+        to_yaml_path("models.yaml"): "SMALL_FC_MNIST",
     }, value_magician={
         "checkpoint_dir": lambda p: os.path.join(
             p.checkpoint_dir, p.model, p.mtype,

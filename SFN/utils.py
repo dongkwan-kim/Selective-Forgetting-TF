@@ -1,13 +1,12 @@
 from copy import deepcopy
 from termcolor import cprint
 from pprint import pprint
+import os
 
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 import re
-
-from params import MyParams
 
 
 def sum_set(s: set, *args):
@@ -15,6 +14,10 @@ def sum_set(s: set, *args):
     for _s in args:
         s.update(_s)
     return s
+
+
+def get_project_dir():
+    return os.path.abspath(os.path.join(__file__, os.pardir, os.pardir))
 
 
 def parse_var_name(var_name):
@@ -36,7 +39,7 @@ def print_ckpt_vars(model_path, prefix: str = None, color=None):
     pprint(vars_in_checkpoint)
 
 
-def get_dims_from_config(config: MyParams, search="dims", with_key=False) -> list:
+def get_dims_from_config(config, search="dims", with_key=False) -> list:
     dims_config = sorted([(k, v) for k, v in config.values().items() if search in k],
                          key=lambda t: t[0])
     if not with_key:
