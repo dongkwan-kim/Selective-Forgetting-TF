@@ -4,133 +4,40 @@ import tensorflow as tf
 from SFDEN import SFDEN
 from SFHPS import SFHPS
 from SFLCL import SFLCL
+from params import MyParams, check_params, to_yaml_path
 from data import *
 from utils import build_line_of_list
 
 np.random.seed(1004)
-flags = tf.app.flags
-flags.DEFINE_integer("max_iter", 400, "Epoch to train")
-flags.DEFINE_float("lr", 0.001, "Learning rate(init) for train")
-flags.DEFINE_integer("batch_size", 256, "The size of batch for 1 iteration")
-flags.DEFINE_string("checkpoint_dir", "../checkpoints/default", "Directory path to save the checkpoints")
-flags.DEFINE_integer("dims0", 784, "Dimensions about input layer of fully connect layers")
-flags.DEFINE_integer("dims1", 64, "Dimensions about 1st layer")
-flags.DEFINE_integer("dims2", 32, "Dimensions about 2nd layer")
-flags.DEFINE_integer("dims3", 10, "Dimensions about output layer")
-flags.DEFINE_integer("n_classes", 10, 'The number of classes at each task')
-flags.DEFINE_float("l1_lambda", 0.00001, "Sparsity for L1")
-flags.DEFINE_float("l2_lambda", 0.0001, "L2 lambda")
-flags.DEFINE_float("gl_lambda", 0.001, "Group Lasso lambda")
-flags.DEFINE_float("regular_lambda", 0.5, "regularization lambda")
-flags.DEFINE_integer("ex_k", 10, "The number of units increased in the expansion processing")
-flags.DEFINE_float('loss_thr', 0.1, "Threshold of dynamic expansion")
-flags.DEFINE_float('spl_thr', 0.1, "Threshold of split and duplication")
-
-# New hyper-parameters
-flags.DEFINE_integer("n_tasks", 10, 'The number of tasks')
-flags.DEFINE_integer("task_to_forget", 6, 'Task to forget')
-flags.DEFINE_integer("one_step_neurons", 5, 'Number of neurons to forget in one step')
-flags.DEFINE_integer("steps_to_forget", 35, 'Total number of steps in forgetting')
-flags.DEFINE_string("importance_criteria", "first_Taylor_approximation", "Criteria to measure importance of neurons")
-flags.DEFINE_integer("retrain_max_iter_per_task", 150, "Epoch to re-train per one task")
-flags.DEFINE_integer("retrain_task_iter", 80, "Number of re-training one task with retrain_max_iter_per_task")
-flags.DEFINE_integer("coreset_size", 250, "Size of coreset")
-
-# TODO: Refactoring experimental settings
-MODE = {
-    "SIZE": "DEFAULT",  # TEST, SMALL, DEFAULT
-    "EXPERIMENT": "FORGET",  # FORGET, RETRAIN, CRITERIA
-    "MODEL": SFLCL,  # SFDEN, SFHPS, SFLCL
-    "DTYPE": "CIFAR10",  # PERMUTED_MNIST, COARSE_CIFAR100, CIFAR10, MNIST
-}
-
-if MODE["SIZE"] == "TEST":
-    flags.FLAGS.max_iter = 90
-    flags.FLAGS.n_tasks = 2
-    flags.FLAGS.task_to_forget = 1
-    flags.FLAGS.steps_to_forget = 6
-    flags.FLAGS.checkpoint_dir = "../checkpoints/test"
-elif MODE["SIZE"] == "SMALL":
-    flags.FLAGS.max_iter = 200
-    flags.FLAGS.n_tasks = 4
-    flags.FLAGS.task_to_forget = 2
-    flags.FLAGS.steps_to_forget = 14
-    flags.FLAGS.checkpoint_dir = "../checkpoints/small"
-
-if MODE["EXPERIMENT"] == "RETRAIN":
-    flags.FLAGS.steps_to_forget = flags.FLAGS.steps_to_forget - 12
-elif MODE["EXPERIMENT"] == "CRITERIA":
-    flags.FLAGS.importance_criteria = "activation"
-    flags.FLAGS.checkpoint_dir += "/" + flags.FLAGS.importance_criteria
-
-if MODE["DTYPE"] == "COARSE_CIFAR100":
-    flags.FLAGS.n_classes = 20
-    flags.DEFINE_integer("conv0_filters", 3, "Number of filters in input")
-    flags.DEFINE_integer("conv0_size", 32, "Size of input")
-    flags.DEFINE_integer("conv1_filters", 64, "Number of filters in conv1")
-    flags.DEFINE_integer("conv1_size", 11, "Size of kernel in conv1")
-    flags.DEFINE_integer("pool1_ksize", 3, "Size of pooling window for xy direction of images")
-    flags.DEFINE_integer("conv2_filters", 128, "Number of filters in conv2")
-    flags.DEFINE_integer("conv2_size", 5, "Size of kernel in conv2")
-    flags.DEFINE_integer("pool2_ksize", 3, "Size of pooling window for xy direction of images")
-    flags.DEFINE_integer("conv3_filters", 256, "Number of filters in conv3")
-    flags.DEFINE_integer("conv3_size", 5, "Size of kernel in conv3")
-    flags.DEFINE_integer("conv4_filters", 256, "Number of filters in conv4")
-    flags.DEFINE_integer("conv4_size", 3, "Size of kernel in conv4")
-    flags.DEFINE_integer("conv5_filters", 256, "Number of filters in conv5")
-    flags.DEFINE_integer("conv5_size", 3, "Size of kernel in conv5")
-    flags.DEFINE_integer("pool5_ksize", 2, "Size of pooling window for xy direction of images")
-    flags.DEFINE_integer("fc0", 4 * 4 * 256, "Dimensions about input layer of fully connect layers")
-    flags.DEFINE_integer("fc1", 1024, "Dimensions about 1st layer")
-    flags.DEFINE_integer("fc2", 128, "Dimensions about 1st layer")
-    flags.DEFINE_integer("fc3", flags.FLAGS.n_classes, "Dimensions of output layer")
-elif MODE["DTYPE"] == "CIFAR10":
-    flags.DEFINE_integer("conv0_filters", 3, "Number of filters in input")
-    flags.DEFINE_integer("conv0_size", 32, "Size of input")
-    flags.DEFINE_integer("conv1_filters", 64, "Number of filters in conv1")
-    flags.DEFINE_integer("conv1_size", 11, "Size of kernel in conv1")
-    flags.DEFINE_integer("pool1_ksize", 3, "Size of pooling window for xy direction of images")
-    flags.DEFINE_integer("conv2_filters", 128, "Number of filters in conv2")
-    flags.DEFINE_integer("conv2_size", 5, "Size of kernel in conv2")
-    flags.DEFINE_integer("pool2_ksize", 3, "Size of pooling window for xy direction of images")
-    flags.DEFINE_integer("conv3_filters", 256, "Number of filters in conv3")
-    flags.DEFINE_integer("conv3_size", 5, "Size of kernel in conv3")
-    flags.DEFINE_integer("conv4_filters", 256, "Number of filters in conv4")
-    flags.DEFINE_integer("conv4_size", 3, "Size of kernel in conv4")
-    flags.DEFINE_integer("conv5_filters", 256, "Number of filters in conv5")
-    flags.DEFINE_integer("conv5_size", 3, "Size of kernel in conv5")
-    flags.DEFINE_integer("pool5_ksize", 2, "Size of pooling window for xy direction of images")
-    flags.DEFINE_integer("fc0", 4 * 4 * 256, "Dimensions about input layer of fully connect layers")
-    flags.DEFINE_integer("fc1", 1024, "Dimensions about 1st layer")
-    flags.DEFINE_integer("fc2", 128, "Dimensions about 1st layer")
-    flags.DEFINE_integer("fc3", flags.FLAGS.n_classes, "Dimensions of output layer")
-elif MODE["DTYPE"] == "MNIST":
-    flags.FLAGS.max_iter = 1
-    flags.DEFINE_integer("conv0_filters", 1, "Number of filters in input")
-    flags.DEFINE_integer("conv0_size", 28, "Size of input")
-    flags.DEFINE_integer("conv1_filters", 3, "Number of filters in conv1")
-    flags.DEFINE_integer("conv1_size", 5, "Size of kernel in conv1")
-    flags.DEFINE_integer("pool1_ksize", 2, "Size of pooling window for xy direction of images")
-    flags.DEFINE_integer("fc0", 14*14*3, "Dimensions about input layer of fully connect layers")
-    flags.DEFINE_integer("fc1", 128, "Dimensions about 1st layer")
-    flags.DEFINE_integer("fc2", 16, "Dimensions about 1st layer")
-    flags.DEFINE_integer("fc3", flags.FLAGS.n_classes, "Dimensions of output layer")
-
-flags.FLAGS.checkpoint_dir = os.path.join(flags.FLAGS.checkpoint_dir, MODE["MODEL"].__name__)
-if MODE["MODEL"] == SFHPS:
-    flags.FLAGS.max_iter = 1
-    flags.FLAGS.dims1 += 10 * flags.FLAGS.n_tasks
-    flags.FLAGS.dims2 += 10 * flags.FLAGS.n_tasks
-    flags.FLAGS.retrain_task_iter = 1000
-    flags.FLAGS.one_step_neurons = 7
-    flags.FLAGS.l1_lambda = 0.00001
-    flags.FLAGS.l2_lambda = 0.0
-elif MODE["MODEL"] == SFLCL:
-    flags.FLAGS.max_iter = 100
-    flags.FLAGS.n_tasks = flags.FLAGS.n_classes
 
 
-FLAGS = flags.FLAGS
+def get_load_params() -> MyParams:
+    loaded_params = MyParams(
+        yaml_file_to_config_name={
+
+            # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET,
+            # SFLCL10_FORGET, SFLCL20_FORGET
+            to_yaml_path("experiment.yaml"): "SFLCL10_FORGET",
+
+            # SMALL_FC_MNIST, LARGE_FC_MNIST,
+            # SMALL_CONV_MNIST, ALEXNETV_MNIST,
+            # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100
+            to_yaml_path("models.yaml"): "ALEXNETV_MNIST",
+
+        },
+        value_magician={
+            "model": lambda p: {
+                "SFDEN": SFDEN,
+                "SFHPS": SFHPS,
+                "SFLCL": SFLCL,
+            }[p.model],
+            "checkpoint_dir": lambda p: os.path.join(
+                p.checkpoint_dir, p.model, p.mtype,
+            ),
+        })
+    check_params(loaded_params)
+    loaded_params.pprint()
+    return loaded_params
 
 
 def experiment_forget(sfn, _flags, _policies):
@@ -180,7 +87,6 @@ def experiment_forget_and_retrain(sfn, _flags, _policies, _coreset=None):
 
 
 def get_dataset(dtype: str, _flags, **kwargs) -> tuple:
-
     if dtype == "PERMUTED_MNIST":
         _labels, _train_xs, _val_xs, _test_xs = get_permuted_datasets(dtype, _flags.n_tasks, **kwargs)
         train_sz = _train_xs[0].shape[0]
@@ -218,9 +124,11 @@ def get_dataset(dtype: str, _flags, **kwargs) -> tuple:
 
 if __name__ == '__main__':
 
-    labels, train_xs, val_xs, test_xs, coreset = get_dataset(MODE["DTYPE"], FLAGS)
+    params = get_load_params()
 
-    model = MODE["MODEL"](FLAGS)
+    labels, train_xs, val_xs, test_xs, coreset = get_dataset(params.dtype, params)
+
+    model = params.model(params)
     model.add_dataset(labels, train_xs, val_xs, test_xs)
 
     if not model.restore():
@@ -228,9 +136,11 @@ if __name__ == '__main__':
         model.get_importance_matrix()
         model.save()
 
-    if MODE["EXPERIMENT"] == "FORGET" or MODE["EXPERIMENT"] == "CRITERIA":
+    if params.expr_type == "FORGET" or params.expr_type == "CRITERIA":
         policies_for_expr = ["MIX", "MAX", "VAR", "LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
-        experiment_forget(model, FLAGS, policies_for_expr)
-    elif MODE["EXPERIMENT"] == "RETRAIN":
+        # noinspection PyTypeChecker
+        experiment_forget(model, params, policies_for_expr)
+    elif params.expr_type == "RETRAIN":
         policies_for_expr = ["MIX"]
-        experiment_forget_and_retrain(model, FLAGS, policies_for_expr, coreset)
+        # noinspection PyTypeChecker
+        experiment_forget_and_retrain(model, params, policies_for_expr, coreset)

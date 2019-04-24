@@ -7,6 +7,8 @@ import numpy as np
 import tensorflow as tf
 import re
 
+from params import MyParams
+
 
 def sum_set(s: set, *args):
     s = deepcopy(s)
@@ -34,8 +36,8 @@ def print_ckpt_vars(model_path, prefix: str = None, color=None):
     pprint(vars_in_checkpoint)
 
 
-def get_dims_from_config(config, search="dims", with_key=False) -> list:
-    dims_config = sorted([(k, v) for k, v in config.flag_values_dict().items() if search in k],
+def get_dims_from_config(config: MyParams, search="dims", with_key=False) -> list:
+    dims_config = sorted([(k, v) for k, v in config.values().items() if search in k],
                          key=lambda t: t[0])
     if not with_key:
         return [v for _, v in dims_config]

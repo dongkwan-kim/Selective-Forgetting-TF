@@ -27,7 +27,7 @@ class SFHPS(SFN):
         self.n_layers = len(self.dims) - 1
         self.n_classes = config.n_classes
         self.max_iter = config.max_iter
-        self.task_iter = config.retrain_task_iter  # Just use retrain_task_ter for task_iter
+        self.task_iter = config.task_iter
         self.init_lr = config.lr
         self.l1_lambda = config.l1_lambda
         self.l2_lambda = config.l2_lambda
