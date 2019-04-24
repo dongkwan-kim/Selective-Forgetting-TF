@@ -114,9 +114,9 @@ class SFLCL(SFN):
         test_perf = self.get_performance(test_preds, ys)
         for rank, idx in enumerate(reversed(np.argsort(test_perf))):
             if rank < half_number_to_print:
-                print("\t Class: %s, test perf: %.4f" % (str(idx), test_perf[idx]))
+                print("\t Class of task_id: %s, test perf: %.4f" % (str(idx + 1), test_perf[idx]))
             elif rank >= len(test_perf) - half_number_to_print:
-                print("\t Class: %s, test perf: %.4f" % (str(idx), test_perf[idx]))
+                print("\t Class of task_id: %s, test perf: %.4f" % (str(idx + 1), test_perf[idx]))
 
             if rank == half_number_to_print and len(test_perf) > 2 * half_number_to_print:
                 print("\t ...")
