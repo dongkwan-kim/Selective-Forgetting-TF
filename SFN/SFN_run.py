@@ -36,11 +36,12 @@ flags.DEFINE_integer("retrain_max_iter_per_task", 150, "Epoch to re-train per on
 flags.DEFINE_integer("retrain_task_iter", 80, "Number of re-training one task with retrain_max_iter_per_task")
 flags.DEFINE_integer("coreset_size", 250, "Size of coreset")
 
+# TODO: Refactoring experimental settings
 MODE = {
     "SIZE": "DEFAULT",  # TEST, SMALL, DEFAULT
     "EXPERIMENT": "FORGET",  # FORGET, RETRAIN, CRITERIA
     "MODEL": SFLCL,  # SFDEN, SFHPS, SFLCL
-    "DTYPE": "COARSE_CIFAR100",  # PERMUTED_MNIST, COARSE_CIFAR100, MNIST
+    "DTYPE": "CIFAR10",  # PERMUTED_MNIST, COARSE_CIFAR100, CIFAR10, MNIST
 }
 
 if MODE["SIZE"] == "TEST":
@@ -64,6 +65,26 @@ elif MODE["EXPERIMENT"] == "CRITERIA":
 
 if MODE["DTYPE"] == "COARSE_CIFAR100":
     flags.FLAGS.n_classes = 20
+    flags.DEFINE_integer("conv0_filters", 3, "Number of filters in input")
+    flags.DEFINE_integer("conv0_size", 32, "Size of input")
+    flags.DEFINE_integer("conv1_filters", 64, "Number of filters in conv1")
+    flags.DEFINE_integer("conv1_size", 11, "Size of kernel in conv1")
+    flags.DEFINE_integer("pool1_ksize", 3, "Size of pooling window for xy direction of images")
+    flags.DEFINE_integer("conv2_filters", 128, "Number of filters in conv2")
+    flags.DEFINE_integer("conv2_size", 5, "Size of kernel in conv2")
+    flags.DEFINE_integer("pool2_ksize", 3, "Size of pooling window for xy direction of images")
+    flags.DEFINE_integer("conv3_filters", 256, "Number of filters in conv3")
+    flags.DEFINE_integer("conv3_size", 5, "Size of kernel in conv3")
+    flags.DEFINE_integer("conv4_filters", 256, "Number of filters in conv4")
+    flags.DEFINE_integer("conv4_size", 3, "Size of kernel in conv4")
+    flags.DEFINE_integer("conv5_filters", 256, "Number of filters in conv5")
+    flags.DEFINE_integer("conv5_size", 3, "Size of kernel in conv5")
+    flags.DEFINE_integer("pool5_ksize", 2, "Size of pooling window for xy direction of images")
+    flags.DEFINE_integer("fc0", 4 * 4 * 256, "Dimensions about input layer of fully connect layers")
+    flags.DEFINE_integer("fc1", 1024, "Dimensions about 1st layer")
+    flags.DEFINE_integer("fc2", 128, "Dimensions about 1st layer")
+    flags.DEFINE_integer("fc3", flags.FLAGS.n_classes, "Dimensions of output layer")
+elif MODE["DTYPE"] == "CIFAR10":
     flags.DEFINE_integer("conv0_filters", 3, "Number of filters in input")
     flags.DEFINE_integer("conv0_size", 32, "Size of input")
     flags.DEFINE_integer("conv1_filters", 64, "Number of filters in conv1")
@@ -177,6 +198,11 @@ def get_dataset(dtype: str, _flags, **kwargs) -> tuple:
     elif dtype == "COARSE_CIFAR100":
         _labels, _train_xs, _val_xs, _test_xs = get_class_as_task_datasets(dtype, _flags.n_tasks,
                                                                            y_name="coarse_label", **kwargs)
+        _coreset = None  # TODO
+        return _labels, _train_xs, _val_xs, _test_xs, _coreset
+
+    elif dtype == "CIFAR10":
+        _labels, _train_xs, _val_xs, _test_xs = get_class_as_task_datasets(dtype, _flags.n_tasks, **kwargs)
         _coreset = None  # TODO
         return _labels, _train_xs, _val_xs, _test_xs, _coreset
 

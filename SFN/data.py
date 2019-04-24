@@ -64,7 +64,8 @@ def dtype_to_name(dtype: str):
 def name_to_train_and_val_num(name: str) -> tuple:
     if name == "mnist":
         return 55000, 5000
-    elif name == "cifar100":
+    elif name == "cifar100" or \
+            name == "cifar10":
         return 45000, 5000
     else:
         raise ValueError
@@ -77,13 +78,12 @@ def get_to_one_hot(num_class: int) -> Callable:
 
 
 def preprocess_xs(name: str, xs: List[np.ndarray], is_for_cnn=None) -> tuple:
-
     def reshape_xs():
         _xs = []
         for x in xs:
             _, *whd = x.shape
             # (-1, w * h * d) if not is_for_cnn else (-1, w, h, d)
-            x = x.reshape((-1, reduce(lambda i, j: i*j, whd))) if not is_for_cnn else x.reshape((-1, *whd))
+            x = x.reshape((-1, reduce(lambda i, j: i * j, whd))) if not is_for_cnn else x.reshape((-1, *whd))
             _xs.append(x)
         return _xs
 
@@ -91,7 +91,8 @@ def preprocess_xs(name: str, xs: List[np.ndarray], is_for_cnn=None) -> tuple:
         is_for_cnn = is_for_cnn or False
         reshaped_xs = reshape_xs()
         return tuple(x / 255 for x in reshaped_xs)
-    elif name == "cifar100":
+    elif name == "cifar100" or \
+            name == "cifar10":
         is_for_cnn = is_for_cnn or True
         reshaped_xs = reshape_xs()
         return tuple(x / 255 for x in reshaped_xs)
@@ -100,7 +101,6 @@ def preprocess_xs(name: str, xs: List[np.ndarray], is_for_cnn=None) -> tuple:
 
 
 def get_tfds(dtype: str, data_dir: str = None, x_name="image", y_name="label", is_verbose=True, **kwargs):
-
     name = dtype_to_name(dtype)
     assert name in tfds.list_builders()
 
@@ -146,7 +146,6 @@ def get_tfds(dtype: str, data_dir: str = None, x_name="image", y_name="label", i
 
 def get_permuted_datasets(dtype: str, n_tasks: int, data_dir=None, base_seed=42,
                           **kwargs) -> Tuple[DataLabel, list, list, list]:
-
     data_label, train_x, val_x, test_x = get_tfds(dtype, data_dir, **kwargs)
 
     # Pixel Permuting
@@ -166,7 +165,6 @@ def get_permuted_datasets(dtype: str, n_tasks: int, data_dir=None, base_seed=42,
 
 def get_class_as_task_datasets(dtype: str, n_tasks: int, data_dir=None,
                                **kwargs) -> Tuple[DataLabel, list, list, list]:
-
     data_label, train_x, val_x, test_x = get_tfds(dtype, data_dir, **kwargs)
 
     train_not_one_hot_label = np.argmax(data_label.train_labels, axis=1)
@@ -303,13 +301,13 @@ class PermutedCoreset(ReusableObject):
         return self.train_xs[item], self.get_train_labels(item + 1), \
                self.val_xs[item], self.get_validation_labels(item + 1), \
                self.test_xs[item], self.get_test_labels(item + 1)
-    
+
     def get_train_labels(self, task_id):
         return self.data_labels.get_train_labels(task_id)
-    
+
     def get_validation_labels(self, task_id):
         return self.data_labels.get_validation_labels(task_id)
-    
+
     def get_test_labels(self, task_id):
         return self.data_labels.get_test_labels(task_id)
 
