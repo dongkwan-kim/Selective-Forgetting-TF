@@ -17,12 +17,12 @@ def get_load_params() -> MyParams:
 
             # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET,
             # SFLCL10_FORGET, SFLCL20_FORGET
-            to_yaml_path("experiment.yaml"): "SFLCL10_FORGET",
+            to_yaml_path("experiment.yaml"): "SFLCL20_FORGET",
 
             # SMALL_FC_MNIST, LARGE_FC_MNIST,
             # SMALL_CONV_MNIST, ALEXNETV_MNIST,
             # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100
-            to_yaml_path("models.yaml"): "ALEXNETV_MNIST",
+            to_yaml_path("models.yaml"): "ALEXNETV_COARSE_CIFAR100",
 
         },
         value_magician={

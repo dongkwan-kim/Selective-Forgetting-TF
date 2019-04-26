@@ -37,15 +37,15 @@ SMALL_CONV_MNIST:
   one_step_neurons: 5
 
 ALEXNET_VARIANT: &ALEXNET_VARIANT
-  conv1_filters: 64
+  conv1_filters: 96
   conv1_size: 11
   pool1_ksize: 3
-  conv2_filters: 128
+  conv2_filters: 256
   conv2_size: 5
   pool2_ksize: 3
-  conv3_filters: 256
+  conv3_filters: 384
   conv3_size: 5
-  conv4_filters: 256
+  conv4_filters: 384
   conv4_size: 3
   conv5_filters: 256
   conv5_size: 3
