@@ -126,7 +126,9 @@ class SFLCL(SFN):
     def predict_only_after_training(self, **kwargs) -> list:
         cprint("\n PREDICT ONLY AFTER " + ("TRAINING" if not self.retrained else "RE-TRAINING"), "yellow")
         _, _, _, _, test_x, test_labels = self.get_data_stream_from_task_as_class_data(shuffle=False)
-        return self.predict_perform(test_x, test_labels, **kwargs)
+        perfs = self.predict_perform(test_x, test_labels, **kwargs)
+        print("   [*] avg_perf: %.4f +- %.4f" % (float(np.mean(perfs)), float(np.std(perfs))))
+        return perfs
 
     def set_layer_types(self):
         for i in range(2, len(self.conv_dims), 2):
@@ -176,7 +178,7 @@ class SFLCL(SFN):
 
         return X, Y
 
-    def initial_train(self, print_iter=50, *args):
+    def initial_train(self, print_iter=100, *args):
 
         X, Y = self.build_model()
 
@@ -199,17 +201,17 @@ class SFLCL(SFN):
 
         train_x, train_labels, val_x, val_labels, test_x, test_labels = self.get_data_stream_from_task_as_class_data()
 
-        for epoch in range(self.max_iter):
+        for epoch in trange(self.max_iter):
             self.initialize_batch()
             num_batches = int(math.ceil(len(train_x) / self.batch_size))
-            for _ in trange(num_batches):
+            for _ in range(num_batches):
                 batch_x, batch_y = self.get_next_batch(train_x, train_labels)
                 _, loss_val = self.sess.run([opt, self.loss], feed_dict={X: batch_x, Y: batch_y})
 
             if epoch % print_iter == 0 or epoch == self.max_iter - 1:
                 print('\n OVERALL EVALUATION at ITERATION {}'.format(epoch))
                 perfs = self.predict_perform(test_x, test_labels)
-                print("   [*] avg_perf: %.4f" % float(np.mean(perfs)))
+                print("   [*] avg_perf: %.4f +- %.4f" % (float(np.mean(perfs)), float(np.std(perfs))))
 
     def get_data_stream_from_task_as_class_data(self, shuffle=True, base_seed=42) -> Tuple[np.ndarray, ...]:
         """a method that combines data divided by class"""
