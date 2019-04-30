@@ -309,4 +309,3 @@ class SFLCL(SFN):
 
     def _assign_retrained_value_to_tensor(self, task_id):
         pass
-
