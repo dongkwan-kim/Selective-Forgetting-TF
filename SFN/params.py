@@ -61,6 +61,9 @@ class MyParams(HParams):
             cprint("{} from {}".format(v, k), "green")
         pprint(self.values())
 
+    def has(self, k: str):
+        return k in self
+
 
 def check_params(params):
     assert params.mtype in params.support_model, \
