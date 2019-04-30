@@ -1,5 +1,5 @@
-from collections import defaultdict
-from typing import Dict, List, Callable
+from collections import defaultdict, OrderedDict
+from typing import Dict, List, Callable, Tuple
 import os
 import pickle
 import math
@@ -10,8 +10,24 @@ from termcolor import cprint
 from tqdm import trange
 
 from data import PermutedCoreset, DataLabel
+from enums import UnitType
 from utils import build_line_of_list, print_all_vars
 from utils_importance import *
+
+
+def get_utype_from_layer_type(layer_type: str or List[str]) -> UnitType or List[UnitType]:
+    # hard coded conversion
+    layer_type_to_utype = {
+        "conv": UnitType.FILTER,
+        "fc": UnitType.NEURON,
+        "layer": UnitType.NEURON,  # TODO: Replace layer to fc
+    }
+    if isinstance(layer_type, str):
+        return layer_type_to_utype[layer_type]
+    elif isinstance(layer_type, list):
+        return [layer_type_to_utype[lt] for lt in layer_type]
+    else:
+        raise TypeError("layer_type is type({})".format(type(layer_type)))
 
 
 class SFN:
@@ -31,6 +47,7 @@ class SFN:
         self.importance_criteria = config.importance_criteria
 
         self.prediction_history: Dict[str, List] = defaultdict(list)
+        self.pruning_rate_history: Dict[str, List] = defaultdict(list)
         self.layer_to_removed_neuron_set: Dict[str, set] = defaultdict(set)
         self.layer_types: List[str] = []
 
@@ -67,6 +84,9 @@ class SFN:
         raise NotImplementedError
 
     # Variable, params, ... attributes Manipulation
+
+    def get_name_to_param_shapes(self) -> Dict[str, tuple]:
+        return {name: tuple(param.get_shape().as_list()) for name, param in self.params.items()}
 
     def get_params(self) -> dict:
         raise NotImplementedError
@@ -201,36 +221,34 @@ class SFN:
 
     # Data visualization
 
-    def print_history(self, one_step_neuron=1):
+    def print_summary(self, task_id):
         for policy, history in self.prediction_history.items():
-            print("\t".join([policy] + [str(x) for x in range(1, len(history[0]) + 1)]))
-            for i, acc in enumerate(history):
-                print("\t".join([str(i * one_step_neuron)] + [str(x) for x in acc]))
+            print("== {} ==".format(policy))
+            print("\t".join(["Pruning rate"] + [str(x) for x in range(1, len(history[0]) + 1)] + ["AUROC-{}".format(policy)]))
+            pruning_rate_as_x = self.pruning_rate_history[policy]
+            for i, (pruning_rate, perf) in enumerate(zip(pruning_rate_as_x, history)):
+                perf_except_t = np.delete(perf, task_id - 1)
+                mean_perf = np.mean(perf_except_t)
+                print("\t".join([str(pruning_rate)] + [str(x) for x in perf] + [str(mean_perf)]))
 
-    def print_summary(self, task_id, one_step_neuron=1):
-        for policy, history in self.prediction_history.items():
-            print("\t".join([policy] + [str(x) for x in range(1, len(history[0]) + 1)] + ["Acc-{}".format(policy)]))
-            for i, acc in enumerate(history):
-                acc_except_t = np.delete(acc, task_id - 1)
-                mean_acc = np.mean(acc_except_t)
-                print("\t".join([str(i * one_step_neuron)] + [str(x) for x in acc] + [str(mean_acc)]))
+    def draw_chart_summary(self, task_id, file_prefix=None, file_extension=".png", ylim=None):
 
-    def draw_chart_summary(self, task_id, one_step_neuron=1, file_prefix=None, file_extension=".png", ylim=None):
-
-        mean_acc_except_t = None
-        min_acc_except_t = None
-        x_removed_neurons = None
+        mean_perf_except_t = None
+        min_perf_except_t = None
 
         for policy, history in self.prediction_history.items():
 
-            x_removed_neurons = [i * one_step_neuron for i, acc in enumerate(history)]
+            pruning_rate_as_x = self.pruning_rate_history[policy]
             history_txn = np.transpose(history)
             tasks = [x for x in range(1, self.n_tasks + 1)]
 
-            build_line_of_list(x=x_removed_neurons, y_list=history_txn, label_y_list=tasks,
-                               xlabel="Removed Neurons", ylabel="Accuracy",
+            build_line_of_list(x_or_x_list=pruning_rate_as_x,
+                               is_x_list=False,
+                               y_list=history_txn,
+                               label_y_list=tasks,
+                               xlabel="Pruning rate", ylabel="AUROC",
                                ylim=ylim or [0.5, 1],
-                               title="Accuracy by {} Neuron Deletion".format(policy),
+                               title="AUROC by {} Neuron Deletion".format(policy),
                                file_name="{}_{}_{}{}".format(
                                    file_prefix, self.importance_criteria.split("_")[0], policy, file_extension),
                                highlight_yi=task_id - 1)
@@ -239,26 +257,29 @@ class SFN:
             history_n_mean_except_t = np.mean(history_txn_except_t, axis=0)
             history_n_min_except_t = np.min(history_txn_except_t, axis=0)
 
-            if mean_acc_except_t is None:
-                mean_acc_except_t = history_n_mean_except_t
-                min_acc_except_t = history_n_min_except_t
+            if mean_perf_except_t is None:
+                mean_perf_except_t = history_n_mean_except_t
+                min_perf_except_t = history_n_min_except_t
             else:
-                mean_acc_except_t = np.vstack((mean_acc_except_t, history_n_mean_except_t))
-                min_acc_except_t = np.vstack((min_acc_except_t, history_n_min_except_t))
+                mean_perf_except_t = np.vstack((mean_perf_except_t, history_n_mean_except_t))
+                min_perf_except_t = np.vstack((min_perf_except_t, history_n_min_except_t))
 
-        build_line_of_list(x=x_removed_neurons, y_list=mean_acc_except_t,
-                           label_y_list=[policy for policy in self.prediction_history.keys()],
-                           xlabel="Removed Neurons", ylabel="Mean Accuracy",
+        policy_keys = [policy for policy in self.prediction_history.keys()]
+        build_line_of_list(x_or_x_list=[self.pruning_rate_history[policy] for policy in policy_keys],
+                           y_list=mean_perf_except_t,
+                           label_y_list=policy_keys,
+                           xlabel="Pruning rate", ylabel="Mean AUROC",
                            ylim=ylim or [0.7, 1],
-                           title="Mean Accuracy Except Forgetting Task-{}".format(task_id),
+                           title="Mean AUROC Except Forgetting Task-{}".format(task_id),
                            file_name="{}_{}_MeanAcc{}".format(
                                file_prefix, self.importance_criteria.split("_")[0], file_extension,
                            ))
-        build_line_of_list(x=x_removed_neurons, y_list=min_acc_except_t,
-                           label_y_list=[policy for policy in self.prediction_history.keys()],
-                           xlabel="Removed Neurons", ylabel="Min Accuracy",
+        build_line_of_list(x_or_x_list=[self.pruning_rate_history[policy] for policy in policy_keys],
+                           y_list=min_perf_except_t,
+                           label_y_list=policy_keys,
+                           xlabel="Pruning rate", ylabel="Min AUROC",
                            ylim=ylim or [0.5, 1],
-                           title="Minimum Accuracy Except Forgetting Task-{}".format(task_id),
+                           title="Minimum AUROC Except Forgetting Task-{}".format(task_id),
                            file_name="{}_{}_MinAcc{}".format(
                                file_prefix, self.importance_criteria.split("_")[0], file_extension,
                            ))
@@ -312,7 +333,7 @@ class SFN:
         i_mat = self._get_reduced_i_mat(task_id_or_ids)
         return np.max(i_mat, axis=0)
 
-    def get_selected_by_layers(self, selected_indexes: np.ndarray) -> tuple:
+    def _get_selected_by_layers(self, selected_indexes: np.ndarray) -> tuple:
         selected_by_layers_list = []
         prev_divider = 0
         for i_mat in self.importance_matrix_tuple:
@@ -325,7 +346,41 @@ class SFN:
             prev_divider = divider
         return tuple(selected_by_layers_list)
 
-    def get_neurons_by_mixed_ein_and_lin(self, task_id, number_to_select, mixing_coeff=0.45) -> tuple:
+    def _get_indices_of_certain_utype(self, ordered_indices: np.ndarray, certain_utype) -> np.ndarray:
+
+        # [<UnitType.FILTER: 1>, <UnitType.FILTER: 1>, ... <UnitType.NEURON: 0>]
+        utypes_of_layers = get_utype_from_layer_type(self.layer_types)
+
+        assert len(utypes_of_layers) - 1 == len(self.importance_matrix_tuple), \
+            "{} - 1 != {}".format(len(utypes_of_layers), len(self.importance_matrix_tuple))
+        assert certain_utype in utypes_of_layers
+
+        if len(set(utypes_of_layers)) == 1:
+            return ordered_indices
+
+        elif len(set(utypes_of_layers)) >= 2:
+            utypes_to_num_units = OrderedDict()
+            utype_to_loop = None
+            for utype, i_mat_of_layer in zip(utypes_of_layers, self.importance_matrix_tuple):
+                if utype_to_loop != utype:
+                    utype_to_loop = utype
+                    utypes_to_num_units[utype_to_loop] = 0
+                # i_mat_of_layer.shape[-1]: -1 of (n_tasks, n_units/layer)
+                utypes_to_num_units[utype_to_loop] += i_mat_of_layer.shape[-1]
+
+            start_idx = 0
+            for i, utype in enumerate(utypes_to_num_units):
+
+                utype_start, utype_end = (start_idx, start_idx + utypes_to_num_units[utype])
+                start_idx = utypes_to_num_units[utype]
+
+                # utype_start <= X < utype_end, when X is indices of utype can have.
+                if certain_utype == utype:
+                    return ordered_indices[(ordered_indices >= utype_start) & (ordered_indices < utype_end)]
+        else:
+            raise ValueError("len(set(utypes_of_layers)) should be not 0")
+
+    def get_units_by_mixed_ein_and_lin(self, task_id, number_to_select, utype, mixing_coeff=0.45) -> tuple:
 
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
         num_tasks, num_neurons = i_mat.shape
@@ -341,11 +396,11 @@ class SFN:
         sparsity = number_to_select / num_neurons
         mixed = (1 - mixing_coeff) * (num_tasks - 1) * minus_ei + mixing_coeff * li
 
-        mixed_asc_sorted_idx = np.argsort(mixed)
+        mixed_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(mixed), utype)
         selected = mixed_asc_sorted_idx[:number_to_select]
-        return self.get_selected_by_layers(selected)
+        return self._get_selected_by_layers(selected)
 
-    def get_neurons_with_task_variance(self, task_id_or_ids, number_to_select, mixing_coeff=0.65):
+    def get_units_with_task_variance(self, task_id_or_ids, number_to_select, utype, mixing_coeff=0.65):
 
         i_mat = self._get_reduced_i_mat(task_id_or_ids)
         num_tasks, num_neurons = i_mat.shape
@@ -354,13 +409,13 @@ class SFN:
         variance = np.std(i_mat, axis=0) ** 2
 
         sparsity = number_to_select / num_neurons
-        mixed = (1 - mixing_coeff) * variance + mixing_coeff * li
+        varianced = (1 - mixing_coeff) * variance + mixing_coeff * li
 
-        mixed_asc_sorted_idx = np.argsort(mixed)
-        selected = mixed_asc_sorted_idx[:number_to_select]
-        return self.get_selected_by_layers(selected)
+        varianced_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(varianced), utype)
+        selected = varianced_asc_sorted_idx[:number_to_select]
+        return self._get_selected_by_layers(selected)
 
-    def get_neurons_with_maximum_importance(self, task_id_or_ids, number_to_select, mixing_coeff=0.65):
+    def get_units_with_maximum_importance(self, task_id_or_ids, number_to_select, utype, mixing_coeff=0.65):
 
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
         num_tasks, num_neurons = i_mat.shape
@@ -369,23 +424,24 @@ class SFN:
         mi = self.get_maximum_importance(task_id_or_ids)
 
         sparsity = number_to_select / num_neurons
-        mixed = (1 - mixing_coeff) * mi + mixing_coeff * li
+        maximized = (1 - mixing_coeff) * mi + mixing_coeff * li
 
-        mi_asc_sorted_idx = np.argsort(mixed)
-        selected = mi_asc_sorted_idx[:number_to_select]
-        return self.get_selected_by_layers(selected)
+        maximized_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(maximized), utype)
+        selected = maximized_asc_sorted_idx[:number_to_select]
+        return self._get_selected_by_layers(selected)
 
-    def get_random_neurons(self, number_to_select):
+    def get_random_units(self, number_to_select, utype):
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
         indexes = np.asarray(range(i_mat.shape[-1]))
         np.random.seed(i_mat.shape[-1])
         np.random.shuffle(indexes)
+        indexes = self._get_indices_of_certain_utype(indexes, utype)
         selected = indexes[:number_to_select]
-        return self.get_selected_by_layers(selected)
+        return self._get_selected_by_layers(selected)
 
     # Selective forgetting
 
-    def selective_forget(self, task_to_forget, number_of_neurons, policy, **kwargs) -> tuple:
+    def selective_forget(self, task_to_forget, number_of_units, policy, utype, **kwargs) -> Tuple[np.ndarray]:
 
         assert policy in ["MIX", "MAX", "VAR", "EIN", "LIN", "RANDOM", "ALL", "ALL_VAR"]
 
@@ -394,41 +450,37 @@ class SFN:
         if not self.importance_matrix_tuple:
             self.get_importance_matrix()
 
-        cprint("\n SELECTIVE FORGET {} task-{} from {}, neurons-{}".format(
-            policy, task_to_forget, self.n_tasks, number_of_neurons), "green")
+        cprint("\n SELECTIVE FORGET {} task_id-{} from {}, {} {}".format(
+            policy, task_to_forget, self.n_tasks, number_of_units, utype), "green")
 
         if policy == "MIX":
-            neuron_indexes = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, **kwargs)
+            unit_indexes = self.get_units_by_mixed_ein_and_lin(task_to_forget, number_of_units, utype, **kwargs)
         elif policy == "MAX":
-            neuron_indexes = self.get_neurons_with_maximum_importance(task_to_forget, number_of_neurons, **kwargs)
+            unit_indexes = self.get_units_with_maximum_importance(task_to_forget, number_of_units, utype, **kwargs)
         elif policy == "VAR":
-            neuron_indexes = self.get_neurons_with_task_variance(task_to_forget, number_of_neurons, **kwargs)
+            unit_indexes = self.get_units_with_task_variance(task_to_forget, number_of_units, utype, **kwargs)
         elif policy == "EIN":
-            neuron_indexes = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, mixing_coeff=0)
+            unit_indexes = self.get_units_by_mixed_ein_and_lin(task_to_forget, number_of_units, utype, mixing_coeff=0)
         elif policy == "LIN":
-            neuron_indexes = self.get_neurons_by_mixed_ein_and_lin(task_to_forget, number_of_neurons, mixing_coeff=1)
+            unit_indexes = self.get_units_by_mixed_ein_and_lin(task_to_forget, number_of_units, utype, mixing_coeff=1)
         elif policy == "RANDOM":
-            neuron_indexes = self.get_random_neurons(number_of_neurons)
+            unit_indexes = self.get_random_units(number_of_units, utype)
         elif policy == "ALL":
-            neuron_indexes = self.get_neurons_by_mixed_ein_and_lin([], number_of_neurons, mixing_coeff=1)
+            unit_indexes = self.get_units_by_mixed_ein_and_lin([], number_of_units, utype, mixing_coeff=1)
         elif policy == "ALL_VAR":
-            neuron_indexes = self.get_neurons_with_task_variance([], number_of_neurons, **kwargs)
+            unit_indexes = self.get_units_with_task_variance([], number_of_units, utype, **kwargs)
         else:
             raise NotImplementedError
 
-        # e.g. ['conv', 'conv', 'fc', 'fc', 'fc'] -> [0, 1, 0, 1, 2]
-        scope_postfixes = []
-        scope_counted = {scope_prefix: 0 for scope_prefix in set(self.layer_types)}
-        for scope_prefix in self.layer_types:
-            scope_postfixes.append(scope_counted[scope_prefix])
-            scope_counted[scope_prefix] += 1
+        # e.g. ['conv', 'conv', 'fc', 'fc', 'fc'] -> ["conv0", "conv1", "fc0", "fc1", "fc2"]
+        scope_list = self._get_scope_list()
 
-        for i, ni, layer_type in zip(scope_postfixes, neuron_indexes, self.layer_types):
-            self._remove_pruning_units("{}{}".format(layer_type, i + 1), ni)
+        for scope, ni in zip(scope_list, unit_indexes):
+            self._remove_pruning_units(scope, ni)
 
         self.assign_new_session()
 
-        return neuron_indexes
+        return unit_indexes
 
     def _remove_pruning_units(self, scope, indexes: np.ndarray):
         """Zeroing columns of target indexes"""
@@ -458,20 +510,90 @@ class SFN:
         self.params[w.name] = w
         self.params[b.name] = b
 
-    def sequentially_selective_forget_and_predict(self, task_to_forget, one_step_neurons, steps, policy):
+    def sequentially_selective_forget_and_predict(self,
+                                                  task_to_forget,
+                                                  utype_to_one_step_units: dict,
+                                                  steps_to_forget,
+                                                  policy):
 
-        cprint("\n SEQUENTIALLY SELECTIVE FORGET {} task-{} from {}, neurons-{}".format(
-            policy, task_to_forget, self.n_tasks, one_step_neurons * steps), "green")
+        cprint("\n SEQUENTIALLY SELECTIVE FORGET {} task_id-{} from {}".format(
+            policy, task_to_forget, self.n_tasks), "green")
+        for utype, one_step_units in utype_to_one_step_units.items():
+            cprint("\t {}: total {}".format(utype, one_step_units * steps_to_forget), "green")
 
-        for i in range(steps + 1):
-            self.selective_forget(task_to_forget, i * one_step_neurons, policy)
+        for i in range(steps_to_forget + 1):
+
+            list_of_unit_indices_by_layer = []
+            for utype, one_step_units in utype_to_one_step_units.items():
+                unit_indices_by_layer = self.selective_forget(task_to_forget, i * one_step_units, policy, utype)
+                list_of_unit_indices_by_layer.append(unit_indices_by_layer)
+
+            pruning_rate = self.get_parameter_level_pruning_rate(
+                list_of_unit_indices_by_layer,
+                list(utype_to_one_step_units.keys()))
+            self.pruning_rate_history[policy].append(pruning_rate)
+
             pred = self.predict_only_after_training()
             self.prediction_history[policy].append(pred)
 
-            if i != steps:
+            if i != steps_to_forget:
                 self.recover_recent_params()
 
+    def _get_scope_postfixes(self) -> List[int]:
+        """
+        :return: conversion of self.layer_types
+        e.g. self.layer_types ['conv', 'conv', 'fc', 'fc', 'fc'] -> [0, 1, 0, 1, 2]
+        """
+        scope_postfixes = []
+        scope_counted = {scope_prefix: 0 for scope_prefix in set(self.layer_types)}
+        for scope_prefix in self.layer_types:
+            scope_postfixes.append(scope_counted[scope_prefix])
+            scope_counted[scope_prefix] += 1
+        return scope_postfixes
+
+    def _get_scope_list(self) -> List[str]:
+        """
+        :return: conversion of self.layer_types
+        e.g. ['conv', 'conv', 'fc', 'fc', 'fc'] -> ["conv1", "conv2", "fc1", "fc2", "fc3"]
+        """
+        return ["{}{}".format(layer_type, postfix + 1)
+                for layer_type, postfix in zip(self.layer_types, self._get_scope_postfixes())]
+
+    def get_parameter_level_pruning_rate(self,
+                                         list_of_unit_indices_by_layer: List[Tuple[np.ndarray]],
+                                         utype_list: List[UnitType]) -> float:
+        """
+        :param list_of_unit_indices_by_layer: List[Tuple[np.ndarray]]
+        :param utype_list: List[UnitType] of interest
+        :return: num_total_pruned_parameters / num_total_parameters
+        """
+        name_to_param_shapes = self.get_name_to_param_shapes()
+
+        num_total_parameters = 0
+        for name, param_shape in name_to_param_shapes.items():
+            layer_type = "".join(c for c in name.split("/")[0] if not c.isdigit())
+            unit_type = get_utype_from_layer_type(layer_type)
+            if unit_type in utype_list:
+                num_total_parameters += np.prod(param_shape)
+
+        num_total_pruned_parameters = 0
+        for tuple_of_unit_indices_of_layer, scope in zip(zip(*list_of_unit_indices_by_layer),
+                                                         self._get_scope_list()):
+            # ndarray of shape (n_units/layer,)
+            unit_indices_of_layer = np.concatenate(tuple_of_unit_indices_of_layer)
+            num_pruned_unit = len(unit_indices_of_layer)
+
+            weight_shape = name_to_param_shapes["{}/weight:0".format(scope)]
+            # e.g.
+            # if weight shape = (11, 11, 3, 96), 11 * 11 * 3 * num_pruned_unit (weight) + num_pruned_unit (biases)
+            # if weight shape = (4096, 1024), 4096 * num_pruned_unit (weight) + num_pruned_unit (biases)
+            pruned_parameters_at_this_layer = np.prod(weight_shape[:-1]) * num_pruned_unit + num_pruned_unit
+            num_total_pruned_parameters += pruned_parameters_at_this_layer
+
+        return float(num_total_pruned_parameters / num_total_parameters)
+
     # Importance vectors
+
     def get_importance_vector(self, task_id, importance_criteria: str, layer_separate=False) -> tuple or np.ndarray:
         """
         :param task_id:
@@ -599,9 +721,9 @@ class SFN:
             for t in range(flags.n_tasks):
                 if (t + 1) != flags.task_to_forget:
                     coreset_t = coreset[t] if coreset is not None \
-                                           else (self.trainXs[t], self.data_labels.get_train_labels(t + 1),
-                                                 self.valXs[t], self.data_labels.get_validation_labels(t + 1),
-                                                 self.testXs[t], self.data_labels.get_test_labels(t + 1))
+                        else (self.trainXs[t], self.data_labels.get_train_labels(t + 1),
+                              self.valXs[t], self.data_labels.get_validation_labels(t + 1),
+                              self.testXs[t], self.data_labels.get_test_labels(t + 1))
                     if is_verbose:
                         cprint("\n\n\tTASK %d RE-TRAINING at iteration %d\n" % (t + 1, retrain_iter), "green")
                     self._retrain_at_task(t + 1, coreset_t, flags, is_verbose)
@@ -617,7 +739,7 @@ class SFN:
         if epoches_to_print:
             print("\t".join(str(t + 1) for t in range(self.n_tasks)))
             for epo in epoches_to_print:
-                print("\t".join(str(round(acc, 4)) for acc in series_of_perfs[epo]))
+                print("\t".join(str(round(perf, 4)) for perf in series_of_perfs[epo]))
 
         return series_of_perfs
 

@@ -1,3 +1,5 @@
+from typing import Dict
+
 import os
 import tensorflow as tf
 
@@ -7,6 +9,7 @@ from SFLCL import SFLCL
 from params import MyParams, check_params, to_yaml_path
 from data import *
 from utils import build_line_of_list, get_project_dir
+from enums import UnitType
 
 np.random.seed(1004)
 
@@ -40,32 +43,46 @@ def get_load_params() -> MyParams:
     return loaded_params
 
 
+def get_one_step_unit_dict(_flags, is_one_shot=False) -> Dict[UnitType, int]:
+    utype_to_step_dict = {}
+    for utype in UnitType:
+        one_step_key = "one_step_{}s".format(str(utype).lower())
+        if _flags.has(one_step_key):
+            if not is_one_shot:
+                utype_to_step_dict[utype] = _flags.get(one_step_key)
+            else:
+                utype_to_step_dict[utype] = _flags.get(one_step_key) * _flags.steps_to_forget
+
+    assert len(utype_to_step_dict) != 0
+    return utype_to_step_dict
+
+
 def experiment_forget(sfn, _flags, _policies):
+
+    utype_to_one_step_units = get_one_step_unit_dict(_flags)
+
     for policy in _policies:
         sfn.sequentially_selective_forget_and_predict(
-            _flags.task_to_forget, _flags.one_step_neurons, _flags.steps_to_forget,
+            task_to_forget=_flags.task_to_forget,
+            utype_to_one_step_units=utype_to_one_step_units,
+            steps_to_forget=_flags.steps_to_forget,
             policy=policy,
         )
         sfn.recover_old_params()
 
-    sfn.print_summary(_flags.task_to_forget, _flags.one_step_neurons)
-    sfn.draw_chart_summary(_flags.task_to_forget, _flags.one_step_neurons,
-                           file_prefix=os.path.join(
-                               get_project_dir(),
-                               "figs/{}_task{}_step{}_total{}".format(
-                                   sfn.__class__.__name__,
-                                   _flags.task_to_forget,
-                                   _flags.one_step_neurons,
-                                   str(int(_flags.steps_to_forget) * int(_flags.one_step_neurons)),
-                               ),
-                           ))
+    sfn.print_summary(_flags.task_to_forget)
+    sfn.draw_chart_summary(
+        _flags.task_to_forget,
+        file_prefix=os.path.join(get_project_dir(), "figs/{}_task{}".format(_flags.mtype, _flags.task_to_forget))
+    )
 
 
 def experiment_forget_and_retrain(sfn, _flags, _policies, _coreset=None):
-    one_shot_neurons = _flags.one_step_neurons * _flags.steps_to_forget
     for policy in _policies:
         sfn.sequentially_selective_forget_and_predict(
-            _flags.task_to_forget, one_shot_neurons, 1,
+            task_to_forget=_flags.task_to_forget,
+            utype_to_one_step_units=get_one_step_unit_dict(_flags, is_one_shot=True),
+            steps_to_forget=1,
             policy=policy,
         )
         lst_of_perfs_at_epoch = sfn.retrain_after_forgetting(
@@ -73,7 +90,8 @@ def experiment_forget_and_retrain(sfn, _flags, _policies, _coreset=None):
             epoches_to_print=[0, 1, -2, -1],
             is_verbose=False,
         )
-        build_line_of_list(x=list(i * _flags.retrain_max_iter_per_task for i in range(len(lst_of_perfs_at_epoch))),
+        build_line_of_list(x_or_x_list=list(i * _flags.retrain_max_iter_per_task
+                                            for i in range(len(lst_of_perfs_at_epoch))),
                            y_list=np.transpose(lst_of_perfs_at_epoch),
                            label_y_list=[t + 1 for t in range(_flags.n_tasks)],
                            xlabel="Re-training Epoches", ylabel="AUROC", ylim=[0.9, 1],
@@ -143,7 +161,7 @@ if __name__ == '__main__':
         model.save()
 
     if params.expr_type == "FORGET" or params.expr_type == "CRITERIA":
-        policies_for_expr = ["MIX", "MAX", "VAR", "LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
+        policies_for_expr = ["MIX", "MAX" "VAR", "LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
         # noinspection PyTypeChecker
         experiment_forget(model, params, policies_for_expr)
     elif params.expr_type == "RETRAIN":

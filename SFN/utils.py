@@ -132,10 +132,13 @@ def draw_importance_bar_chart(iv, prev_first_layer, curr_first_layer, prev_secon
               ylabel="Importance", title="Importance of Neurons in task {}".format(task_id), color=colors)
 
 
-def build_line_of_list(x, y_list, label_y_list, xlabel, ylabel, title, file_name,
-                       highlight_yi=None, **kwargs):
+def build_line_of_list(x_or_x_list, y_list, label_y_list, xlabel, ylabel, title, file_name,
+                       highlight_yi=None, is_x_list=True, **kwargs):
 
-    for i, (y, yl) in enumerate(zip(y_list, label_y_list)):
+    if not is_x_list:
+        x_or_x_list = [deepcopy(x_or_x_list) for _ in range(len(y_list))]
+
+    for i, (x, y, yl) in enumerate(zip(x_or_x_list, y_list, label_y_list)):
 
         if highlight_yi is None:
             alpha, linewidth = 1, 1
