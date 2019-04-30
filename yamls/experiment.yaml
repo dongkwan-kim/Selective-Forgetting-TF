@@ -12,7 +12,7 @@ basic: &BASIC
 
 SFDEN_FORGET: &SFDEN_FORGET
   <<: *BASIC
-  max_iter: 400
+  max_iter: 600
   gl_lambda: 0.001
   regular_lambda: 0.5
   ex_k: 10
