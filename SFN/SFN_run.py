@@ -14,18 +14,18 @@ from enums import UnitType
 np.random.seed(1004)
 
 
-def get_load_params() -> MyParams:
+def load_experiment_and_model_params() -> MyParams:
     loaded_params = MyParams(
         yaml_file_to_config_name={
 
             # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET,
             # SFLCL10_FORGET, SFLCL20_FORGET
-            to_yaml_path("experiment.yaml"): "SFLCL20_FORGET",
+            to_yaml_path("experiment.yaml"): "SFDEN_FORGET",
 
             # SMALL_FC_MNIST, LARGE_FC_MNIST,
             # SMALL_CONV_MNIST, ALEXNETV_MNIST,
             # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100
-            to_yaml_path("models.yaml"): "ALEXNETV_COARSE_CIFAR100",
+            to_yaml_path("models.yaml"): "SMALL_FC_MNIST",
 
         },
         value_magician={
@@ -40,6 +40,14 @@ def get_load_params() -> MyParams:
         })
     check_params(loaded_params)
     loaded_params.pprint()
+    return loaded_params
+
+
+def load_policy_params(policy, **kwargs) -> MyParams:
+    loaded_params = MyParams(
+        yaml_file_to_config_name={to_yaml_path("policies.yaml"): policy},
+        **kwargs
+    )
     return loaded_params
 
 
@@ -67,6 +75,7 @@ def experiment_forget(sfn, _flags, _policies):
             utype_to_one_step_units=utype_to_one_step_units,
             steps_to_forget=_flags.steps_to_forget,
             policy=policy,
+            params_of_utype=load_policy_params(policy),
         )
         sfn.recover_old_params()
 
@@ -148,7 +157,7 @@ def get_dataset(dtype: str, _flags, **kwargs) -> tuple:
 
 if __name__ == '__main__':
 
-    params = get_load_params()
+    params = load_experiment_and_model_params()
 
     labels, train_xs, val_xs, test_xs, coreset = get_dataset(params.dtype, params)
 
@@ -161,7 +170,7 @@ if __name__ == '__main__':
         model.save()
 
     if params.expr_type == "FORGET" or params.expr_type == "CRITERIA":
-        policies_for_expr = ["MIX", "MAX" "VAR", "LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
+        policies_for_expr = ["MIX", "MAX", "VAR", "LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
         # noinspection PyTypeChecker
         experiment_forget(model, params, policies_for_expr)
     elif params.expr_type == "RETRAIN":

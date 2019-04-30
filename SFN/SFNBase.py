@@ -11,6 +11,7 @@ from tqdm import trange
 
 from data import PermutedCoreset, DataLabel
 from enums import UnitType
+from params import MyParams
 from utils import build_line_of_list, print_all_vars
 from utils_importance import *
 
@@ -380,7 +381,7 @@ class SFN:
         else:
             raise ValueError("len(set(utypes_of_layers)) should be not 0")
 
-    def get_units_by_mixed_ein_and_lin(self, task_id, number_to_select, utype, mixing_coeff=0.45) -> tuple:
+    def get_units_by_mixed_ein_and_lin(self, task_id, number_to_select, utype, mixing_coeff) -> tuple:
 
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
         num_tasks, num_neurons = i_mat.shape
@@ -394,13 +395,13 @@ class SFN:
             minus_ei = 0
 
         sparsity = number_to_select / num_neurons
-        mixed = (1 - mixing_coeff) * (num_tasks - 1) * minus_ei + mixing_coeff * li
+        mixed = mixing_coeff * minus_ei + (1 - mixing_coeff) * li
 
         mixed_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(mixed), utype)
         selected = mixed_asc_sorted_idx[:number_to_select]
         return self._get_selected_by_layers(selected)
 
-    def get_units_with_task_variance(self, task_id_or_ids, number_to_select, utype, mixing_coeff=0.65):
+    def get_units_with_task_variance(self, task_id_or_ids, number_to_select, utype, mixing_coeff):
 
         i_mat = self._get_reduced_i_mat(task_id_or_ids)
         num_tasks, num_neurons = i_mat.shape
@@ -409,13 +410,13 @@ class SFN:
         variance = np.std(i_mat, axis=0) ** 2
 
         sparsity = number_to_select / num_neurons
-        varianced = (1 - mixing_coeff) * variance + mixing_coeff * li
+        varianced = mixing_coeff * variance + (1 - mixing_coeff) * li
 
         varianced_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(varianced), utype)
         selected = varianced_asc_sorted_idx[:number_to_select]
         return self._get_selected_by_layers(selected)
 
-    def get_units_with_maximum_importance(self, task_id_or_ids, number_to_select, utype, mixing_coeff=0.65):
+    def get_units_with_maximum_importance(self, task_id_or_ids, number_to_select, utype, mixing_coeff):
 
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
         num_tasks, num_neurons = i_mat.shape
@@ -424,7 +425,7 @@ class SFN:
         mi = self.get_maximum_importance(task_id_or_ids)
 
         sparsity = number_to_select / num_neurons
-        maximized = (1 - mixing_coeff) * mi + mixing_coeff * li
+        maximized = mixing_coeff * mi + (1 - mixing_coeff) * li
 
         maximized_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(maximized), utype)
         selected = maximized_asc_sorted_idx[:number_to_select]
@@ -443,8 +444,6 @@ class SFN:
 
     def selective_forget(self, task_to_forget, number_of_units, policy, utype, **kwargs) -> Tuple[np.ndarray]:
 
-        assert policy in ["MIX", "MAX", "VAR", "EIN", "LIN", "RANDOM", "ALL", "ALL_VAR"]
-
         self.old_params_list.append(self.get_params())
 
         if not self.importance_matrix_tuple:
@@ -453,6 +452,7 @@ class SFN:
         cprint("\n SELECTIVE FORGET {} task_id-{} from {}, {} {}".format(
             policy, task_to_forget, self.n_tasks, number_of_units, utype), "green")
 
+        policy = policy.split(":")[0]
         if policy == "MIX":
             unit_indexes = self.get_units_by_mixed_ein_and_lin(task_to_forget, number_of_units, utype, **kwargs)
         elif policy == "MAX":
@@ -514,7 +514,8 @@ class SFN:
                                                   task_to_forget,
                                                   utype_to_one_step_units: dict,
                                                   steps_to_forget,
-                                                  policy):
+                                                  policy,
+                                                  params_of_utype: MyParams):
 
         cprint("\n SEQUENTIALLY SELECTIVE FORGET {} task_id-{} from {}".format(
             policy, task_to_forget, self.n_tasks), "green")
@@ -525,7 +526,9 @@ class SFN:
 
             list_of_unit_indices_by_layer = []
             for utype, one_step_units in utype_to_one_step_units.items():
-                unit_indices_by_layer = self.selective_forget(task_to_forget, i * one_step_units, policy, utype)
+                unit_indices_by_layer = self.selective_forget(
+                    task_to_forget, i * one_step_units, policy, utype, **params_of_utype.get(str(utype)),
+                )
                 list_of_unit_indices_by_layer.append(unit_indices_by_layer)
 
             pruning_rate = self.get_parameter_level_pruning_rate(
