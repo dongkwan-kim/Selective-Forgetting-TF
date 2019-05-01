@@ -515,7 +515,7 @@ class SFN:
                                                   utype_to_one_step_units: dict,
                                                   steps_to_forget,
                                                   policy,
-                                                  params_of_utype: MyParams):
+                                                  params_of_utype: dict):
 
         cprint("\n SEQUENTIALLY SELECTIVE FORGET {} task_id-{} from {}".format(
             policy, task_to_forget, self.n_tasks), "green")
@@ -527,7 +527,7 @@ class SFN:
             list_of_unit_indices_by_layer = []
             for utype, one_step_units in utype_to_one_step_units.items():
                 unit_indices_by_layer = self.selective_forget(
-                    task_to_forget, i * one_step_units, policy, utype, **params_of_utype.get(str(utype)),
+                    task_to_forget, i * one_step_units, policy, utype, **params_of_utype[str(utype)],
                 )
                 list_of_unit_indices_by_layer.append(unit_indices_by_layer)
 
@@ -613,17 +613,24 @@ class SFN:
 
     def get_importance_vector_from_tf_vars(self, task_id, importance_criteria,
                                            h_length_list, hidden_layer_list, gradient_list, weight_list, bias_list,
-                                           X, Y, layer_separate=False) -> tuple or np.ndarray:
+                                           X, Y,
+                                           layer_separate=False, use_coreset=False) -> tuple or np.ndarray:
 
         importance_vectors = [np.zeros(shape=(0, h_length)) for h_length in h_length_list]
 
+        if use_coreset:
+            xs = None
+            ys = None
+            raise NotImplementedError
+        else:
+            xs = self.trainXs[task_id - 1]
+            ys = self.data_labels.get_train_labels(task_id)
+
         self.initialize_batch()
-        num_batches = int(math.ceil(len(self.trainXs[task_id - 1]) / self.batch_size))
+        num_batches = int(math.ceil(len(xs) / self.batch_size))
         for _ in trange(num_batches):
-            batch_x, batch_y = self.get_next_batch(
-                self.trainXs[task_id - 1],
-                self.data_labels.get_train_labels(task_id),
-            )
+
+            batch_x, batch_y = self.get_next_batch(xs, ys)
 
             # shape = (batch_size, |h|)
             if importance_criteria == "first_Taylor_approximation":

@@ -20,12 +20,12 @@ def load_experiment_and_model_params() -> MyParams:
 
             # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET,
             # SFLCL10_FORGET, SFLCL20_FORGET
-            to_yaml_path("experiment.yaml"): "SFDEN_FORGET",
+            to_yaml_path("experiment.yaml"): "SFLCL10_FORGET",
 
             # SMALL_FC_MNIST, LARGE_FC_MNIST,
             # SMALL_CONV_MNIST, ALEXNETV_MNIST,
             # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100
-            to_yaml_path("models.yaml"): "SMALL_FC_MNIST",
+            to_yaml_path("models.yaml"): "ALEXNETV_CIFAR10",
 
         },
         value_magician={
@@ -43,9 +43,9 @@ def load_experiment_and_model_params() -> MyParams:
     return loaded_params
 
 
-def load_policy_params(policy, **kwargs) -> MyParams:
+def load_params_of_policy(mtype, **kwargs) -> MyParams:
     loaded_params = MyParams(
-        yaml_file_to_config_name={to_yaml_path("policies.yaml"): policy},
+        yaml_file_to_config_name={to_yaml_path("policies.yaml"): mtype},
         **kwargs
     )
     return loaded_params
@@ -68,6 +68,7 @@ def get_one_step_unit_dict(_flags, is_one_shot=False) -> Dict[UnitType, int]:
 def experiment_forget(sfn, _flags, _policies):
 
     utype_to_one_step_units = get_one_step_unit_dict(_flags)
+    policy_params = load_params_of_policy(_flags.mtype)
 
     for policy in _policies:
         sfn.sequentially_selective_forget_and_predict(
@@ -75,7 +76,7 @@ def experiment_forget(sfn, _flags, _policies):
             utype_to_one_step_units=utype_to_one_step_units,
             steps_to_forget=_flags.steps_to_forget,
             policy=policy,
-            params_of_utype=load_policy_params(policy),
+            params_of_utype=policy_params.get(policy),
         )
         sfn.recover_old_params()
 
@@ -87,12 +88,14 @@ def experiment_forget(sfn, _flags, _policies):
 
 
 def experiment_forget_and_retrain(sfn, _flags, _policies, _coreset=None):
+    policy_params = load_params_of_policy(_flags.mtype)
     for policy in _policies:
         sfn.sequentially_selective_forget_and_predict(
             task_to_forget=_flags.task_to_forget,
             utype_to_one_step_units=get_one_step_unit_dict(_flags, is_one_shot=True),
             steps_to_forget=1,
             policy=policy,
+            params_of_utype=policy_params.get(policy),
         )
         lst_of_perfs_at_epoch = sfn.retrain_after_forgetting(
             _flags, policy, _coreset,

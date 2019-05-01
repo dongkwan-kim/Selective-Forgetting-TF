@@ -1,31 +1,32 @@
-MIX:
-  FILTER:
-    mixing_coeff: 0.45
-  NEURON:
-    mixing_coeff: 0.45
+ALEXNETV_CIFAR10:
+  MIX:
+    FILTER:
+      mixing_coeff: 0.45
+    NEURON:
+      mixing_coeff: 0.85
 
-MAX:
-  FILTER:
-    mixing_coeff: 0.65
-  NEURON:
-    mixing_coeff: 0.65
+  MAX:
+    FILTER:
+      mixing_coeff: 0.65
+    NEURON:
+      mixing_coeff: 0.65
 
-VAR:
-  FILTER:
-    mixing_coeff: 0.65
-  NEURON:
-    mixing_coeff: 0.65
+  VAR:
+    FILTER:
+      mixing_coeff: 0.65
+    NEURON:
+      mixing_coeff: 0.65
 
-LIN:
+  LIN:
 
-EIN:
+  EIN:
 
-RANDOM:
+  RANDOM:
 
-ALL:
+  ALL:
 
-ALL_VAR:
-  FILTER:
-    mixing_coeff: 0.65
-  NEURON:
-    mixing_coeff: 0.65
+  ALL_VAR:
+    FILTER:
+      mixing_coeff: 0.65
+    NEURON:
+      mixing_coeff: 0.65
