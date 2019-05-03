@@ -20,12 +20,12 @@ def load_experiment_and_model_params() -> MyParams:
 
             # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET,
             # SFLCL10_FORGET, SFLCL20_FORGET
-            to_yaml_path("experiment.yaml"): "SFLCL10_FORGET",
+            to_yaml_path("experiment.yaml"): "SFHPS_FORGET",
 
             # SMALL_FC_MNIST, LARGE_FC_MNIST,
             # SMALL_CONV_MNIST, ALEXNETV_MNIST,
             # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100
-            to_yaml_path("models.yaml"): "ALEXNETV_CIFAR10",
+            to_yaml_path("models.yaml"): "LARGE_FC_MNIST",
 
         },
         value_magician={
@@ -172,11 +172,13 @@ if __name__ == '__main__':
         model.get_importance_matrix()
         model.save()
 
+    model.normalize_importance_matrix_about_task()
+
     if params.expr_type == "FORGET" or params.expr_type == "CRITERIA":
-        policies_for_expr = ["MIX", "MAX", "VAR", "LIN", "EIN", "RANDOM", "ALL", "ALL_VAR"]
+        policies_for_expr = ["REL", "MAX", "MEAN", "CONST", "RANDOM", "ALL_MEAN", "ALL_CONST"]
         # noinspection PyTypeChecker
         experiment_forget(model, params, policies_for_expr)
     elif params.expr_type == "RETRAIN":
-        policies_for_expr = ["MIX"]
+        policies_for_expr = ["REL"]
         # noinspection PyTypeChecker
         experiment_forget_and_retrain(model, params, policies_for_expr, coreset)

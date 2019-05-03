@@ -5,13 +5,14 @@ import pickle
 import math
 
 import numpy as np
+import numpy.linalg as npl
+import scipy.special as spspc
 import tensorflow as tf
 from termcolor import cprint
 from tqdm import trange
 
 from data import PermutedCoreset, DataLabel
 from enums import UnitType
-from params import MyParams
 from utils import build_line_of_list, print_all_vars
 from utils_importance import *
 
@@ -225,7 +226,11 @@ class SFN:
     def print_summary(self, task_id):
         for policy, history in self.prediction_history.items():
             print("== {} ==".format(policy))
-            print("\t".join(["Pruning rate"] + [str(x) for x in range(1, len(history[0]) + 1)] + ["AUROC-{}".format(policy)]))
+            print("\t".join(
+                ["Pruning rate"]
+                + [str(x) for x in range(1, len(history[0]) + 1)]
+                + ["AUROC-{}".format(policy)]
+            ))
             pruning_rate_as_x = self.pruning_rate_history[policy]
             for i, (pruning_rate, perf) in enumerate(zip(pruning_rate_as_x, history)):
                 perf_except_t = np.delete(perf, task_id - 1)
@@ -301,47 +306,17 @@ class SFN:
 
     # Pruning strategies
 
-    def _get_reduced_i_mat(self, task_id_or_ids):
-        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
-        if isinstance(task_id_or_ids, int):
-            i_mat = np.delete(i_mat, task_id_or_ids - 1, axis=0)
-        elif isinstance(task_id_or_ids, list):
-            i_mat = np.delete(i_mat, [tid - 1 for tid in task_id_or_ids], axis=0)
-        else:
-            raise TypeError
-        return i_mat
-
-    def get_exceptionally_importance(self, task_id):
-        # TODO: not only task_id (int) but also task_ids (list)
-        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
-        num_tasks, num_neurons = i_mat.shape
-
-        mean_dot_j = np.mean(i_mat, axis=0)
-        stdev_dot_j = np.std(i_mat, axis=0)
-
-        ei = np.zeros(shape=(num_neurons,))
-        for j in range(num_neurons):
-            ei[j] = 1 / (num_tasks - 1) * (i_mat[task_id - 1][j] - mean_dot_j[j]) / (stdev_dot_j[j] + 1e-6)
-
-        return ei
-
-    def get_least_importance(self, task_id_or_ids):
-        i_mat = self._get_reduced_i_mat(task_id_or_ids)
-        li = np.mean(i_mat, axis=0)
-        return li
-
-    def get_maximum_importance(self, task_id_or_ids):
-        i_mat = self._get_reduced_i_mat(task_id_or_ids)
-        return np.max(i_mat, axis=0)
-
-    def _get_selected_by_layers(self, selected_indexes: np.ndarray) -> tuple:
+    def _get_selected_by_layers(self, selected_indices: np.ndarray) -> tuple:
+        """
+        Convert selected_indices of whole ndarray to indices of layer.
+        """
         selected_by_layers_list = []
         prev_divider = 0
         for i_mat in self.importance_matrix_tuple:
             divider = prev_divider + i_mat.shape[-1]
             selected_by_layers_list.append(
-                selected_indexes[(selected_indexes >= prev_divider) &
-                                 (selected_indexes < divider)]
+                selected_indices[(selected_indices >= prev_divider) &
+                                 (selected_indices < divider)]
                 - prev_divider
             )
             prev_divider = divider
@@ -381,54 +356,103 @@ class SFN:
         else:
             raise ValueError("len(set(utypes_of_layers)) should be not 0")
 
-    def get_units_by_mixed_ein_and_lin(self, task_id, number_to_select, utype, mixing_coeff) -> tuple:
-
+    def _get_reduced_i_mat(self, task_id_or_ids, use_complementary_tasks: bool = False):
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
-        num_tasks, num_neurons = i_mat.shape
 
-        li = self.get_least_importance(task_id)
+        if use_complementary_tasks:
+            n_tasks, _ = i_mat.shape
+            _task_ids = [task_id_or_ids] if isinstance(task_id_or_ids, int) else task_id_or_ids
 
-        if isinstance(task_id, int) or (isinstance(task_id, list) and len(task_id) != 0):
-            ei = self.get_exceptionally_importance(task_id)
-            minus_ei = - ei
-        else:  # EI cannot be calculated while forgetting zero task.
-            minus_ei = 0
+            # Complementary tasks
+            task_id_or_ids = [tid for tid in range(1, n_tasks + 1) if tid not in _task_ids]
 
-        sparsity = number_to_select / num_neurons
-        mixed = mixing_coeff * minus_ei + (1 - mixing_coeff) * li
+        if isinstance(task_id_or_ids, int):
+            i_mat = np.delete(i_mat, task_id_or_ids - 1, axis=0)
+        elif isinstance(task_id_or_ids, list):
+            i_mat = np.delete(i_mat, [tid - 1 for tid in task_id_or_ids], axis=0)
+        else:
+            raise TypeError
+        return i_mat
 
-        mixed_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(mixed), utype)
-        selected = mixed_asc_sorted_idx[:number_to_select]
-        return self._get_selected_by_layers(selected)
-
-    def get_units_with_task_variance(self, task_id_or_ids, number_to_select, utype, mixing_coeff):
-
+    def get_mean_importance(self, task_id_or_ids) -> np.ndarray:
         i_mat = self._get_reduced_i_mat(task_id_or_ids)
-        num_tasks, num_neurons = i_mat.shape
+        li = np.mean(i_mat, axis=0)
+        return li
 
-        li = self.get_least_importance(task_id_or_ids)
-        variance = np.std(i_mat, axis=0) ** 2
+    def get_maximum_importance(self, task_id_or_ids) -> np.ndarray:
+        i_mat = self._get_reduced_i_mat(task_id_or_ids)
+        return np.max(i_mat, axis=0)
 
-        sparsity = number_to_select / num_neurons
-        varianced = mixing_coeff * variance + (1 - mixing_coeff) * li
+    def get_importance_task_related_deviation(self, task_id_or_ids, relatedness_type: str) -> np.ndarray:
 
-        varianced_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(varianced), utype)
-        selected = varianced_asc_sorted_idx[:number_to_select]
+        i_mat_to_remember = self._get_reduced_i_mat(task_id_or_ids)  # (T - |S|, |H|)
+        mean_i_mat_to_remember = np.mean(i_mat_to_remember, axis=0)  # (|H|,)
+        n_units = len(mean_i_mat_to_remember)
+        deviation_i_mat_to_remember = np.abs(i_mat_to_remember - mean_i_mat_to_remember)  # (T - |S|, |H|)
+
+        i_mat_to_forget = self._get_reduced_i_mat(task_id_or_ids, use_complementary_tasks=True)  # (|S|, |H|)
+        mean_i_mat_to_forget = np.mean(i_mat_to_forget, axis=0)  # (|H|,)
+
+        _e = 1e-7
+
+        if relatedness_type == "symmetric_task_level":
+            rho = spspc.expit(1 / (_e + npl.norm(i_mat_to_remember - mean_i_mat_to_forget, axis=1)))  # (T - |S|,)
+            rho = np.transpose(np.tile(rho, (n_units, 1)))  # (T - |S|, |H|)
+
+        elif relatedness_type == "symmetric_unit_level":
+            rho = spspc.expit(1 / (_e + np.abs(i_mat_to_remember - mean_i_mat_to_forget)))  # (T - |S|, |H|)
+
+        elif relatedness_type == "asymmetric_task_level":
+            rho = spspc.expit(npl.norm(mean_i_mat_to_forget) /
+                              (_e + npl.norm(i_mat_to_remember - mean_i_mat_to_forget, axis=1)))  # (T - |S|,)
+            rho = np.transpose(np.tile(rho, (n_units, 1)))  # (T - |S|, |H|)
+
+        elif relatedness_type == "asymmetric_unit_level":
+            rho = spspc.expit(np.abs(mean_i_mat_to_forget) /
+                              (_e + np.abs(i_mat_to_remember - mean_i_mat_to_forget)))  # (T - |S|, |H|)
+
+        elif relatedness_type == "constant":
+            rho = np.ones(i_mat_to_remember.shape)
+
+        else:
+            raise ValueError("{} does not have an appropriate relatedness_type".format(relatedness_type))
+
+        rho = 2 * rho - 1
+
+        related_deviation = np.mean(rho * deviation_i_mat_to_remember, axis=0)  # (T - |S|, |H|) -> (|H|,)
+        assert related_deviation.shape == (n_units,), \
+            "related_deviation.shape, {}, is not ({},)".format(related_deviation.shape, n_units)
+        return related_deviation
+
+    def get_units_with_task_related_deviation(self, task_id_or_ids, number_to_select, utype,
+                                              mixing_coeff, relatedness_type):
+        mean_i = self.get_mean_importance(task_id_or_ids)
+
+        if mixing_coeff > 0:
+            related_deviation = self.get_importance_task_related_deviation(task_id_or_ids, relatedness_type)
+            deviated = mixing_coeff * related_deviation + (1 - mixing_coeff) * mean_i
+        else:
+            deviated = mean_i
+
+        deviated_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(deviated), utype)
+        selected = deviated_asc_sorted_idx[:number_to_select]
         return self._get_selected_by_layers(selected)
 
-    def get_units_with_maximum_importance(self, task_id_or_ids, number_to_select, utype, mixing_coeff):
-
-        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
-        num_tasks, num_neurons = i_mat.shape
-
-        li = self.get_least_importance(task_id_or_ids)
-        mi = self.get_maximum_importance(task_id_or_ids)
-
-        sparsity = number_to_select / num_neurons
-        maximized = mixing_coeff * mi + (1 - mixing_coeff) * li
-
-        maximized_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(maximized), utype)
+    def get_units_by_maximum_importance(self, task_id_or_ids, number_to_select, utype):
+        """Pruning ConvNets Online for Efficient Specialist Models, CVPR W, 2018."""
+        max_i = self.get_maximum_importance(task_id_or_ids)
+        maximized_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(max_i), utype)
         selected = maximized_asc_sorted_idx[:number_to_select]
+        return self._get_selected_by_layers(selected)
+
+    def get_units_by_mean_importance(self, task_id_or_ids, number_to_select, utype):
+        """
+        Pruning Filters and Classes: Towards On-Device Customization of Convolutional Neural Networks, Mobisys W, 2017.
+        Recovering from Random Pruning: On the Plasticity of Deep Convolutional Neural Networks, Arxiv, 2018.
+        """
+        mean_i = self.get_mean_importance(task_id_or_ids)
+        asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(mean_i), utype)
+        selected = asc_sorted_idx[:number_to_select]
         return self._get_selected_by_layers(selected)
 
     def get_random_units(self, number_to_select, utype):
@@ -453,22 +477,23 @@ class SFN:
             policy, task_to_forget, self.n_tasks, number_of_units, utype), "green")
 
         policy = policy.split(":")[0]
-        if policy == "MIX":
-            unit_indexes = self.get_units_by_mixed_ein_and_lin(task_to_forget, number_of_units, utype, **kwargs)
+        if policy == "REL":
+            unit_indexes = self.get_units_with_task_related_deviation(task_to_forget, number_of_units, utype, **kwargs)
         elif policy == "MAX":
-            unit_indexes = self.get_units_with_maximum_importance(task_to_forget, number_of_units, utype, **kwargs)
-        elif policy == "VAR":
-            unit_indexes = self.get_units_with_task_variance(task_to_forget, number_of_units, utype, **kwargs)
-        elif policy == "EIN":
-            unit_indexes = self.get_units_by_mixed_ein_and_lin(task_to_forget, number_of_units, utype, mixing_coeff=0)
-        elif policy == "LIN":
-            unit_indexes = self.get_units_by_mixed_ein_and_lin(task_to_forget, number_of_units, utype, mixing_coeff=1)
+            unit_indexes = self.get_units_by_maximum_importance(task_to_forget, number_of_units, utype)
+        elif policy == "MEAN":
+            unit_indexes = self.get_units_by_mean_importance(task_to_forget, number_of_units, utype)
+        elif policy == "CONST":
+            unit_indexes = self.get_units_with_task_related_deviation(task_to_forget, number_of_units, utype,
+                                                                      relatedness_type="constant", **kwargs)
         elif policy == "RANDOM":
             unit_indexes = self.get_random_units(number_of_units, utype)
-        elif policy == "ALL":
-            unit_indexes = self.get_units_by_mixed_ein_and_lin([], number_of_units, utype, mixing_coeff=1)
-        elif policy == "ALL_VAR":
-            unit_indexes = self.get_units_with_task_variance([], number_of_units, utype, **kwargs)
+        elif policy == "ALL_MEAN":
+            unit_indexes = self.get_units_with_task_related_deviation([], number_of_units, utype,
+                                                                      mixing_coeff=0, relatedness_type="constant")
+        elif policy == "ALL_CONST":
+            unit_indexes = self.get_units_with_task_related_deviation([], number_of_units, utype,
+                                                                      relatedness_type="constant", **kwargs)
         else:
             raise NotImplementedError
 
@@ -526,9 +551,9 @@ class SFN:
 
             list_of_unit_indices_by_layer = []
             for utype, one_step_units in utype_to_one_step_units.items():
+                kwargs = {} if params_of_utype is None else params_of_utype[str(utype)]
                 unit_indices_by_layer = self.selective_forget(
-                    task_to_forget, i * one_step_units, policy, utype, **params_of_utype[str(utype)],
-                )
+                    task_to_forget, i * one_step_units, policy, utype, **kwargs)
                 list_of_unit_indices_by_layer.append(unit_indices_by_layer)
 
             pruning_rate = self.get_parameter_level_pruning_rate(
@@ -618,7 +643,7 @@ class SFN:
 
         importance_vectors = [np.zeros(shape=(0, h_length)) for h_length in h_length_list]
 
-        if use_coreset:
+        if use_coreset:  # TODO
             xs = None
             ys = None
             raise NotImplementedError
@@ -711,6 +736,20 @@ class SFN:
             return self.importance_matrix_tuple  # (T, |h1|), (T, |h2|)
         else:
             return np.concatenate(self.importance_matrix_tuple, axis=1)  # shape = (T, |h|)
+
+    def normalize_importance_matrix_about_task(self):
+        # TODO: filter norm / neuron norm
+        i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)  # (T, |H|)
+        i_norm = npl.norm(i_mat, axis=1, keepdims=True)  # (T, 1)
+        normalized_importance_matrices = []
+        for i_mat_of_layer in self.importance_matrix_tuple:
+            normalized_importance_matrices.append(i_mat_of_layer / i_norm)  # (T, |hx|)
+        self.importance_matrix_tuple = tuple(normalized_importance_matrices)
+        return self.importance_matrix_tuple
+
+    def pprint_importance_matrix(self):
+        for i_vec in np.concatenate(self.importance_matrix_tuple, axis=1):
+            print("\t".join(str(importance) for importance in i_vec))
 
     # Retrain after forgetting
 
