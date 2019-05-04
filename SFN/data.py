@@ -66,7 +66,7 @@ def name_to_train_and_val_num(name: str) -> tuple:
         return 55000, 5000
     elif name == "cifar100" or \
             name == "cifar10":
-        return 45000, 5000
+        return 50000, 5000
     else:
         raise ValueError
 
@@ -129,15 +129,15 @@ def get_tfds(dtype: str, data_dir: str = None, x_name="image", y_name="label", i
 
     # Training Validation Separation
     # this is necessary because tfds does not support validation separation.
-    train_num = name_to_train_and_val_num(name)[0]
+    train_num, val_num = name_to_train_and_val_num(name)
     train_x = train_and_validation_x[:train_num]
-    val_x = train_and_validation_x[train_num:]
+    val_x = train_and_validation_x[-val_num:]
 
     # One hot labeling
     to_one_hot = get_to_one_hot(info.features[y_name].num_classes)
     data_label = DataLabel(
         train_labels=to_one_hot(train_and_validation[y_name][:train_num]),
-        validation_labels=to_one_hot(train_and_validation[y_name][train_num:]),
+        validation_labels=to_one_hot(train_and_validation[y_name][-val_num:]),
         test_labels=to_one_hot(test[y_name]),
         label_type=LabelType.ONE_LABELS_TO_ALL_TASK,
     )
