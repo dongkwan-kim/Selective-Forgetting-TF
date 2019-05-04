@@ -83,3 +83,16 @@ ALEXNETV_COARSE_CIFAR100:
   n_classes: 20
   dtype: COARSE_CIFAR100
   mtype: ALEXNETV_COARSE_CIFAR100
+
+ALEXNETV_CIFAR100:
+  <<: *ALEXNET_VARIANT
+  conv0_filters: 3
+  conv0_size: 32
+  conv1_filters: 196
+  fc2: 1024
+  fc3: 100
+  n_classes: 100
+  dropout_type: "dropout"
+  keep_prob: 0.7
+  dtype: CIFAR100
+  mtype: ALEXNETV_CIFAR100

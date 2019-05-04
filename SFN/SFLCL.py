@@ -6,7 +6,7 @@ import math
 
 import tensorflow as tf
 import numpy as np
-from DEN.ops import ROC_AUC
+from DEN.ops import ROC_AUC, accuracy
 from termcolor import cprint
 from tqdm import trange
 
@@ -45,6 +45,8 @@ class SFLCL(SFN):
         self.init_lr = config.lr
         self.l1_lambda = config.l1_lambda
         self.l2_lambda = config.l2_lambda
+        self.dropout_type = config.dropout_type if "dropout_type" in config else "dropout"
+        self.keep_prob = config.keep_prob if "keep_prob" in config else 1
         self.checkpoint_dir = config.checkpoint_dir
         if not os.path.isdir(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
@@ -98,15 +100,16 @@ class SFLCL(SFN):
             perf_list.append(perf)
         return [float(p) for p in perf_list]
 
-    def predict_perform(self, xs, ys, number_to_print=6) -> list:
+    def predict_perform(self, xs, ys, number_to_print=8) -> list:
         X = tf.get_default_graph().get_tensor_by_name("X:0")
+        keep_prob = tf.get_default_graph().get_tensor_by_name("keep_prob:0")
         test_preds_list = []
 
         # (10000, 32, 32, 3) is too big, so divide to batches.
         test_batch_size = len(xs) // 5
         for i in range(5):
             partial_xs = xs[i*test_batch_size:(i+1)*test_batch_size]
-            test_preds_list.append(self.sess.run(self.yhat, feed_dict={X: partial_xs}))
+            test_preds_list.append(self.sess.run(self.yhat, feed_dict={X: partial_xs, keep_prob: 1}))
         test_preds = np.concatenate(test_preds_list)
 
         half_number_to_print = int(number_to_print / 2)
@@ -121,13 +124,14 @@ class SFLCL(SFN):
             if rank == half_number_to_print and len(test_perf) > 2 * half_number_to_print:
                 print("\t ...")
 
+        print("   [*] avg_perf: %.4f +- %.4f" % (float(np.mean(test_perf)), float(np.std(test_perf))))
+        print("   [*] accuracy: {} %".format(accuracy(test_preds, ys)))
         return test_perf
 
     def predict_only_after_training(self, **kwargs) -> list:
         cprint("\n PREDICT ONLY AFTER " + ("TRAINING" if not self.retrained else "RE-TRAINING"), "yellow")
         _, _, _, _, test_x, test_labels = self.get_data_stream_from_task_as_class_data(shuffle=False)
         perfs = self.predict_perform(test_x, test_labels, **kwargs)
-        print("   [*] avg_perf: %.4f +- %.4f" % (float(np.mean(perfs)), float(np.std(perfs))))
         return perfs
 
     def set_layer_types(self):
@@ -152,6 +156,7 @@ class SFLCL(SFN):
         xn_filters, xsize = self.conv_dims[0], self.conv_dims[1]
         X = tf.placeholder(tf.float32, [None, xsize, xsize, xn_filters], name="X")
         Y = tf.placeholder(tf.float32, [None, self.n_classes], name="Y")
+        keep_prob = tf.placeholder(tf.float32, name="keep_prob")
 
         h_conv = X
         for conv_num, i in enumerate(range(2, len(self.conv_dims), 2)):
@@ -172,15 +177,19 @@ class SFLCL(SFN):
 
             if i < len(self.dims) - 1:  # Do not activate the last layer.
                 h_fc = tf.nn.relu(h_fc)
+                if self.dropout_type == "dropout":
+                    h_fc = tf.nn.dropout(h_fc, keep_prob)
+                else:
+                    raise ValueError
 
         self.yhat = tf.nn.sigmoid(h_fc)
         self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=h_fc, labels=Y))
 
-        return X, Y
+        return X, Y, keep_prob
 
     def initial_train(self, print_iter=100, *args):
 
-        X, Y = self.build_model()
+        X, Y, keep_prob = self.build_model()
 
         # Add L1 & L2 loss regularizer
         l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(
@@ -206,12 +215,12 @@ class SFLCL(SFN):
             num_batches = int(math.ceil(len(train_x) / self.batch_size))
             for _ in range(num_batches):
                 batch_x, batch_y = self.get_next_batch(train_x, train_labels)
-                _, loss_val = self.sess.run([opt, self.loss], feed_dict={X: batch_x, Y: batch_y})
+                _, loss_val = self.sess.run([opt, self.loss],
+                                            feed_dict={X: batch_x, Y: batch_y, keep_prob: self.keep_prob})
 
             if epoch % print_iter == 0 or epoch == self.max_iter - 1:
                 print('\n OVERALL EVALUATION at ITERATION {}'.format(epoch))
-                perfs = self.predict_perform(test_x, test_labels)
-                print("   [*] avg_perf: %.4f +- %.4f" % (float(np.mean(perfs)), float(np.std(perfs))))
+                self.predict_perform(test_x, test_labels)
 
     def get_data_stream_from_task_as_class_data(self, shuffle=True, base_seed=42) -> Tuple[np.ndarray, ...]:
         """a method that combines data divided by class"""

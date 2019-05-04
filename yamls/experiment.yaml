@@ -55,3 +55,11 @@ SFLCL20_FORGET:
   expr_type: FORGET
   model: SFLCL
   support_model: ["ALEXNETV_COARSE_CIFAR100"]
+
+SFLCL100_FORGET:
+  <<: *BASIC
+  max_iter: 6000
+  n_tasks: 100
+  expr_type: FORGET
+  model: SFLCL
+  support_model: ["ALEXNETV_CIFAR100"]

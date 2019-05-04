@@ -19,13 +19,13 @@ def load_experiment_and_model_params() -> MyParams:
         yaml_file_to_config_name={
 
             # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET,
-            # SFLCL10_FORGET, SFLCL20_FORGET
-            to_yaml_path("experiment.yaml"): "SFHPS_FORGET",
+            # SFLCL10_FORGET, SFLCL20_FORGET, SFLCL100_FORGET
+            to_yaml_path("experiment.yaml"): "SFLCL100_FORGET",
 
             # SMALL_FC_MNIST, LARGE_FC_MNIST,
             # SMALL_CONV_MNIST, ALEXNETV_MNIST,
-            # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100
-            to_yaml_path("models.yaml"): "LARGE_FC_MNIST",
+            # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
+            to_yaml_path("models.yaml"): "ALEXNETV_CIFAR100",
 
         },
         value_magician={
@@ -144,6 +144,11 @@ def get_dataset(dtype: str, _flags, **kwargs) -> tuple:
         return _labels, _train_xs, _val_xs, _test_xs, _coreset
 
     elif dtype == "CIFAR10":
+        _labels, _train_xs, _val_xs, _test_xs = get_class_as_task_datasets(dtype, _flags.n_tasks, **kwargs)
+        _coreset = None  # TODO
+        return _labels, _train_xs, _val_xs, _test_xs, _coreset
+
+    elif dtype == "CIFAR100":
         _labels, _train_xs, _val_xs, _test_xs = get_class_as_task_datasets(dtype, _flags.n_tasks, **kwargs)
         _coreset = None  # TODO
         return _labels, _train_xs, _val_xs, _test_xs, _coreset
