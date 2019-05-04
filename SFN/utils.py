@@ -1,7 +1,11 @@
 from copy import deepcopy
+from termcolor import cprint
+from pprint import pprint
+import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+import tensorflow as tf
 import re
 
 
@@ -12,9 +16,36 @@ def sum_set(s: set, *args):
     return s
 
 
+def get_project_dir():
+    return os.path.abspath(os.path.join(__file__, os.pardir, os.pardir))
+
+
 def parse_var_name(var_name):
-    p = re.compile("(.+)_t(\d+)_layer(\d)/(.+):0")
+    p = re.compile("(.+)_t(\\d+)_layer(\\d)/(.+):0")
     return [x if not x.isnumeric() else int(x) for x in p.findall(var_name)[0]]
+
+
+def print_all_vars(prefix: str = None, color=None):
+    all_variables = tf.get_collection_ref(tf.GraphKeys.GLOBAL_VARIABLES)
+    if prefix:
+        cprint(prefix, color)
+    pprint(all_variables)
+
+
+def print_ckpt_vars(model_path, prefix: str = None, color=None):
+    vars_in_checkpoint = tf.train.list_variables(model_path)
+    if prefix:
+        cprint(prefix, color)
+    pprint(vars_in_checkpoint)
+
+
+def get_dims_from_config(config, search="dims", with_key=False) -> list:
+    dims_config = sorted([(k, v) for k, v in config.values().items() if search in k],
+                         key=lambda t: t[0])
+    if not with_key:
+        return [v for _, v in dims_config]
+    else:
+        return dims_config
 
 
 # Matrix utils
@@ -101,10 +132,13 @@ def draw_importance_bar_chart(iv, prev_first_layer, curr_first_layer, prev_secon
               ylabel="Importance", title="Importance of Neurons in task {}".format(task_id), color=colors)
 
 
-def build_line_of_list(x, y_list, label_y_list, xlabel, ylabel, title, file_name,
-                       highlight_yi=None, **kwargs):
+def build_line_of_list(x_or_x_list, y_list, label_y_list, xlabel, ylabel, title, file_name,
+                       highlight_yi=None, is_x_list=True, **kwargs):
 
-    for i, (y, yl) in enumerate(zip(y_list, label_y_list)):
+    if not is_x_list:
+        x_or_x_list = [deepcopy(x_or_x_list) for _ in range(len(y_list))]
+
+    for i, (x, y, yl) in enumerate(zip(x_or_x_list, y_list, label_y_list)):
 
         if highlight_yi is None:
             alpha, linewidth = 1, 1

@@ -1,0 +1,58 @@
+DEFAULT: &DEFAULT
+
+  CONST:
+    FILTER:
+      mixing_coeff: 0.65
+    NEURON:
+      mixing_coeff: 0.65
+
+  ALL_CONST:
+    FILTER:
+      mixing_coeff: 0.65
+    NEURON:
+      mixing_coeff: 0.65
+
+  MAX:
+
+  MEAN:
+
+  RANDOM:
+
+  ALL_MEAN:
+
+
+ALEXNETV_CIFAR10:
+  <<: *DEFAULT
+
+  REL:
+    FILTER:
+      mixing_coeff: 0
+    NEURON:
+      mixing_coeff: 0.45
+      relatedness_type: "asymmetric_unit_level"
+
+LARGE_FC_MNIST:
+  <<: *DEFAULT
+
+  REL:
+    FILTER:
+      mixing_coeff: 0
+    NEURON:
+      mixing_coeff: 0.45
+      relatedness_type: "asymmetric_unit_level"
+
+  CONST:
+    FILTER:
+      mixing_coeff: 0
+    NEURON:
+      mixing_coeff: 0.85
+
+
+SMALL_FC_MNIST:
+  <<: *DEFAULT
+  REL:
+    FILTER:
+      mixing_coeff: 0
+    NEURON:
+      mixing_coeff: 0.26
+      relatedness_type: "asymmetric_unit_level"

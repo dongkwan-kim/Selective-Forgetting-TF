@@ -1,0 +1,98 @@
+SMALL_FC_MNIST:
+  dims0: 784
+  dims1: 64
+  dims2: 32
+  dims3: 10
+  n_classes: 10
+  dtype: PERMUTED_MNIST
+  mtype: SMALL_FC_MNIST
+  one_step_neurons: 9
+
+LARGE_FC_MNIST:
+  dims0: 784
+  dims1: 164
+  dims2: 132
+  dims3: 10
+  n_classes: 10
+  dtype: PERMUTED_MNIST
+  mtype: LARGE_FC_MNIST
+  one_step_neurons: 12
+
+SMALL_CONV_MNIST:
+  conv0_filters: 1
+  conv0_size: 28
+  conv1_filters: 10
+  conv1_size: 5
+  pool1_ksize: 3
+  conv2_filters: 10
+  conv2_size: 3
+  pool2_ksize: 2
+  fc0: 490
+  fc1: 128
+  fc2: 16
+  fc3: 10
+  n_classes: 10
+  dtype: MNIST
+  mtype: SMALL_CONV_MNIST
+  one_step_neurons: 8
+  one_step_filters: 1
+
+ALEXNET_VARIANT: &ALEXNET_VARIANT
+  conv1_filters: 96
+  conv1_size: 11
+  pool1_ksize: 3
+  conv2_filters: 256
+  conv2_size: 5
+  pool2_ksize: 3
+  conv3_filters: 384
+  conv3_size: 5
+  conv4_filters: 384
+  conv4_size: 3
+  conv5_filters: 256
+  conv5_size: 3
+  pool5_ksize: 3
+  fc0: 4096
+  fc1: 1024
+  fc2: 128
+  # one_step_neurons: 56
+  one_step_filters: 68
+
+ALEXNETV_MNIST:
+  <<: *ALEXNET_VARIANT
+  conv0_filters: 1
+  conv0_size: 28
+  fc3: 10
+  n_classes: 10
+  dtype: MNIST
+  mtype: ALEXNETV_MNIST
+
+ALEXNETV_CIFAR10:
+  <<: *ALEXNET_VARIANT
+  conv0_filters: 3
+  conv0_size: 32
+  fc3: 10
+  n_classes: 10
+  dtype: CIFAR10
+  mtype: ALEXNETV_CIFAR10
+
+ALEXNETV_COARSE_CIFAR100:
+  <<: *ALEXNET_VARIANT
+  conv0_filters: 3
+  conv0_size: 32
+  fc3: 20
+  n_classes: 20
+  dtype: COARSE_CIFAR100
+  mtype: ALEXNETV_COARSE_CIFAR100
+
+ALEXNETV_CIFAR100:
+  <<: *ALEXNET_VARIANT
+  conv0_filters: 3
+  conv0_size: 32
+  conv1_filters: 196
+  fc2: 1024
+  fc3: 100
+  n_classes: 100
+  dropout_type: "dropout"
+  keep_prob: 0.7
+  dtype: CIFAR100
+  mtype: ALEXNETV_CIFAR100

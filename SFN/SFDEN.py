@@ -1,16 +1,18 @@
 import collections
 from typing import Dict, List, Callable
 from termcolor import cprint
+import math
 
 from DEN.DEN import DEN
-from SFN.SFNBase import SFN
 
+from SFNBase import SFN
+
+import tensorflow as tf
+import numpy as np
 from utils import build_line_of_list, get_zero_expanded_matrix, parse_var_name
-from utils_importance import *
 
 
-class SFDEN(SFN, DEN):
-
+class SFDEN(DEN, SFN):
     """
     Selective Forgettable Dynamic Expandable Network
 
@@ -22,16 +24,16 @@ class SFDEN(SFN, DEN):
         SFN.__init__(self, config)
         DEN.__init__(self, config)
         self.attr_to_save += ["T", "time_stamp"]
+        self.set_layer_types()
 
-    def assign_new_session(self):
-        params = self.get_params()
-        self.clear()
-        self.sess = tf.Session()
-        self.load_params(params)
+    # Variable, params, ... attributes Manipulation
 
-    # Save & Restore
+    def set_layer_types(self):
+        for i in range(self.n_layers - 1):
+            self.layer_types.append("layer")
+        self.layer_types.append("layer")
 
-    def reconstruct_model(self):
+    def create_model_variables(self):
         tf.reset_default_graph()
         last_task_dims = self.time_stamp["task{}".format(self.n_tasks)]
         for i in range(self.n_layers - 1):
@@ -43,7 +45,14 @@ class SFDEN(SFN, DEN):
                                  [last_task_dims[-2], self.n_classes], True)
             self.create_variable('layer%d' % self.n_layers, 'biases_%d' % task_id, [self.n_classes], True)
 
-    # Variable, params, ... attributes Manipulation
+    def assign_new_session(self, idx=None):
+        if idx is None:
+            params = self.get_params()
+        else:
+            params = self.old_params_list[idx]
+        self.clear()
+        self.sess = tf.Session()
+        self.load_params(params)
 
     def sfden_get_weight_and_bias_at_task(self, layer_id: int, stamp: list, task_id: int, var_prefix: str,
                                           is_bottom=False, is_forgotten=False):
@@ -98,20 +107,16 @@ class SFDEN(SFN, DEN):
         return [neuron for neuron in self.layer_to_removed_neuron_set["layer%d" % layer_id]
                 if stamp is None or neuron < stamp[layer_id]]
 
-    def clear(self):
-        self.destroy_graph()
-        self.sess.close()
-
     # Train DEN: code from github.com/dongkwan-kim/DEN/blob/master/DEN/DEN_run.py
 
-    def train_den(self, flags):
+    def initial_train(self):
         params = dict()
         avg_perf = []
 
-        for t in range(flags.n_tasks):
-            data = (self.trainXs[t], self.mnist.train.labels,
-                    self.valXs[t], self.mnist.validation.labels,
-                    self.testXs[t], self.mnist.test.labels)
+        for t in range(self.n_tasks):
+            data = (self.trainXs[t], self.data_labels.get_train_labels(t + 1),
+                    self.valXs[t], self.data_labels.get_validation_labels(t + 1),
+                    self.testXs[t], self.data_labels.get_test_labels(t + 1))
 
             self.sess = tf.Session()
 
@@ -127,14 +132,14 @@ class SFDEN(SFN, DEN):
             self.load_params(params)
 
             print('\n OVERALL EVALUATION')
-            temp_perfs = []
+            overall_perfs = []
             for j in range(t + 1):
-                temp_perf = self.predict_perform(j + 1, self.testXs[j], self.mnist.test.labels)
-                temp_perfs.append(temp_perf)
-            avg_perf.append(sum(temp_perfs) / float(t + 1))
+                temp_perf = self.predict_perform(j + 1, self.testXs[j], self.data_labels.get_test_labels(j + 1))
+                overall_perfs.append(temp_perf)
+            avg_perf.append(sum(overall_perfs) / float(t + 1))
             print("   [*] avg_perf: %.4f" % avg_perf[t])
 
-            if t != flags.n_tasks - 1:
+            if t != self.n_tasks - 1:
                 self.clear()
 
     # Retrain after forgetting
@@ -176,10 +181,9 @@ class SFDEN(SFN, DEN):
         self.sess.run(tf.global_variables_initializer())
         for epoch in range(retrain_flags.retrain_max_iter_per_task):
             self.initialize_batch()
-            while True:
+            num_batches = int(math.ceil(len(train_xs_t) / self.batch_size))
+            for _ in range(num_batches):
                 batch_x, batch_y = self.get_next_batch(train_xs_t, train_labels_t)
-                if len(batch_x) == 0:
-                    break
                 _, loss_val = self.sess.run([train_step, loss], feed_dict={X: batch_x, Y: batch_y})
 
             val_preds, val_loss_val = self.sess.run([yhat, loss], feed_dict={X: val_xs_t, Y: val_labels_t})
@@ -235,7 +239,7 @@ class SFDEN(SFN, DEN):
         cprint("\n PREDICT ONLY AFTER " + ("TRAINING" if not self.retrained else "RE-TRAINING"), "yellow")
         temp_perfs = []
         for t in range(self.n_tasks):
-            temp_perf = self.predict_perform(t + 1, self.testXs[t], self.mnist.test.labels)
+            temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.get_test_labels(t + 1))
             temp_perfs.append(temp_perf)
         return temp_perfs
 
@@ -253,57 +257,9 @@ class SFDEN(SFN, DEN):
                 original_shape[0] -= len(removed_neurons_prev)
             return original_shape
 
-    # Utils for sequential experiments
-
     def recover_params(self, idx):
-        self.params = self.old_params_list[idx]
-        self.clear()
-        self.sess = tf.Session()
-        self.load_params(self.params)
+        self.assign_new_session(idx)
         self.sess.run(tf.global_variables_initializer())
-
-    # Selective forgetting
-
-    def selective_forget(self, task_to_forget, number_of_neurons, policy) -> tuple:
-
-        self.old_params_list.append(self.get_params())
-
-        if not self.importance_matrix_tuple:
-            self.get_importance_matrix()
-
-        ni_1, ni_2 = self.get_selective_forget_neurons(task_to_forget, number_of_neurons, policy)
-
-        self._remove_neurons("layer1", ni_1)
-        self._remove_neurons("layer2", ni_2)
-
-        self.assign_new_session()
-
-        return ni_1, ni_2
-
-    def _remove_neurons(self, scope, indexes: np.ndarray):
-        """Zeroing columns of target indexes"""
-
-        if len(indexes) == 0:
-            return
-
-        print("\n REMOVE NEURONS {} ({}) - {}".format(scope, len(indexes), indexes))
-        self.layer_to_removed_neuron_set[scope].update(set(indexes))
-
-        w: tf.Variable = self.get_variable(scope, "weight", False)
-        b: tf.Variable = self.get_variable(scope, "biases", False)
-
-        val_w = w.eval(session=self.sess)
-        val_b = b.eval(session=self.sess)
-
-        for i in indexes:
-            val_w[:, i] = 0
-            val_b[i] = 0
-
-        self.sess.run(tf.assign(w, val_w))
-        self.sess.run(tf.assign(b, val_b))
-
-        self.params[w.name] = w
-        self.params[b.name] = b
 
     # Importance vectors
 
@@ -335,54 +291,22 @@ class SFDEN(SFN, DEN):
         yhat = tf.nn.sigmoid(y)
         loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y))
 
-        train_step = tf.train.GradientDescentOptimizer(self.init_lr).minimize(loss)
+        _ = tf.train.GradientDescentOptimizer(self.init_lr).minimize(loss)
         gradient_list = [tf.gradients(loss, h) for h in hidden_layer_list]
 
         self.sess.run(tf.global_variables_initializer())
 
         h_length_list = [h.get_shape().as_list()[-1] for h in hidden_layer_list]
-        importance_vector_1 = np.zeros(shape=(0, h_length_list[0]))
-        importance_vector_2 = np.zeros(shape=(0, h_length_list[1]))
 
-        self.initialize_batch()
-        while True:
-            batch_x, batch_y = self.get_next_batch(self.trainXs[task_id - 1], self.mnist.train.labels)
-            if len(batch_x) == 0:
-                break
-
-            # shape = (batch_size, |h|)
-            if importance_criteria == "first_Taylor_approximation":
-                batch_importance_vector_1, batch_importance_vector_2 = get_1st_taylor_approximation_based(self.sess, {
-                    "hidden_layers": hidden_layer_list,
-                    "gradients": gradient_list,
-                }, {X: batch_x, Y: batch_y})
-
-            elif importance_criteria == "activation":
-                batch_importance_vector_1, batch_importance_vector_2 = get_activation_based(self.sess, {
-                    "hidden_layers": hidden_layer_list,
-                }, {X: batch_x, Y: batch_y})
-
-            elif importance_criteria == "magnitude":
-                batch_importance_vector_1, batch_importance_vector_2 = get_magnitude_based(self.sess, {
-                    "weights": weight_list,
-                    "biases": bias_list,
-                }, {X: batch_x, Y: batch_y})
-
-            elif importance_criteria == "gradient":
-                batch_importance_vector_1, batch_importance_vector_2 = get_gradient_based(self.sess, {
-                    "gradients": gradient_list,
-                }, {X: batch_x, Y: batch_y})
-
-            else:
-                raise NotImplementedError
-
-            importance_vector_1 = np.vstack((importance_vector_1, batch_importance_vector_1))
-            importance_vector_2 = np.vstack((importance_vector_2, batch_importance_vector_2))
-
-        importance_vector_1 = importance_vector_1.sum(axis=0)
-        importance_vector_2 = importance_vector_2.sum(axis=0)
-
-        if layer_separate:
-            return importance_vector_1, importance_vector_2  # (|h1|,), (|h2|,)
-        else:
-            return np.concatenate((importance_vector_1, importance_vector_2))  # shape = (|h|,)
+        # layer_separate = True: tuple of ndarray of shape (|h1|,), (|h2|,) or
+        # layer_separate = False: ndarray of shape (|h|,)
+        return self.get_importance_vector_from_tf_vars(
+            task_id, importance_criteria,
+            h_length_list=h_length_list,
+            hidden_layer_list=hidden_layer_list,
+            gradient_list=gradient_list,
+            weight_list=weight_list,
+            bias_list=bias_list,
+            X=X, Y=Y,
+            layer_separate=layer_separate,
+        )

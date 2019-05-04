@@ -1,0 +1,65 @@
+basic: &BASIC
+  checkpoint_dir: checkpoints/
+  lr: 0.001
+  batch_size: 256
+  l1_lambda: 1e-05
+  l2_lambda: 0.0001
+  n_tasks: 10
+  task_to_forget: 6
+  steps_to_forget: 20
+  importance_criteria: first_Taylor_approximation
+  coreset_size: 250
+
+SFDEN_FORGET: &SFDEN_FORGET
+  <<: *BASIC
+  max_iter: 600
+  gl_lambda: 0.001
+  regular_lambda: 0.5
+  ex_k: 10
+  loss_thr: 0.1
+  spl_thr: 0.1
+  retrain_task_iter: 80
+  retrain_max_iter_per_task: 150
+  expr_type: FORGET
+  model: SFDEN
+  support_model: ["SMALL_FC_MNIST"]
+
+SFDEN_RETRAIN:
+  <<: *SFDEN_FORGET
+  steps_to_forget: 23
+  expr_type: RETRAIN
+  model: SFDEN
+  support_model: ["SMALL_FC_MNIST"]
+
+SFHPS_FORGET:
+  <<: *BASIC
+  max_iter: 1
+  task_iter: 500
+  l1_lambda: 1e-05
+  l2_lambda: 1e-05
+  expr_type: FORGET
+  model: SFHPS
+  support_model: ["LARGE_FC_MNIST"]
+
+SFLCL10_FORGET:
+  <<: *BASIC
+  max_iter: 500
+  expr_type: FORGET
+  model: SFLCL
+  support_model: ["SMALL_CONV_MNIST", "ALEXNETV_MNIST", "ALEXNETV_CIFAR10"]
+
+SFLCL20_FORGET:
+  <<: *BASIC
+  max_iter: 4500
+  n_tasks: 20
+  expr_type: FORGET
+  model: SFLCL
+  support_model: ["ALEXNETV_COARSE_CIFAR100"]
+
+SFLCL100_FORGET:
+  <<: *BASIC
+  max_iter: 6000
+  n_tasks: 100
+  expr_type: FORGET
+  model: SFLCL
+  support_model: ["ALEXNETV_CIFAR100"]
