@@ -213,14 +213,17 @@ class SFLCL(SFN):
         for epoch in trange(self.max_iter):
             self.initialize_batch()
             num_batches = int(math.ceil(len(train_x) / self.batch_size))
+            loss_sum = 0
             for _ in range(num_batches):
                 batch_x, batch_y = self.get_next_batch(train_x, train_labels)
                 _, loss_val = self.sess.run([opt, self.loss],
                                             feed_dict={X: batch_x, Y: batch_y, keep_prob: self.keep_prob})
+                loss_sum += loss_val
 
             if epoch % print_iter == 0 or epoch == self.max_iter - 1:
                 print('\n OVERALL EVALUATION at ITERATION {}'.format(epoch))
                 self.predict_perform(test_x, test_labels)
+                print("   [*] loss: {}".format(loss_sum))
 
     def get_data_stream_from_task_as_class_data(self, shuffle=True, base_seed=42) -> Tuple[np.ndarray, ...]:
         """a method that combines data divided by class"""
