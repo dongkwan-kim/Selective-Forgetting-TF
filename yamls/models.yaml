@@ -52,8 +52,10 @@ ALEXNET_VARIANT: &ALEXNET_VARIANT
   conv5_size: 3
   pool5_ksize: 3
   fc0: 4096
-  fc1: 1024
-  fc2: 128
+  fc1: 2048
+  fc2: 2048
+  dropout_type: "dropout"
+  keep_prob: 0.5
   # one_step_neurons: 56
   one_step_filters: 68
 
@@ -89,10 +91,7 @@ ALEXNETV_CIFAR100:
   conv0_filters: 3
   conv0_size: 32
   conv1_filters: 196
-  fc2: 1024
   fc3: 100
   n_classes: 100
-  dropout_type: "dropout"
-  keep_prob: 0.7
   dtype: CIFAR100
   mtype: ALEXNETV_CIFAR100

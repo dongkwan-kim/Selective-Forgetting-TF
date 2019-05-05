@@ -50,7 +50,7 @@ SFLCL10_FORGET:
 
 SFLCL20_FORGET:
   <<: *BASIC
-  max_iter: 4500
+  max_iter: 4000
   n_tasks: 20
   expr_type: FORGET
   model: SFLCL
@@ -58,7 +58,7 @@ SFLCL20_FORGET:
 
 SFLCL100_FORGET:
   <<: *BASIC
-  max_iter: 6000
+  max_iter: 5000
   n_tasks: 100
   expr_type: FORGET
   model: SFLCL
