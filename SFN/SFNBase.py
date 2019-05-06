@@ -6,7 +6,6 @@ import math
 
 import numpy as np
 import numpy.linalg as npl
-import scipy.special as spspc
 import tensorflow as tf
 from termcolor import cprint
 from tqdm import trange
@@ -386,7 +385,7 @@ class SFN:
         i_mat = self._get_reduced_i_mat(task_id_or_ids)
         return np.max(i_mat, axis=0)
 
-    def get_importance_task_related_deviation(self, task_id_or_ids, relatedness_type: str) -> np.ndarray:
+    def get_importance_task_related_deviation(self, task_id_or_ids, relatedness_type: str, tau=0.005) -> np.ndarray:
 
         i_mat_to_remember = self._get_reduced_i_mat(task_id_or_ids)  # (T - |S|, |H|)
         mean_i_mat_to_remember = np.mean(i_mat_to_remember, axis=0)  # (|H|,)
@@ -399,28 +398,17 @@ class SFN:
         _e = 1e-7
 
         if relatedness_type == "symmetric_task_level":
-            rho = spspc.expit(1 / (_e + npl.norm(i_mat_to_remember - mean_i_mat_to_forget, axis=1)))  # (T - |S|,)
+            rho = np.tanh(tau / (_e + npl.norm(i_mat_to_remember - mean_i_mat_to_forget, axis=1)))  # (T - |S|,)
             rho = np.transpose(np.tile(rho, (n_units, 1)))  # (T - |S|, |H|)
 
         elif relatedness_type == "symmetric_unit_level":
-            rho = spspc.expit(1 / (_e + np.abs(i_mat_to_remember - mean_i_mat_to_forget)))  # (T - |S|, |H|)
-
-        elif relatedness_type == "asymmetric_task_level":
-            rho = spspc.expit(npl.norm(mean_i_mat_to_forget) /
-                              (_e + npl.norm(i_mat_to_remember - mean_i_mat_to_forget, axis=1)))  # (T - |S|,)
-            rho = np.transpose(np.tile(rho, (n_units, 1)))  # (T - |S|, |H|)
-
-        elif relatedness_type == "asymmetric_unit_level":
-            rho = spspc.expit(np.abs(mean_i_mat_to_forget) /
-                              (_e + np.abs(i_mat_to_remember - mean_i_mat_to_forget)))  # (T - |S|, |H|)
+            rho = np.tanh(tau / (_e + np.abs(i_mat_to_remember - mean_i_mat_to_forget)))  # (T - |S|, |H|)
 
         elif relatedness_type == "constant":
             rho = np.ones(i_mat_to_remember.shape)
 
         else:
             raise ValueError("{} does not have an appropriate relatedness_type".format(relatedness_type))
-
-        rho = 2 * rho - 1
 
         related_deviation = np.mean(rho * deviation_i_mat_to_remember, axis=0)  # (T - |S|, |H|) -> (|H|,)
         assert related_deviation.shape == (n_units,), \

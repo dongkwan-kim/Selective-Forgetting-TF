@@ -83,7 +83,9 @@ def experiment_forget(sfn, _flags, _policies):
     sfn.print_summary(_flags.task_to_forget)
     sfn.draw_chart_summary(
         _flags.task_to_forget,
-        file_prefix=os.path.join(get_project_dir(), "figs/{}_task{}".format(_flags.mtype, _flags.task_to_forget)),
+        file_prefix=os.path.join(get_project_dir(), "figs/{}_{}_task{}".format(
+            _flags.model, _flags.expr_type, _flags.task_to_forget
+        )),
         file_extension=".pdf",
     )
 
@@ -180,7 +182,7 @@ if __name__ == '__main__':
     model.normalize_importance_matrix_about_task()
 
     if params.expr_type == "FORGET" or params.expr_type == "CRITERIA":
-        policies_for_expr = ["REL", "MAX", "MEAN", "CONST", "RANDOM", "ALL_MEAN", "ALL_CONST"]
+        policies_for_expr = ["RANDOM", "MEAN", "MAX", "CONST", "REL"]
         # noinspection PyTypeChecker
         experiment_forget(model, params, policies_for_expr)
     elif params.expr_type == "RETRAIN":
