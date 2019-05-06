@@ -66,7 +66,7 @@ def name_to_train_and_val_num(name: str) -> tuple:
         return 55000, 5000
     elif name == "cifar100" or \
             name == "cifar10":
-        return 50000, 5000
+        return 45000, 5000
     else:
         raise ValueError
 
@@ -226,7 +226,7 @@ def slice_xs(xs, indices):
     return list(map(lambda ndarr: ndarr[indices], xs))
 
 
-class PermutedCoreset(ReusableObject):
+class Coreset(ReusableObject):
 
     def __init__(self,
                  data_labels: DataLabel,
@@ -323,22 +323,22 @@ class PermutedCoreset(ReusableObject):
         self.test_xs = [x for t_idx, x in enumerate(self.test_xs) if t_idx < small_num_tasks]
 
 
+def _create_coresets(c_name, coreset, sz_list: list):
+    for sz in sz_list:  # [2500, 1000, 500, 250]
+        if sz != sz_list[0]:
+            coreset.reduce_xs(sz)
+        coreset.dump("~/tfds/{}/coreset_size_{}.pkl".format(c_name, sz))
+
+
 if __name__ == '__main__':
-    t, s = 10, 1000
-    file_name = "~/tfds/MNIST_coreset/pmc_tasks_{}_size_{}.pkl".format(t, s)
-    c = PermutedCoreset(*get_permuted_datasets("PERMUTED_MNIST", t, "~/tfds/MNIST_data"),
-                        sampling_ratio=[(s / 55000), 1.0, 1.0],
-                        sampling_type="k-center",
-                        load_file_name=file_name)
 
-    if not c.loaded:
-        c.dump(file_name)
+    file_format = "~/tfds/{}/coreset_size_{}.pkl"
+    size_list = [5000, 2500, 1000, 500, 250]
+    max_size = size_list[0]
 
-    cc = deepcopy(c)
-    for t in [10, 4, 2]:
-        c.reduce_tasks(t)
-        for s in [1000, 500, 250, 100]:
-            if not (t == 10 and s == 1000):
-                c.reduce_xs(s)
-                c.dump("~/tfds/MNIST_coreset/pmc_tasks_{}_size_{}.pkl".format(t, s))
-        c = deepcopy(cc)
+    coreset_name = "PERMUTED_MNIST_coreset"
+    c = Coreset(*get_permuted_datasets("PERMUTED_MNIST", 10, "~/tfds/MNIST_data"),
+                sampling_ratio=[(max_size / 55000), 1.0, 1.0],
+                sampling_type="k-center",
+                load_file_name=file_format.format(coreset_name, max_size))
+    _create_coresets(coreset_name, c, size_list)

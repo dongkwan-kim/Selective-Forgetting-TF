@@ -172,7 +172,7 @@ class SFDEN(DEN, SFN):
         yhat = tf.nn.sigmoid(y)
         loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y))
 
-        train_step = tf.train.GradientDescentOptimizer(self.init_lr).minimize(loss)
+        train_step = tf.train.AdamOptimizer(self.init_lr).minimize(loss)
 
         loss_window = collections.deque(maxlen=10)
         old_loss = 999

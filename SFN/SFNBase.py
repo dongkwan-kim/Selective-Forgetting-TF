@@ -11,7 +11,7 @@ import tensorflow as tf
 from termcolor import cprint
 from tqdm import trange
 
-from data import PermutedCoreset, DataLabel
+from data import Coreset, DataLabel
 from enums import UnitType
 from utils import build_line_of_list, print_all_vars, get_zero_expanded_matrix, parse_var_name
 from utils_importance import *
@@ -756,7 +756,7 @@ class SFN:
 
     # Retrain after forgetting
 
-    def retrain_after_forgetting(self, flags, policy, coreset: PermutedCoreset = None,
+    def retrain_after_forgetting(self, flags, policy, coreset: Coreset = None,
                                  epoches_to_print: list = None, is_verbose: bool = True):
         cprint("\n RETRAIN AFTER FORGETTING - {}".format(policy), "green")
         self.retrained = True
