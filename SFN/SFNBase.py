@@ -13,7 +13,7 @@ from tqdm import trange
 
 from data import PermutedCoreset, DataLabel
 from enums import UnitType
-from utils import build_line_of_list, print_all_vars
+from utils import build_line_of_list, print_all_vars, get_zero_expanded_matrix, parse_var_name
 from utils_importance import *
 
 
@@ -850,5 +850,39 @@ class SFN:
     def _retrain_at_task(self, task_id, data, retrain_flags, is_verbose):
         raise NotImplementedError
 
-    def _assign_retrained_value_to_tensor(self, task_id):
-        raise NotImplementedError
+    def _assign_retrained_value_to_tensor(self, task_id, value_preprocess=None, **kwargs):
+
+        # Get retrained values.
+        retrained_values_dict = self.sfn_get_params(name_filter=lambda n: "_t{}_".format(task_id) in n
+                                                                          and "retrain" in n)
+        # get_zero_expanded_matrix.
+        # TODO: CNN
+        scope_list = self._get_scope_list()
+        for name, retrained_value in list(retrained_values_dict.items()):
+            prefix, task_id, scope, var_type = parse_var_name(name)
+            scope_idx = scope_list.index(scope)
+            prev_scope = scope_list[scope_idx - 1] if scope_idx > 0 else None
+            removed_neurons = self.get_removed_neurons_of_scope(scope, **kwargs)
+
+            # Expand columns
+            retrained_value = get_zero_expanded_matrix(retrained_value, removed_neurons, add_rows=False)
+
+            # Expand rows
+            if prev_scope and "weight" in var_type:
+                removed_neurons_prev = self.get_removed_neurons_of_scope(prev_scope, **kwargs)
+                retrained_value = get_zero_expanded_matrix(retrained_value, removed_neurons_prev, add_rows=True)
+
+            retrained_values_dict[name] = retrained_value
+
+        # Assign values to tensors.
+        for name, retrained_value in retrained_values_dict.items():
+            prefix, task_id, scope, var_type = parse_var_name(name)
+            tensor_sfn = self.params["{}/{}:0".format(scope, var_type)]
+            value_sfn = tensor_sfn.eval(session=self.sess)
+
+            if not value_preprocess:
+                value_sfn = retrained_value
+            else:
+                value_sfn = value_preprocess(name, value_sfn, retrained_value)
+
+            self.sess.run(tf.assign(tensor_sfn, value_sfn))

@@ -196,42 +196,24 @@ class SFDEN(DEN, SFN):
                     break
                 old_loss = mean_loss
 
-    def _assign_retrained_value_to_tensor(self, task_id):
+    def _assign_retrained_value_to_tensor(self, task_id, **kwargs):
 
         stamp = self.time_stamp['task%d' % task_id]
 
-        # Get retrained values.
-        retrained_values_dict = self.sfn_get_params(name_filter=lambda n: "_t{}_".format(task_id) in n
-                                                                          and "retrain" in n)
-
-        # get_zero_expanded_matrix.
-        for name, retrained_value in list(retrained_values_dict.items()):
-            prefix, _, layer_id, var_type = parse_var_name(name)
-            removed_neurons = self.get_removed_neurons_of_scope("layer%d" % layer_id, stamp)
-
-            # Expand columns
-            retrained_value = get_zero_expanded_matrix(retrained_value, removed_neurons, add_rows=False)
-
-            # Expand rows
-            if layer_id > 1 and "weight" in var_type:
-                removed_neurons_prev = self.get_removed_neurons_of_scope("layer%d" % (layer_id - 1), stamp)
-                retrained_value = get_zero_expanded_matrix(retrained_value, removed_neurons_prev, add_rows=True)
-
-            retrained_values_dict[name] = retrained_value
-
-        # Assign values to tensors from DEN.
-        for name, retrained_value in retrained_values_dict.items():
-            prefix, _, layer_id, var_type = parse_var_name(name)
-            name_den = "layer{}/{}:0".format(layer_id, var_type)
-            tensor_den = self.params[name_den]
-            value_den = tensor_den.eval(session=self.sess)
-
+        def _value_preprocess_sfden(name, value_sfn, retrained_value) -> np.ndarray:
+            _, _, scope, var_type = parse_var_name(name)
+            layer_id = int(re.findall(r'\d+', scope)[0])
             if "weight" in var_type:
-                value_den[:stamp[layer_id - 1], :stamp[layer_id]] = retrained_value
+                value_sfn[:stamp[layer_id - 1], :stamp[layer_id]] = retrained_value
             else:
-                value_den[:stamp[layer_id]] = retrained_value
+                value_sfn[:stamp[layer_id]] = retrained_value
+            return value_sfn
 
-            self.sess.run(tf.assign(tensor_den, value_den))
+        super()._assign_retrained_value_to_tensor(
+            task_id,
+            value_preprocess=_value_preprocess_sfden,
+            stamp=stamp,
+        )
 
     def predict_only_after_training(self) -> list:
         cprint("\n PREDICT ONLY AFTER " + ("TRAINING" if not self.retrained else "RE-TRAINING"), "yellow")

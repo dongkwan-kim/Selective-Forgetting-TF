@@ -318,6 +318,3 @@ class SFLCL(SFN):
 
     def _retrain_at_task(self, task_id, data, retrain_flags, is_verbose):
         pass
-
-    def _assign_retrained_value_to_tensor(self, task_id):
-        pass

@@ -21,7 +21,8 @@ def get_project_dir():
 
 
 def parse_var_name(var_name):
-    p = re.compile("(.+)_t(\\d+)_layer(\\d)/(.+):0")
+    # prefix, task_id, scope, var_type
+    p = re.compile("(.+)_t(\\d+)_(\\w+)/(.+):0")
     return [x if not x.isnumeric() else int(x) for x in p.findall(var_name)[0]]
 
 

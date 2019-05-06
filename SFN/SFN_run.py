@@ -20,7 +20,7 @@ def load_experiment_and_model_params() -> MyParams:
 
             # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET,
             # SFLCL10_FORGET, SFLCL20_FORGET, SFLCL100_FORGET
-            to_yaml_path("experiment.yaml"): "SFDEN_FORGET",
+            to_yaml_path("experiment.yaml"): "SFDEN_RETRAIN",
 
             # SMALL_FC_MNIST, LARGE_FC_MNIST,
             # SMALL_CONV_MNIST, ALEXNETV_MNIST,
