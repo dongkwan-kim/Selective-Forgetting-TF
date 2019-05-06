@@ -113,6 +113,9 @@ class SFN:
         """
         raise NotImplementedError
 
+    def get_removed_neurons_of_scope(self, scope, **kwargs) -> list:
+        return [neuron for neuron in self.layer_to_removed_neuron_set[scope]]
+
     def clear(self):
         tf.reset_default_graph()
         self.sess.close()
@@ -791,6 +794,58 @@ class SFN:
                 print("\t".join(str(round(perf, 4)) for perf in series_of_perfs[epo]))
 
         return series_of_perfs
+
+    def get_retraining_vars_from_old_vars(self, scope: str,
+                                          weight_name: str, bias_name: str,
+                                          task_id: int, var_prefix: str,
+                                          weight_var=None, bias_var=None, **kwargs) -> tuple:
+
+        """
+        :param scope: scope of variables.
+        :param weight_name: if weight_variable is None, use get_variable else use it.
+        :param bias_name: if bias_variable is None, use get_variable else use it.
+        :param task_id: id of task / 1 ~
+        :param var_prefix: variable prefix
+        :param weight_var: weight_variable
+        :param bias_var: bias_variable
+        :param kwargs: kwargs for get_removed_neurons_of_scope
+        :return: tuple of w and b
+
+        e.g. when scope == "layer2",
+        layer-"layer2", weight whose shape is (r0, c0), bias whose shape is (b0,)
+        layer-next of "layer2", weight whose shape is (r1, c1), bias whose shape is (b1,)
+        removed_neurons of (l-1)th [...] whose length is n0
+        removed_neurons of (l)th [...] whose length is n1
+        return weight whose shape is (r1 - n0, c1 - n1)
+               bias whose shape is (b1 - n1)
+        """
+        scope_list = self._get_scope_list()
+        scope_idx = scope_list.index(scope)
+        prev_scope = scope_list[scope_idx - 1] if scope_idx > 0 else None
+
+        assert self.importance_matrix_tuple is not None
+        w: tf.Variable = self.get_variable(scope, weight_name, True) \
+            if weight_var is None else weight_var
+        b: tf.Variable = self.get_variable(scope, bias_name, True) \
+            if bias_var is None else bias_var
+
+        # TODO: CNN
+
+        # Remove columns (neurons in the current layer)
+        removed_neurons = self.get_removed_neurons_of_scope(scope, **kwargs)
+        w: np.ndarray = np.delete(w.eval(session=self.sess), removed_neurons, axis=1)
+        b: np.ndarray = np.delete(b.eval(session=self.sess), removed_neurons)
+
+        # Remove rows (neurons in the previous layer)
+        if prev_scope:  # Do not consider 1st layer, that does not have previous layer.
+            removed_neurons_prev = self.get_removed_neurons_of_scope(prev_scope, **kwargs)
+            w = np.delete(w, removed_neurons_prev, axis=0)
+
+        sfn_w = self.sfn_create_or_get_variable("%s_t%d_%s" % (var_prefix, task_id, scope), weight_name,
+                                                trainable=True, initializer=w)
+        sfn_b = self.sfn_create_or_get_variable("%s_t%d_%s" % (var_prefix, task_id, scope), bias_name,
+                                                trainable=True, initializer=b)
+        return sfn_w, sfn_b
 
     def _retrain_at_task(self, task_id, data, retrain_flags, is_verbose):
         raise NotImplementedError

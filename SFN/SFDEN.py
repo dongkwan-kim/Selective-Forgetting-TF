@@ -2,6 +2,7 @@ import collections
 from typing import Dict, List, Callable
 from termcolor import cprint
 import math
+import re
 
 from DEN.DEN import DEN
 
@@ -54,8 +55,8 @@ class SFDEN(DEN, SFN):
         self.sess = tf.Session()
         self.load_params(params)
 
-    def sfden_get_weight_and_bias_at_task(self, layer_id: int, stamp: list, task_id: int, var_prefix: str,
-                                          is_bottom=False, is_forgotten=False):
+    def get_variables_for_sfden(self, layer_id: int, stamp: list, task_id: int, var_prefix: str,
+                                is_bottom=False, is_forgotten=False):
         """
         :param layer_id: id of layer 1 ~
         :param stamp: time_stamp
@@ -76,35 +77,32 @@ class SFDEN(DEN, SFN):
                bias whose shape is (b1 - n1)
         """
 
-        w_key, b_key = ("weight", "biases") if not is_bottom else ("weight_%d" % task_id, "biases_%d" % task_id)
-        layer_key = "layer%d" % layer_id
+        weight_name, bias_name = ("weight", "biases") if not is_bottom \
+            else ("weight_%d" % task_id, "biases_%d" % task_id)
+        scope = "layer%d" % layer_id
 
-        w: tf.Variable = self.get_variable(layer_key, w_key, True)
-        b: tf.Variable = self.get_variable(layer_key, b_key, True)
+        w: tf.Variable = self.get_variable(scope, weight_name, True)
+        b: tf.Variable = self.get_variable(scope, bias_name, True)
         w = w[:stamp[layer_id - 1], :stamp[layer_id]]
         b = b[:stamp[layer_id]]
 
         if is_forgotten:
-            assert self.importance_matrix_tuple is not None
+            return self.get_retraining_vars_from_old_vars(
+                scope=scope, weight_name=weight_name, bias_name=bias_name,
+                task_id=task_id, var_prefix=var_prefix,
+                weight_var=w, bias_var=b,
+                stamp=stamp,
+            )
+        else:
+            sfn_w = self.sfn_create_or_get_variable("%s_t%d_layer%d" % (var_prefix, task_id, layer_id), weight_name,
+                                                    trainable=True, initializer=w)
+            sfn_b = self.sfn_create_or_get_variable("%s_t%d_layer%d" % (var_prefix, task_id, layer_id), bias_name,
+                                                    trainable=True, initializer=b)
+            return sfn_w, sfn_b
 
-            # Remove columns (neurons in the current layer)
-            removed_neurons = self.get_removed_neurons_of_layer(layer_id, stamp)
-            w: np.ndarray = np.delete(w.eval(session=self.sess), removed_neurons, axis=1)
-            b: np.ndarray = np.delete(b.eval(session=self.sess), removed_neurons)
-
-            # Remove rows (neurons in the previous layer)
-            if layer_id > 1:  # Do not consider 1st layer, that does not have previous layer.
-                removed_neurons_prev = self.get_removed_neurons_of_layer(layer_id - 1, stamp)
-                w = np.delete(w, removed_neurons_prev, axis=0)
-
-        sfn_w = self.sfn_create_or_get_variable("%s_t%d_layer%d" % (var_prefix, task_id, layer_id), w_key,
-                                                trainable=True, initializer=w)
-        sfn_b = self.sfn_create_or_get_variable("%s_t%d_layer%d" % (var_prefix, task_id, layer_id), b_key,
-                                                trainable=True, initializer=b)
-        return sfn_w, sfn_b
-
-    def get_removed_neurons_of_layer(self, layer_id, stamp=None) -> list:
-        return [neuron for neuron in self.layer_to_removed_neuron_set["layer%d" % layer_id]
+    def get_removed_neurons_of_scope(self, scope, stamp=None) -> list:
+        layer_id = int(re.findall(r'\d+', scope)[0])
+        return [neuron for neuron in self.layer_to_removed_neuron_set[scope]
                 if stamp is None or neuron < stamp[layer_id]]
 
     # Train DEN: code from github.com/dongkwan-kim/DEN/blob/master/DEN/DEN_run.py
@@ -160,14 +158,14 @@ class SFDEN(DEN, SFN):
         bottom = X
         stamp = self.time_stamp['task%d' % task_id]
         for i in range(1, self.n_layers):
-            sfn_w, sfn_b = self.sfden_get_weight_and_bias_at_task(
+            sfn_w, sfn_b = self.get_variables_for_sfden(
                 i, stamp, task_id, "retrain",
                 is_bottom=False, is_forgotten=True)
             bottom = tf.nn.relu(tf.matmul(bottom, sfn_w) + sfn_b)
             if is_verbose:
                 print(' [*] task %d, shape of layer %d : %s' % (task_id, i, sfn_w.get_shape().as_list()))
 
-        sfn_w, sfn_b = self.sfden_get_weight_and_bias_at_task(
+        sfn_w, sfn_b = self.get_variables_for_sfden(
             self.n_layers, stamp, task_id, "retrain",
             is_bottom=True, is_forgotten=True)
         y = tf.matmul(bottom, sfn_w) + sfn_b
@@ -209,14 +207,14 @@ class SFDEN(DEN, SFN):
         # get_zero_expanded_matrix.
         for name, retrained_value in list(retrained_values_dict.items()):
             prefix, _, layer_id, var_type = parse_var_name(name)
-            removed_neurons = self.get_removed_neurons_of_layer(layer_id, stamp)
+            removed_neurons = self.get_removed_neurons_of_scope("layer%d" % layer_id, stamp)
 
             # Expand columns
             retrained_value = get_zero_expanded_matrix(retrained_value, removed_neurons, add_rows=False)
 
             # Expand rows
             if layer_id > 1 and "weight" in var_type:
-                removed_neurons_prev = self.get_removed_neurons_of_layer(layer_id - 1, stamp)
+                removed_neurons_prev = self.get_removed_neurons_of_scope("layer%d" % (layer_id - 1), stamp)
                 retrained_value = get_zero_expanded_matrix(retrained_value, removed_neurons_prev, add_rows=True)
 
             retrained_values_dict[name] = retrained_value
@@ -250,10 +248,10 @@ class SFDEN(DEN, SFN):
         else:
             original_shape = super().get_shape(obj_w_shape, task_id, layer_id)
             stamp = self.time_stamp['task%d' % task_id]
-            removed_neurons = self.get_removed_neurons_of_layer(layer_id, stamp)
+            removed_neurons = self.get_removed_neurons_of_scope("layer%d" % layer_id, stamp)
             original_shape[1] -= len(removed_neurons)
             if layer_id > 1:
-                removed_neurons_prev = self.get_removed_neurons_of_layer(layer_id - 1, stamp)
+                removed_neurons_prev = self.get_removed_neurons_of_scope("layer%d" % (layer_id - 1), stamp)
                 original_shape[0] -= len(removed_neurons_prev)
             return original_shape
 
@@ -277,7 +275,7 @@ class SFDEN(DEN, SFN):
         bottom = X
         stamp = self.time_stamp['task%d' % task_id]
         for i in range(1, self.n_layers):
-            sfn_w, sfn_b = self.sfden_get_weight_and_bias_at_task(i, stamp, task_id, "imp", is_bottom=False)
+            sfn_w, sfn_b = self.get_variables_for_sfden(i, stamp, task_id, "imp", is_bottom=False)
             bottom = tf.nn.relu(tf.matmul(bottom, sfn_w) + sfn_b)
 
             hidden_layer_list.append(bottom)
@@ -286,7 +284,7 @@ class SFDEN(DEN, SFN):
 
             print(' [*] task %d, shape of layer %d : %s' % (task_id, i, sfn_w.get_shape().as_list()))
 
-        sfn_w, sfn_b = self.sfden_get_weight_and_bias_at_task(self.n_layers, stamp, task_id, "imp", is_bottom=True)
+        sfn_w, sfn_b = self.get_variables_for_sfden(self.n_layers, stamp, task_id, "imp", is_bottom=True)
         y = tf.matmul(bottom, sfn_w) + sfn_b
         yhat = tf.nn.sigmoid(y)
         loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y))

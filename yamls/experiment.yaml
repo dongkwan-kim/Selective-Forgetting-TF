@@ -26,7 +26,7 @@ SFDEN_FORGET: &SFDEN_FORGET
 
 SFDEN_RETRAIN:
   <<: *SFDEN_FORGET
-  steps_to_forget: 23
+  steps_to_forget: 15
   expr_type: RETRAIN
   model: SFDEN
   support_model: ["SMALL_FC_MNIST"]
