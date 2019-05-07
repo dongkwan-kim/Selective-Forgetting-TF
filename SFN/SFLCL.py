@@ -247,7 +247,8 @@ class SFLCL(SFN):
         return tuple(x_and_label_list)
 
     # shape = (|h|+|f|,) or tuple of (|f1|), (|f2|), (|h1|,), (|h2|,)
-    def get_importance_vector(self, task_id, importance_criteria: str, layer_separate=False) -> tuple or np.ndarray:
+    def get_importance_vector(self, task_id, importance_criteria: str,
+                              layer_separate=False, use_coreset=False) -> tuple or np.ndarray:
         print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)
 
         X = tf.get_default_graph().get_tensor_by_name("X:0")
@@ -298,6 +299,7 @@ class SFLCL(SFN):
             bias_list=None,
             X=X, Y=Y,
             layer_separate=layer_separate,
+            use_coreset=use_coreset,
         )
 
     def recover_params(self, idx):

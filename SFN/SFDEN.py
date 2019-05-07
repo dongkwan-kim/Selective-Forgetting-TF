@@ -244,7 +244,8 @@ class SFDEN(DEN, SFN):
     # Importance vectors
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
-    def get_importance_vector(self, task_id, importance_criteria: str, layer_separate=False) -> tuple or np.ndarray:
+    def get_importance_vector(self, task_id, importance_criteria: str,
+                              layer_separate=False, use_coreset=False) -> tuple or np.ndarray:
         print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)
 
         X = tf.placeholder(tf.float32, [None, self.dims[0]])
@@ -289,4 +290,5 @@ class SFDEN(DEN, SFN):
             bias_list=bias_list,
             X=X, Y=Y,
             layer_separate=layer_separate,
+            use_coreset=use_coreset,
         )

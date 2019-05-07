@@ -203,7 +203,8 @@ class SFHPS(SFN):
                 _, loss_val = self.sess.run([train_step, loss], feed_dict={X: batch_x, Y: batch_y})
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
-    def get_importance_vector(self, task_id, importance_criteria: str, layer_separate=False) -> tuple or np.ndarray:
+    def get_importance_vector(self, task_id, importance_criteria: str,
+                              layer_separate=False, use_coreset=False) -> tuple or np.ndarray:
         print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)
 
         X = tf.get_default_graph().get_tensor_by_name("X:0")
@@ -245,6 +246,7 @@ class SFHPS(SFN):
             bias_list=bias_list,
             X=X, Y=Y,
             layer_separate=layer_separate,
+            use_coreset=use_coreset,
         )
 
     def recover_params(self, idx):

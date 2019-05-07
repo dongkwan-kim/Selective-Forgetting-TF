@@ -41,6 +41,7 @@ class SFN:
         self.checkpoint_dir = config.checkpoint_dir
         self.data_labels: DataLabel = None
         self.trainXs, self.valXs, self.testXs = None, None, None
+        self.coreset: Coreset = None
         self.n_tasks = config.n_tasks
         self.dims = None
 
@@ -75,8 +76,9 @@ class SFN:
         """Set self.layer_types, the list of types (prefix of scope) (e.g. layer, conv, fc, ...)"""
         raise NotImplementedError
 
-    def add_dataset(self, data_labels, train_xs, val_xs, test_xs):
+    def add_dataset(self, data_labels, train_xs, val_xs, test_xs, coreset):
         self.data_labels, self.trainXs, self.valXs, self.testXs = data_labels, train_xs, val_xs, test_xs
+        self.coreset = coreset
 
     def predict_only_after_training(self) -> list:
         raise NotImplementedError
@@ -613,13 +615,15 @@ class SFN:
 
     # Importance vectors
 
-    def get_importance_vector(self, task_id, importance_criteria: str, layer_separate=False) -> tuple or np.ndarray:
+    def get_importance_vector(self, task_id, importance_criteria: str,
+                              layer_separate=False, use_coreset=False) -> tuple or np.ndarray:
         """
         :param task_id:
         :param importance_criteria:
         :param layer_separate:
             - layer_separate = True: tuple of ndarray of shape (|h1|,), (|h2|,) or
             - layer_separate = False: ndarray of shape (|h|,)
+        :param use_coreset: Whether use coreset in computing IV.
 
         First construct the model, then pass tf vars to get_importance_vector_from_tf_vars
 
@@ -634,13 +638,10 @@ class SFN:
 
         importance_vectors = [np.zeros(shape=(0, h_length)) for h_length in h_length_list]
 
-        if use_coreset:  # TODO
-            xs = None
-            ys = None
-            raise NotImplementedError
+        if use_coreset:
+            xs, ys, _, _, _, _ = self.coreset[task_id - 1]
         else:
-            xs = self.trainXs[task_id - 1]
-            ys = self.data_labels.get_train_labels(task_id)
+            xs, ys = self.trainXs[task_id - 1], self.data_labels.get_train_labels(task_id)
 
         self.initialize_batch()
         num_batches = int(math.ceil(len(xs) / self.batch_size))
@@ -697,7 +698,7 @@ class SFN:
             return np.concatenate(importance_vectors)  # shape = (|h|,)
 
     # shape = (T, |h|) or (T, |h1|), (T, |h2|)
-    def get_importance_matrix(self, layer_separate=False, importance_criteria=None):
+    def get_importance_matrix(self, layer_separate=False, importance_criteria=None, use_coreset=False):
 
         importance_matrices = []
 
@@ -709,6 +710,7 @@ class SFN:
                 task_id=t,
                 layer_separate=True,
                 importance_criteria=importance_criteria,
+                use_coreset=use_coreset,
             )
 
             if t == self.n_tasks:
@@ -744,8 +746,7 @@ class SFN:
 
     # Retrain after forgetting
 
-    def retrain_after_forgetting(self, flags, policy, coreset: Coreset = None,
-                                 epoches_to_print: list = None, is_verbose: bool = True):
+    def retrain_after_forgetting(self, flags, policy, epoches_to_print: list = None, is_verbose: bool = True):
         cprint("\n RETRAIN AFTER FORGETTING - {}".format(policy), "green")
         self.retrained = True
         series_of_perfs = []
@@ -760,7 +761,7 @@ class SFN:
 
             for t in range(flags.n_tasks):
                 if (t + 1) != flags.task_to_forget:
-                    coreset_t = coreset[t] if coreset is not None \
+                    coreset_t = self.coreset[t] if self.coreset is not None \
                         else (self.trainXs[t], self.data_labels.get_train_labels(t + 1),
                               self.valXs[t], self.data_labels.get_validation_labels(t + 1),
                               self.testXs[t], self.data_labels.get_test_labels(t + 1))

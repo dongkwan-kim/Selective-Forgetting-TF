@@ -4,6 +4,7 @@ import os
 import tensorflow as tf
 
 from SFDEN import SFDEN
+from SFEWC import SFEWC
 from SFHPS import SFHPS
 from SFLCL import SFLCL
 from params import MyParams, check_params, to_yaml_path
@@ -18,19 +19,20 @@ def load_experiment_and_model_params() -> MyParams:
     loaded_params = MyParams(
         yaml_file_to_config_name={
 
-            # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET,
+            # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET, SFEWC_FORGET,
             # SFLCL10_FORGET, SFLCL20_FORGET, SFLCL100_FORGET
-            to_yaml_path("experiment.yaml"): "SFHPS_FORGET",
+            to_yaml_path("experiment.yaml"): "SFDEN_FORGET",
 
-            # SMALL_FC_MNIST, LARGE_FC_MNIST,
+            # SMALL_FC_MNIST, LARGE_FC_MNIST, XLARGE_FC_MNIST
             # SMALL_CONV_MNIST, ALEXNETV_MNIST,
             # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-            to_yaml_path("models.yaml"): "LARGE_FC_MNIST",
+            to_yaml_path("models.yaml"): "SMALL_FC_MNIST",
 
         },
         value_magician={
             "model": lambda p: {
                 "SFDEN": SFDEN,
+                "SFEWC": SFEWC,
                 "SFHPS": SFHPS,
                 "SFLCL": SFLCL,
             }[p.model],
@@ -91,7 +93,7 @@ def experiment_forget(sfn, _flags, _policies):
     )
 
 
-def experiment_forget_and_retrain(sfn, _flags, _policies, _coreset=None):
+def experiment_forget_and_retrain(sfn, _flags, _policies):
     policy_params = load_params_of_policy(_flags.mtype)
     for policy in _policies:
         sfn.sequentially_selective_forget_and_predict(
@@ -102,7 +104,7 @@ def experiment_forget_and_retrain(sfn, _flags, _policies, _coreset=None):
             params_of_utype=policy_params.get(policy),
         )
         lst_of_perfs_at_epoch = sfn.retrain_after_forgetting(
-            _flags, policy, _coreset,
+            _flags, policy,
             epoches_to_print=[0, 1, -2, -1],
             is_verbose=False,
         )
@@ -173,11 +175,11 @@ if __name__ == '__main__':
     labels, train_xs, val_xs, test_xs, coreset = get_dataset(params.dtype, params)
 
     model = params.model(params)
-    model.add_dataset(labels, train_xs, val_xs, test_xs)
+    model.add_dataset(labels, train_xs, val_xs, test_xs, coreset)
 
     if not model.restore():
         model.initial_train()
-        model.get_importance_matrix()
+        model.get_importance_matrix(use_coreset=params.need_coreset)
         model.save()
 
     model.normalize_importance_matrix_about_task()
@@ -189,4 +191,4 @@ if __name__ == '__main__':
     elif params.expr_type == "RETRAIN":
         policies_for_expr = ["OURS"]
         # noinspection PyTypeChecker
-        experiment_forget_and_retrain(model, params, policies_for_expr, coreset)
+        experiment_forget_and_retrain(model, params, policies_for_expr)
