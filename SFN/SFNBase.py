@@ -239,7 +239,7 @@ class SFN:
                 mean_perf = np.mean(perf_except_t)
                 print("\t".join([str(pruning_rate)] + [str(x) for x in perf] + [str(mean_perf)]))
 
-    def draw_chart_summary(self, task_id, file_prefix=None, file_extension=".png", ylim=None):
+    def draw_chart_summary(self, task_id, file_prefix=None, file_extension=".png", ylim=None, highlight_ylabels=None):
 
         mean_perf_except_t = None
         min_perf_except_t = None
@@ -259,7 +259,7 @@ class SFN:
                                title="AUROC by {} Neuron Deletion".format(policy),
                                file_name="{}_{}_{}{}".format(
                                    file_prefix, self.importance_criteria.split("_")[0], policy, file_extension),
-                               highlight_yi=task_id - 1)
+                               highlight_ylabels=[task_id])
 
             history_txn_except_t = np.delete(history_txn, task_id - 1, axis=0)
             history_n_mean_except_t = np.mean(history_txn_except_t, axis=0)
@@ -276,21 +276,21 @@ class SFN:
         build_line_of_list(x_or_x_list=[self.pruning_rate_history[policy] for policy in policy_keys],
                            y_list=mean_perf_except_t,
                            label_y_list=policy_keys,
-                           xlabel="Pruning rate", ylabel="Mean AUROC",
-                           ylim=ylim or [0.7, 1],
-                           title="Mean AUROC Except Forgetting Task-{}".format(task_id),
+                           xlabel="Pruning rate", ylabel="Mean of Average Per-task AUROC",
+                           ylim=ylim or [0.5, 1],
+                           title="Mean Performance Without Task-{}".format(task_id),
                            file_name="{}_{}_MeanAcc{}".format(
-                               file_prefix, self.importance_criteria.split("_")[0], file_extension,
-                           ))
+                               file_prefix, self.importance_criteria.split("_")[0], file_extension),
+                           highlight_ylabels=highlight_ylabels)
         build_line_of_list(x_or_x_list=[self.pruning_rate_history[policy] for policy in policy_keys],
                            y_list=min_perf_except_t,
                            label_y_list=policy_keys,
-                           xlabel="Pruning rate", ylabel="Min AUROC",
+                           xlabel="Pruning rate", ylabel="Min of Average Per-task AUROC",
                            ylim=ylim or [0.5, 1],
-                           title="Minimum AUROC Except Forgetting Task-{}".format(task_id),
+                           title="Minimum Performance Without Task-{}".format(task_id),
                            file_name="{}_{}_MinAcc{}".format(
-                               file_prefix, self.importance_criteria.split("_")[0], file_extension,
-                           ))
+                               file_prefix, self.importance_criteria.split("_")[0], file_extension),
+                           highlight_ylabels=highlight_ylabels)
 
     # Utils for sequential experiments
 
@@ -468,7 +468,7 @@ class SFN:
             policy, task_to_forget, self.n_tasks, number_of_units, utype), "green")
 
         policy = policy.split(":")[0]
-        if policy == "REL":
+        if policy == "OURS":
             unit_indexes = self.get_units_with_task_related_deviation(task_to_forget, number_of_units, utype, **kwargs)
         elif policy == "MAX":
             unit_indexes = self.get_units_by_maximum_importance(task_to_forget, number_of_units, utype)

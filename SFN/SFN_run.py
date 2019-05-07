@@ -20,12 +20,12 @@ def load_experiment_and_model_params() -> MyParams:
 
             # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET,
             # SFLCL10_FORGET, SFLCL20_FORGET, SFLCL100_FORGET
-            to_yaml_path("experiment.yaml"): "SFDEN_FORGET",
+            to_yaml_path("experiment.yaml"): "SFHPS_FORGET",
 
             # SMALL_FC_MNIST, LARGE_FC_MNIST,
             # SMALL_CONV_MNIST, ALEXNETV_MNIST,
             # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-            to_yaml_path("models.yaml"): "SMALL_FC_MNIST",
+            to_yaml_path("models.yaml"): "LARGE_FC_MNIST",
 
         },
         value_magician={
@@ -84,9 +84,10 @@ def experiment_forget(sfn, _flags, _policies):
     sfn.draw_chart_summary(
         _flags.task_to_forget,
         file_prefix=os.path.join(get_project_dir(), "figs/{}_{}_task{}".format(
-            _flags.model, _flags.expr_type, _flags.task_to_forget
+            _flags.model.__name__, _flags.expr_type, _flags.task_to_forget
         )),
         file_extension=".pdf",
+        highlight_ylabels=["OURS"],
     )
 
 
@@ -182,10 +183,10 @@ if __name__ == '__main__':
     model.normalize_importance_matrix_about_task()
 
     if params.expr_type == "FORGET" or params.expr_type == "CRITERIA":
-        policies_for_expr = ["RANDOM", "MEAN", "MAX", "CONST", "REL"]
+        policies_for_expr = ["RANDOM", "MEAN", "MAX", "CONST", "OURS"]
         # noinspection PyTypeChecker
         experiment_forget(model, params, policies_for_expr)
     elif params.expr_type == "RETRAIN":
-        policies_for_expr = ["REL"]
+        policies_for_expr = ["OURS"]
         # noinspection PyTypeChecker
         experiment_forget_and_retrain(model, params, policies_for_expr, coreset)

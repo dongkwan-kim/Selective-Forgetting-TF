@@ -134,31 +134,33 @@ def draw_importance_bar_chart(iv, prev_first_layer, curr_first_layer, prev_secon
 
 
 def build_line_of_list(x_or_x_list, y_list, label_y_list, xlabel, ylabel, title, file_name,
-                       highlight_yi=None, is_x_list=True, marker="o", **kwargs):
+                       highlight_ylabels=None, is_x_list=True, marker="o", **kwargs):
 
     if not is_x_list:
         x_or_x_list = [deepcopy(x_or_x_list) for _ in range(len(y_list))]
 
     for i, (x, y, yl) in enumerate(zip(x_or_x_list, y_list, label_y_list)):
 
-        if highlight_yi is None:
-            alpha, linewidth = 1, 1
-        elif highlight_yi == i:
-            alpha, linewidth = 1, 3
+        if highlight_ylabels is None:
+            alpha, linestyle = 1, "-"
+        elif yl in highlight_ylabels:
+            alpha, linestyle = 1, "-"
         else:
-            alpha, linewidth = 0.75, 1
+            alpha, linestyle = 0.75, ":"
 
-        plt.plot(x, y, label=yl, alpha=alpha, linewidth=linewidth,
-                 marker=marker, markersize=1.5)
+        plt.plot(x, y, label=yl, alpha=alpha, linewidth=2.5, linestyle=linestyle,
+                 marker=marker, markersize=4)
 
-    plt.legend()
+    plt.xticks(fontsize="large")
+    plt.yticks(fontsize="large")
+    plt.legend(fontsize="x-large")
 
     if "ylim" in kwargs:
         plt.ylim(kwargs["ylim"])
 
-    plt.title(title)
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
+    plt.title(title, fontdict={"size": 20})
+    plt.xlabel(xlabel, fontdict={"size": 17})
+    plt.ylabel(ylabel, fontdict={"size": 17})
     plt.tight_layout()
 
     if file_name:
