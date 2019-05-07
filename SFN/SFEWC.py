@@ -42,6 +42,12 @@ class SFEWC(SFN):
         self.set_layer_types()
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
 
+    def restore(self, model_name=None):
+        restored = super().restore(model_name)
+        if restored:
+            self.build_model()
+        return restored
+
     def create_variable(self, scope, name, shape, trainable=True) -> tf.Variable:
         with tf.variable_scope(scope):
             w = tf.get_variable(name, shape, trainable=trainable)
@@ -294,9 +300,11 @@ class SFEWC(SFN):
         self.clear()
         self.sess = tf.Session()
         self.load_params(params)
+        self.sess.run(tf.global_variables_initializer())
         self.loss = None
         self.loss_ewc = None
         self.yhat = None
+        self.build_model()
 
     def _retrain_at_task(self, task_id, data, retrain_flags, is_verbose):
         pass
