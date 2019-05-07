@@ -6,7 +6,7 @@ SMALL_FC_MNIST:
   n_classes: 10
   dtype: PERMUTED_MNIST
   mtype: SMALL_FC_MNIST
-  one_step_neurons: 9
+  one_step_neurons: 5
 
 LARGE_FC_MNIST:
   dims0: 784
@@ -16,7 +16,7 @@ LARGE_FC_MNIST:
   n_classes: 10
   dtype: PERMUTED_MNIST
   mtype: LARGE_FC_MNIST
-  one_step_neurons: 12
+  one_step_neurons: 6
 
 SMALL_CONV_MNIST:
   conv0_filters: 1
@@ -34,7 +34,7 @@ SMALL_CONV_MNIST:
   n_classes: 10
   dtype: MNIST
   mtype: SMALL_CONV_MNIST
-  one_step_neurons: 8
+  one_step_neurons: 4
   one_step_filters: 1
 
 ALEXNET_VARIANT: &ALEXNET_VARIANT
@@ -56,8 +56,8 @@ ALEXNET_VARIANT: &ALEXNET_VARIANT
   fc2: 2048
   dropout_type: "dropout"
   keep_prob: 0.5
-  # one_step_neurons: 56
-  one_step_filters: 68
+  # one_step_neurons: 23
+  one_step_filters: 27
 
 ALEXNETV_MNIST:
   <<: *ALEXNET_VARIANT
