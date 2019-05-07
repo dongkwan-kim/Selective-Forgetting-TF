@@ -47,6 +47,7 @@ class SFN:
 
         self.importance_matrix_tuple = None
         self.importance_criteria = config.importance_criteria
+        self.online_importance = config.online_importance
 
         self.prediction_history: Dict[str, List] = defaultdict(list)
         self.pruning_rate_history: Dict[str, List] = defaultdict(list)
@@ -729,6 +730,35 @@ class SFN:
             return self.importance_matrix_tuple  # (T, |h1|), (T, |h2|)
         else:
             return np.concatenate(self.importance_matrix_tuple, axis=1)  # shape = (T, |h|)
+
+    def save_online_importance_matrix(self, task_id, importance_criteria=None):
+
+        importance_criteria = importance_criteria or self.importance_criteria
+        self.importance_criteria = importance_criteria
+
+        i_vector_tuple = self.get_importance_vector(
+            task_id=task_id,
+            layer_separate=True,
+            importance_criteria=importance_criteria,
+            use_coreset=False,
+        )
+
+        if self.importance_matrix_tuple is None:
+            self.importance_matrix_tuple = i_vector_tuple
+        else:
+            importance_matrices = []
+            for i, iv in enumerate(i_vector_tuple):
+                imat = self.importance_matrix_tuple[i]
+                if len(imat.shape) == 1:
+                    pad_width = (0, iv.shape[0] - imat.shape[-1])
+                else:
+                    pad_width = ((0, 0), (0, iv.shape[0] - imat.shape[-1]))
+                new_imat = np.vstack((
+                    np.pad(imat, pad_width, "constant", constant_values=(0, 0)),
+                    iv,
+                ))
+                importance_matrices.append(new_imat)
+            self.importance_matrix_tuple = tuple(importance_matrices)
 
     def normalize_importance_matrix_about_task(self):
         # TODO: filter norm / neuron norm

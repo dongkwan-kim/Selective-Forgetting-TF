@@ -9,6 +9,7 @@ basic: &BASIC
   steps_to_forget: 50
   importance_criteria: first_Taylor_approximation
   need_coreset: False
+  online_importance: False
   coreset_size: 1000
 
 SFDEN_FORGET: &SFDEN_FORGET
@@ -22,6 +23,7 @@ SFDEN_FORGET: &SFDEN_FORGET
   retrain_task_iter: 80
   retrain_max_iter_per_task: 150
   need_coreset: True
+  online_importance: True
   expr_type: FORGET
   model: SFDEN
   support_model: ["SMALL_FC_MNIST"]
