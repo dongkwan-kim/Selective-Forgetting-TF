@@ -22,7 +22,6 @@ SFDEN_FORGET: &SFDEN_FORGET
   spl_thr: 0.1
   retrain_task_iter: 80
   retrain_max_iter_per_task: 150
-  need_coreset: True
   online_importance: True
   expr_type: FORGET
   model: SFDEN
@@ -44,7 +43,7 @@ SFEWC_FORGET:
   ewc_lambda: 0.05
   retrain_task_iter: 80
   retrain_max_iter_per_task: 150
-  need_coreset: True
+  online_importance: True
   expr_type: FORGET
   model: SFEWC
   support_model: ["XLARGE_FC_MNIST"]

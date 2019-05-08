@@ -222,6 +222,9 @@ class SFEWC(SFN):
             avg_perf.append(sum(overall_perfs) / float(t + 1))
             print("   [*] avg_perf: %.4f" % avg_perf[t])
 
+            if self.online_importance:
+                self.save_online_importance_matrix(t + 1)
+
             if t != self.n_tasks - 1:
                 params = self.get_params()
                 self.clear()
