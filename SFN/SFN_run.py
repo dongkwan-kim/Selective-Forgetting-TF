@@ -4,6 +4,7 @@ import os
 import tensorflow as tf
 
 from SFDEN import SFDEN
+from SFEWC import SFEWC
 from SFHPS import SFHPS
 from SFLCL import SFLCL
 from params import MyParams, check_params, to_yaml_path
@@ -18,19 +19,20 @@ def load_experiment_and_model_params() -> MyParams:
     loaded_params = MyParams(
         yaml_file_to_config_name={
 
-            # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET,
+            # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET, SFEWC_FORGET,
             # SFLCL10_FORGET, SFLCL20_FORGET, SFLCL100_FORGET
-            to_yaml_path("experiment.yaml"): "SFLCL100_FORGET",
+            to_yaml_path("experiment.yaml"): "SFEWC_FORGET",
 
-            # SMALL_FC_MNIST, LARGE_FC_MNIST,
+            # SMALL_FC_MNIST, LARGE_FC_MNIST, XLARGE_FC_MNIST
             # SMALL_CONV_MNIST, ALEXNETV_MNIST,
             # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-            to_yaml_path("models.yaml"): "ALEXNETV_CIFAR100",
+            to_yaml_path("models.yaml"): "XLARGE_FC_MNIST",
 
         },
         value_magician={
             "model": lambda p: {
                 "SFDEN": SFDEN,
+                "SFEWC": SFEWC,
                 "SFHPS": SFHPS,
                 "SFLCL": SFLCL,
             }[p.model],
@@ -83,11 +85,15 @@ def experiment_forget(sfn, _flags, _policies):
     sfn.print_summary(_flags.task_to_forget)
     sfn.draw_chart_summary(
         _flags.task_to_forget,
-        file_prefix=os.path.join(get_project_dir(), "figs/{}_task{}".format(_flags.mtype, _flags.task_to_forget))
+        file_prefix=os.path.join(get_project_dir(), "figs/{}_{}_task{}".format(
+            _flags.model.__name__, _flags.expr_type, _flags.task_to_forget
+        )),
+        file_extension=".pdf",
+        highlight_ylabels=["OURS"],
     )
 
 
-def experiment_forget_and_retrain(sfn, _flags, _policies, _coreset=None):
+def experiment_forget_and_retrain(sfn, _flags, _policies):
     policy_params = load_params_of_policy(_flags.mtype)
     for policy in _policies:
         sfn.sequentially_selective_forget_and_predict(
@@ -98,7 +104,7 @@ def experiment_forget_and_retrain(sfn, _flags, _policies, _coreset=None):
             params_of_utype=policy_params.get(policy),
         )
         lst_of_perfs_at_epoch = sfn.retrain_after_forgetting(
-            _flags, policy, _coreset,
+            _flags, policy,
             epoches_to_print=[0, 1, -2, -1],
             is_verbose=False,
         )
@@ -123,67 +129,67 @@ def experiment_forget_and_retrain(sfn, _flags, _policies, _coreset=None):
 
 
 def get_dataset(dtype: str, _flags, **kwargs) -> tuple:
+    # Note that coreset is necessary for the continual learning
     if dtype == "PERMUTED_MNIST":
         _labels, _train_xs, _val_xs, _test_xs = get_permuted_datasets(dtype, _flags.n_tasks, **kwargs)
         train_sz = _train_xs[0].shape[0]
-        _coreset = PermutedCoreset(
-            _labels, _train_xs, _val_xs, _test_xs,
-            sampling_ratio=[(_flags.coreset_size / train_sz), 1.0, 1.0],
-            sampling_type="k-center",
-            load_file_name=os.path.join("~/tfds/MNIST_coreset", "pmc_tasks_{}_size_{}.pkl".format(
-                _flags.n_tasks,
-                _flags.coreset_size,
-            )),
-        )
-        return _labels, _train_xs, _val_xs, _test_xs, _coreset
+        if _flags.need_coreset:
+            _coreset = Coreset(
+                _labels, _train_xs, _val_xs, _test_xs,
+                sampling_ratio=[(_flags.coreset_size / train_sz), 1.0, 1.0],
+                sampling_type="k-center",
+                load_file_name=os.path.join("~/tfds/PERMUTED_MNIST_coreset",
+                                            "coreset_size_{}.pkl".format(_flags.coreset_size)),
+            )
+        else:
+            _coreset = None
 
     elif dtype == "COARSE_CIFAR100":
         _labels, _train_xs, _val_xs, _test_xs = get_class_as_task_datasets(dtype, _flags.n_tasks,
                                                                            y_name="coarse_label", **kwargs)
-        _coreset = None  # TODO
-        return _labels, _train_xs, _val_xs, _test_xs, _coreset
+        _coreset = None
 
     elif dtype == "CIFAR10":
         _labels, _train_xs, _val_xs, _test_xs = get_class_as_task_datasets(dtype, _flags.n_tasks, **kwargs)
-        _coreset = None  # TODO
-        return _labels, _train_xs, _val_xs, _test_xs, _coreset
+        _coreset = None
 
     elif dtype == "CIFAR100":
         _labels, _train_xs, _val_xs, _test_xs = get_class_as_task_datasets(dtype, _flags.n_tasks, **kwargs)
-        _coreset = None  # TODO
-        return _labels, _train_xs, _val_xs, _test_xs, _coreset
+        _coreset = None
 
     elif dtype == "MNIST":
         _labels, _train_xs, _val_xs, _test_xs = get_class_as_task_datasets(dtype, _flags.n_tasks,
                                                                            is_for_cnn=True, **kwargs)
-        _coreset = None  # TODO
-        return _labels, _train_xs, _val_xs, _test_xs, _coreset
-
+        _coreset = None
     else:
         raise ValueError
+
+    return _labels, _train_xs, _val_xs, _test_xs, _coreset
 
 
 if __name__ == '__main__':
 
     params = load_experiment_and_model_params()
 
+    # noinspection PyTypeChecker
     labels, train_xs, val_xs, test_xs, coreset = get_dataset(params.dtype, params)
 
     model = params.model(params)
-    model.add_dataset(labels, train_xs, val_xs, test_xs)
+    model.add_dataset(labels, train_xs, val_xs, test_xs, coreset)
 
     if not model.restore():
         model.initial_train()
-        model.get_importance_matrix()
+        if not model.online_importance:
+            model.get_importance_matrix(use_coreset=params.need_coreset)
         model.save()
 
     model.normalize_importance_matrix_about_task()
 
     if params.expr_type == "FORGET" or params.expr_type == "CRITERIA":
-        policies_for_expr = ["REL", "MAX", "MEAN", "CONST", "RANDOM", "ALL_MEAN", "ALL_CONST"]
+        policies_for_expr = ["RANDOM", "MEAN", "MAX", "CONST", "OURS"]
         # noinspection PyTypeChecker
         experiment_forget(model, params, policies_for_expr)
     elif params.expr_type == "RETRAIN":
-        policies_for_expr = ["REL"]
+        policies_for_expr = ["OURS"]
         # noinspection PyTypeChecker
-        experiment_forget_and_retrain(model, params, policies_for_expr, coreset)
+        experiment_forget_and_retrain(model, params, policies_for_expr)

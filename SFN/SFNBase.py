@@ -6,14 +6,13 @@ import math
 
 import numpy as np
 import numpy.linalg as npl
-import scipy.special as spspc
 import tensorflow as tf
 from termcolor import cprint
 from tqdm import trange
 
-from data import PermutedCoreset, DataLabel
+from data import Coreset, DataLabel
 from enums import UnitType
-from utils import build_line_of_list, print_all_vars
+from utils import build_line_of_list, print_all_vars, get_zero_expanded_matrix, parse_var_name
 from utils_importance import *
 
 
@@ -42,11 +41,13 @@ class SFN:
         self.checkpoint_dir = config.checkpoint_dir
         self.data_labels: DataLabel = None
         self.trainXs, self.valXs, self.testXs = None, None, None
+        self.coreset: Coreset = None
         self.n_tasks = config.n_tasks
         self.dims = None
 
         self.importance_matrix_tuple = None
         self.importance_criteria = config.importance_criteria
+        self.online_importance = config.online_importance
 
         self.prediction_history: Dict[str, List] = defaultdict(list)
         self.pruning_rate_history: Dict[str, List] = defaultdict(list)
@@ -76,8 +77,9 @@ class SFN:
         """Set self.layer_types, the list of types (prefix of scope) (e.g. layer, conv, fc, ...)"""
         raise NotImplementedError
 
-    def add_dataset(self, data_labels, train_xs, val_xs, test_xs):
+    def add_dataset(self, data_labels, train_xs, val_xs, test_xs, coreset):
         self.data_labels, self.trainXs, self.valXs, self.testXs = data_labels, train_xs, val_xs, test_xs
+        self.coreset = coreset
 
     def predict_only_after_training(self) -> list:
         raise NotImplementedError
@@ -112,6 +114,9 @@ class SFN:
         :return:
         """
         raise NotImplementedError
+
+    def get_removed_neurons_of_scope(self, scope, **kwargs) -> list:
+        return [neuron for neuron in self.layer_to_removed_neuron_set[scope]]
 
     def clear(self):
         tf.reset_default_graph()
@@ -237,7 +242,7 @@ class SFN:
                 mean_perf = np.mean(perf_except_t)
                 print("\t".join([str(pruning_rate)] + [str(x) for x in perf] + [str(mean_perf)]))
 
-    def draw_chart_summary(self, task_id, file_prefix=None, file_extension=".png", ylim=None):
+    def draw_chart_summary(self, task_id, file_prefix=None, file_extension=".png", ylim=None, highlight_ylabels=None):
 
         mean_perf_except_t = None
         min_perf_except_t = None
@@ -257,7 +262,7 @@ class SFN:
                                title="AUROC by {} Neuron Deletion".format(policy),
                                file_name="{}_{}_{}{}".format(
                                    file_prefix, self.importance_criteria.split("_")[0], policy, file_extension),
-                               highlight_yi=task_id - 1)
+                               highlight_ylabels=[task_id])
 
             history_txn_except_t = np.delete(history_txn, task_id - 1, axis=0)
             history_n_mean_except_t = np.mean(history_txn_except_t, axis=0)
@@ -274,21 +279,21 @@ class SFN:
         build_line_of_list(x_or_x_list=[self.pruning_rate_history[policy] for policy in policy_keys],
                            y_list=mean_perf_except_t,
                            label_y_list=policy_keys,
-                           xlabel="Pruning rate", ylabel="Mean AUROC",
-                           ylim=ylim or [0.7, 1],
-                           title="Mean AUROC Except Forgetting Task-{}".format(task_id),
+                           xlabel="Pruning rate", ylabel="Mean of Average Per-task AUROC",
+                           ylim=ylim or [0.5, 1],
+                           title="Mean Performance Without Task-{}".format(task_id),
                            file_name="{}_{}_MeanAcc{}".format(
-                               file_prefix, self.importance_criteria.split("_")[0], file_extension,
-                           ))
+                               file_prefix, self.importance_criteria.split("_")[0], file_extension),
+                           highlight_ylabels=highlight_ylabels)
         build_line_of_list(x_or_x_list=[self.pruning_rate_history[policy] for policy in policy_keys],
                            y_list=min_perf_except_t,
                            label_y_list=policy_keys,
-                           xlabel="Pruning rate", ylabel="Min AUROC",
+                           xlabel="Pruning rate", ylabel="Min of Average Per-task AUROC",
                            ylim=ylim or [0.5, 1],
-                           title="Minimum AUROC Except Forgetting Task-{}".format(task_id),
+                           title="Minimum Performance Without Task-{}".format(task_id),
                            file_name="{}_{}_MinAcc{}".format(
-                               file_prefix, self.importance_criteria.split("_")[0], file_extension,
-                           ))
+                               file_prefix, self.importance_criteria.split("_")[0], file_extension),
+                           highlight_ylabels=highlight_ylabels)
 
     # Utils for sequential experiments
 
@@ -383,7 +388,7 @@ class SFN:
         i_mat = self._get_reduced_i_mat(task_id_or_ids)
         return np.max(i_mat, axis=0)
 
-    def get_importance_task_related_deviation(self, task_id_or_ids, relatedness_type: str) -> np.ndarray:
+    def get_importance_task_related_deviation(self, task_id_or_ids, relatedness_type: str, tau=0.005) -> np.ndarray:
 
         i_mat_to_remember = self._get_reduced_i_mat(task_id_or_ids)  # (T - |S|, |H|)
         mean_i_mat_to_remember = np.mean(i_mat_to_remember, axis=0)  # (|H|,)
@@ -396,28 +401,17 @@ class SFN:
         _e = 1e-7
 
         if relatedness_type == "symmetric_task_level":
-            rho = spspc.expit(1 / (_e + npl.norm(i_mat_to_remember - mean_i_mat_to_forget, axis=1)))  # (T - |S|,)
+            rho = np.tanh(tau / (_e + npl.norm(i_mat_to_remember - mean_i_mat_to_forget, axis=1)))  # (T - |S|,)
             rho = np.transpose(np.tile(rho, (n_units, 1)))  # (T - |S|, |H|)
 
         elif relatedness_type == "symmetric_unit_level":
-            rho = spspc.expit(1 / (_e + np.abs(i_mat_to_remember - mean_i_mat_to_forget)))  # (T - |S|, |H|)
-
-        elif relatedness_type == "asymmetric_task_level":
-            rho = spspc.expit(npl.norm(mean_i_mat_to_forget) /
-                              (_e + npl.norm(i_mat_to_remember - mean_i_mat_to_forget, axis=1)))  # (T - |S|,)
-            rho = np.transpose(np.tile(rho, (n_units, 1)))  # (T - |S|, |H|)
-
-        elif relatedness_type == "asymmetric_unit_level":
-            rho = spspc.expit(np.abs(mean_i_mat_to_forget) /
-                              (_e + np.abs(i_mat_to_remember - mean_i_mat_to_forget)))  # (T - |S|, |H|)
+            rho = np.tanh(tau / (_e + np.abs(i_mat_to_remember - mean_i_mat_to_forget)))  # (T - |S|, |H|)
 
         elif relatedness_type == "constant":
             rho = np.ones(i_mat_to_remember.shape)
 
         else:
             raise ValueError("{} does not have an appropriate relatedness_type".format(relatedness_type))
-
-        rho = 2 * rho - 1
 
         related_deviation = np.mean(rho * deviation_i_mat_to_remember, axis=0)  # (T - |S|, |H|) -> (|H|,)
         assert related_deviation.shape == (n_units,), \
@@ -477,7 +471,7 @@ class SFN:
             policy, task_to_forget, self.n_tasks, number_of_units, utype), "green")
 
         policy = policy.split(":")[0]
-        if policy == "REL":
+        if policy == "OURS":
             unit_indexes = self.get_units_with_task_related_deviation(task_to_forget, number_of_units, utype, **kwargs)
         elif policy == "MAX":
             unit_indexes = self.get_units_by_maximum_importance(task_to_forget, number_of_units, utype)
@@ -622,13 +616,15 @@ class SFN:
 
     # Importance vectors
 
-    def get_importance_vector(self, task_id, importance_criteria: str, layer_separate=False) -> tuple or np.ndarray:
+    def get_importance_vector(self, task_id, importance_criteria: str,
+                              layer_separate=False, use_coreset=False) -> tuple or np.ndarray:
         """
         :param task_id:
         :param importance_criteria:
         :param layer_separate:
             - layer_separate = True: tuple of ndarray of shape (|h1|,), (|h2|,) or
             - layer_separate = False: ndarray of shape (|h|,)
+        :param use_coreset: Whether use coreset in computing IV.
 
         First construct the model, then pass tf vars to get_importance_vector_from_tf_vars
 
@@ -643,13 +639,10 @@ class SFN:
 
         importance_vectors = [np.zeros(shape=(0, h_length)) for h_length in h_length_list]
 
-        if use_coreset:  # TODO
-            xs = None
-            ys = None
-            raise NotImplementedError
+        if use_coreset:
+            xs, ys, _, _, _, _ = self.coreset[task_id - 1]
         else:
-            xs = self.trainXs[task_id - 1]
-            ys = self.data_labels.get_train_labels(task_id)
+            xs, ys = self.trainXs[task_id - 1], self.data_labels.get_train_labels(task_id)
 
         self.initialize_batch()
         num_batches = int(math.ceil(len(xs) / self.batch_size))
@@ -706,7 +699,7 @@ class SFN:
             return np.concatenate(importance_vectors)  # shape = (|h|,)
 
     # shape = (T, |h|) or (T, |h1|), (T, |h2|)
-    def get_importance_matrix(self, layer_separate=False, importance_criteria=None):
+    def get_importance_matrix(self, layer_separate=False, importance_criteria=None, use_coreset=False):
 
         importance_matrices = []
 
@@ -718,6 +711,7 @@ class SFN:
                 task_id=t,
                 layer_separate=True,
                 importance_criteria=importance_criteria,
+                use_coreset=use_coreset,
             )
 
             if t == self.n_tasks:
@@ -737,6 +731,35 @@ class SFN:
         else:
             return np.concatenate(self.importance_matrix_tuple, axis=1)  # shape = (T, |h|)
 
+    def save_online_importance_matrix(self, task_id, importance_criteria=None):
+
+        importance_criteria = importance_criteria or self.importance_criteria
+        self.importance_criteria = importance_criteria
+
+        i_vector_tuple = self.get_importance_vector(
+            task_id=task_id,
+            layer_separate=True,
+            importance_criteria=importance_criteria,
+            use_coreset=False,
+        )
+
+        if self.importance_matrix_tuple is None:
+            self.importance_matrix_tuple = i_vector_tuple
+        else:
+            importance_matrices = []
+            for i, iv in enumerate(i_vector_tuple):
+                imat = self.importance_matrix_tuple[i]
+                if len(imat.shape) == 1:
+                    pad_width = (0, iv.shape[0] - imat.shape[-1])
+                else:
+                    pad_width = ((0, 0), (0, iv.shape[0] - imat.shape[-1]))
+                new_imat = np.vstack((
+                    np.pad(imat, pad_width, "constant", constant_values=(0, 0)),
+                    iv,
+                ))
+                importance_matrices.append(new_imat)
+            self.importance_matrix_tuple = tuple(importance_matrices)
+
     def normalize_importance_matrix_about_task(self):
         # TODO: filter norm / neuron norm
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)  # (T, |H|)
@@ -753,8 +776,7 @@ class SFN:
 
     # Retrain after forgetting
 
-    def retrain_after_forgetting(self, flags, policy, coreset: PermutedCoreset = None,
-                                 epoches_to_print: list = None, is_verbose: bool = True):
+    def retrain_after_forgetting(self, flags, policy, epoches_to_print: list = None, is_verbose: bool = True):
         cprint("\n RETRAIN AFTER FORGETTING - {}".format(policy), "green")
         self.retrained = True
         series_of_perfs = []
@@ -769,7 +791,7 @@ class SFN:
 
             for t in range(flags.n_tasks):
                 if (t + 1) != flags.task_to_forget:
-                    coreset_t = coreset[t] if coreset is not None \
+                    coreset_t = self.coreset[t] if self.coreset is not None \
                         else (self.trainXs[t], self.data_labels.get_train_labels(t + 1),
                               self.valXs[t], self.data_labels.get_validation_labels(t + 1),
                               self.testXs[t], self.data_labels.get_test_labels(t + 1))
@@ -792,8 +814,94 @@ class SFN:
 
         return series_of_perfs
 
+    def get_retraining_vars_from_old_vars(self, scope: str,
+                                          weight_name: str, bias_name: str,
+                                          task_id: int, var_prefix: str,
+                                          weight_var=None, bias_var=None, **kwargs) -> tuple:
+
+        """
+        :param scope: scope of variables.
+        :param weight_name: if weight_variable is None, use get_variable else use it.
+        :param bias_name: if bias_variable is None, use get_variable else use it.
+        :param task_id: id of task / 1 ~
+        :param var_prefix: variable prefix
+        :param weight_var: weight_variable
+        :param bias_var: bias_variable
+        :param kwargs: kwargs for get_removed_neurons_of_scope
+        :return: tuple of w and b
+
+        e.g. when scope == "layer2",
+        layer-"layer2", weight whose shape is (r0, c0), bias whose shape is (b0,)
+        layer-next of "layer2", weight whose shape is (r1, c1), bias whose shape is (b1,)
+        removed_neurons of (l-1)th [...] whose length is n0
+        removed_neurons of (l)th [...] whose length is n1
+        return weight whose shape is (r1 - n0, c1 - n1)
+               bias whose shape is (b1 - n1)
+        """
+        scope_list = self._get_scope_list()
+        scope_idx = scope_list.index(scope)
+        prev_scope = scope_list[scope_idx - 1] if scope_idx > 0 else None
+
+        assert self.importance_matrix_tuple is not None
+        w: tf.Variable = self.get_variable(scope, weight_name, True) \
+            if weight_var is None else weight_var
+        b: tf.Variable = self.get_variable(scope, bias_name, True) \
+            if bias_var is None else bias_var
+
+        # TODO: CNN
+
+        # Remove columns (neurons in the current layer)
+        removed_neurons = self.get_removed_neurons_of_scope(scope, **kwargs)
+        w: np.ndarray = np.delete(w.eval(session=self.sess), removed_neurons, axis=1)
+        b: np.ndarray = np.delete(b.eval(session=self.sess), removed_neurons)
+
+        # Remove rows (neurons in the previous layer)
+        if prev_scope:  # Do not consider 1st layer, that does not have previous layer.
+            removed_neurons_prev = self.get_removed_neurons_of_scope(prev_scope, **kwargs)
+            w = np.delete(w, removed_neurons_prev, axis=0)
+
+        sfn_w = self.sfn_create_or_get_variable("%s_t%d_%s" % (var_prefix, task_id, scope), weight_name,
+                                                trainable=True, initializer=w)
+        sfn_b = self.sfn_create_or_get_variable("%s_t%d_%s" % (var_prefix, task_id, scope), bias_name,
+                                                trainable=True, initializer=b)
+        return sfn_w, sfn_b
+
     def _retrain_at_task(self, task_id, data, retrain_flags, is_verbose):
         raise NotImplementedError
 
-    def _assign_retrained_value_to_tensor(self, task_id):
-        raise NotImplementedError
+    def _assign_retrained_value_to_tensor(self, task_id, value_preprocess=None, **kwargs):
+
+        # Get retrained values.
+        retrained_values_dict = self.sfn_get_params(name_filter=lambda n: "_t{}_".format(task_id) in n
+                                                                          and "retrain" in n)
+        # get_zero_expanded_matrix.
+        # TODO: CNN
+        scope_list = self._get_scope_list()
+        for name, retrained_value in list(retrained_values_dict.items()):
+            prefix, task_id, scope, var_type = parse_var_name(name)
+            scope_idx = scope_list.index(scope)
+            prev_scope = scope_list[scope_idx - 1] if scope_idx > 0 else None
+            removed_neurons = self.get_removed_neurons_of_scope(scope, **kwargs)
+
+            # Expand columns
+            retrained_value = get_zero_expanded_matrix(retrained_value, removed_neurons, add_rows=False)
+
+            # Expand rows
+            if prev_scope and "weight" in var_type:
+                removed_neurons_prev = self.get_removed_neurons_of_scope(prev_scope, **kwargs)
+                retrained_value = get_zero_expanded_matrix(retrained_value, removed_neurons_prev, add_rows=True)
+
+            retrained_values_dict[name] = retrained_value
+
+        # Assign values to tensors.
+        for name, retrained_value in retrained_values_dict.items():
+            prefix, task_id, scope, var_type = parse_var_name(name)
+            tensor_sfn = self.params["{}/{}:0".format(scope, var_type)]
+            value_sfn = tensor_sfn.eval(session=self.sess)
+
+            if not value_preprocess:
+                value_sfn = retrained_value
+            else:
+                value_sfn = value_preprocess(name, value_sfn, retrained_value)
+
+            self.sess.run(tf.assign(tensor_sfn, value_sfn))

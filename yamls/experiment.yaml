@@ -6,9 +6,11 @@ basic: &BASIC
   l2_lambda: 0.0001
   n_tasks: 10
   task_to_forget: 6
-  steps_to_forget: 20
+  steps_to_forget: 50
   importance_criteria: first_Taylor_approximation
-  coreset_size: 250
+  need_coreset: False
+  online_importance: False
+  coreset_size: 1000
 
 SFDEN_FORGET: &SFDEN_FORGET
   <<: *BASIC
@@ -20,23 +22,38 @@ SFDEN_FORGET: &SFDEN_FORGET
   spl_thr: 0.1
   retrain_task_iter: 80
   retrain_max_iter_per_task: 150
+  online_importance: True
   expr_type: FORGET
   model: SFDEN
   support_model: ["SMALL_FC_MNIST"]
 
 SFDEN_RETRAIN:
   <<: *SFDEN_FORGET
-  steps_to_forget: 23
+  steps_to_forget: 15
+  need_coreset: True
   expr_type: RETRAIN
   model: SFDEN
   support_model: ["SMALL_FC_MNIST"]
+
+SFEWC_FORGET:
+  <<: *BASIC
+  max_iter: 20
+  l1_lambda: 0.0
+  l2_lambda: 0.0001
+  ewc_lambda: 0.05
+  retrain_task_iter: 80
+  retrain_max_iter_per_task: 150
+  online_importance: True
+  expr_type: FORGET
+  model: SFEWC
+  support_model: ["XLARGE_FC_MNIST"]
 
 SFHPS_FORGET:
   <<: *BASIC
   max_iter: 1
   task_iter: 500
   l1_lambda: 1e-05
-  l2_lambda: 1e-05
+  l2_lambda: 1e-06
   expr_type: FORGET
   model: SFHPS
   support_model: ["LARGE_FC_MNIST"]
@@ -44,21 +61,25 @@ SFHPS_FORGET:
 SFLCL10_FORGET:
   <<: *BASIC
   max_iter: 500
+  l1_lambda: 1e-05
+  l2_lambda: 1e-06
   expr_type: FORGET
   model: SFLCL
   support_model: ["SMALL_CONV_MNIST", "ALEXNETV_MNIST", "ALEXNETV_CIFAR10"]
 
 SFLCL20_FORGET:
   <<: *BASIC
-  max_iter: 4500
+  max_iter: 4000
   n_tasks: 20
+  l1_lambda: 1e-05
+  l2_lambda: 1e-06
   expr_type: FORGET
   model: SFLCL
   support_model: ["ALEXNETV_COARSE_CIFAR100"]
 
 SFLCL100_FORGET:
   <<: *BASIC
-  max_iter: 6000
+  max_iter: 5000
   n_tasks: 100
   expr_type: FORGET
   model: SFLCL
