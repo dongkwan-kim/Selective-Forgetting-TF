@@ -50,3 +50,18 @@ LARGE_FC_MNIST:
       mixing_coeff: 0
     NEURON:
       mixing_coeff: 0.75
+
+XLARGE_FC_MNIST:
+  <<: *DEFAULT
+  OURS:
+    FILTER:
+      mixing_coeff: 0
+    NEURON:
+      mixing_coeff: 0.25
+      relatedness_type: "symmetric_unit_level"
+
+  CONST:
+    FILTER:
+      mixing_coeff: 0
+    NEURON:
+      mixing_coeff: 0.15
