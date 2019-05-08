@@ -14,6 +14,12 @@ from utils import get_dims_from_config, print_all_vars
 
 
 class SFEWC(SFN):
+    """
+    Selective Forgettable Elastic Weight Consolidation
+
+    Kirkpatrick et al. "Overcoming catastrophic forgetting in neural networks."
+    Proceedings of the national academy of sciences. 2017.
+    """
 
     def __init__(self, config):
         super(SFEWC, self).__init__(config)
