@@ -60,8 +60,8 @@ SFHPS_FORGET:
 
 SFLCL10_FORGET:
   <<: *BASIC
-  max_iter: 500
-  l1_lambda: 1e-05
+  max_iter: 2000
+  l1_lambda: 1e-06
   l2_lambda: 1e-06
   expr_type: FORGET
   model: SFLCL
@@ -71,7 +71,7 @@ SFLCL20_FORGET:
   <<: *BASIC
   max_iter: 4000
   n_tasks: 20
-  l1_lambda: 1e-05
+  l1_lambda: 1e-06
   l2_lambda: 1e-06
   expr_type: FORGET
   model: SFLCL
@@ -81,6 +81,8 @@ SFLCL100_FORGET:
   <<: *BASIC
   max_iter: 5000
   n_tasks: 100
+  l1_lambda: 1e-06
+  l2_lambda: 1e-06
   expr_type: FORGET
   model: SFLCL
   support_model: ["ALEXNETV_CIFAR100"]
