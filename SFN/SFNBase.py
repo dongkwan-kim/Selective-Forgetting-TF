@@ -388,7 +388,7 @@ class SFN:
         i_mat = self._get_reduced_i_mat(task_id_or_ids)
         return np.max(i_mat, axis=0)
 
-    def get_importance_task_related_deviation(self, task_id_or_ids, relatedness_type: str, tau=0.005) -> np.ndarray:
+    def get_importance_task_related_deviation(self, task_id_or_ids, relatedness_type: str, tau: float) -> np.ndarray:
 
         i_mat_to_remember = self._get_reduced_i_mat(task_id_or_ids)  # (T - |S|, |H|)
         mean_i_mat_to_remember = np.mean(i_mat_to_remember, axis=0)  # (|H|,)
@@ -419,11 +419,11 @@ class SFN:
         return related_deviation
 
     def get_units_with_task_related_deviation(self, task_id_or_ids, number_to_select, utype,
-                                              mixing_coeff, relatedness_type):
+                                              mixing_coeff, relatedness_type, tau):
         mean_i = self.get_mean_importance(task_id_or_ids)
 
         if mixing_coeff > 0:
-            related_deviation = self.get_importance_task_related_deviation(task_id_or_ids, relatedness_type)
+            related_deviation = self.get_importance_task_related_deviation(task_id_or_ids, relatedness_type, tau)
             deviated = mixing_coeff * related_deviation + (1 - mixing_coeff) * mean_i
         else:
             deviated = mean_i

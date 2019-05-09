@@ -1,16 +1,8 @@
 DEFAULT: &DEFAULT
 
   CONST:
-    FILTER:
-      mixing_coeff: 0.65
-    NEURON:
-      mixing_coeff: 0.65
 
   ALL_CONST:
-    FILTER:
-      mixing_coeff: 0.65
-    NEURON:
-      mixing_coeff: 0.65
 
   MAX:
 
@@ -25,15 +17,19 @@ SMALL_FC_MNIST:
   OURS:
     FILTER:
       mixing_coeff: 0
+      tau: 0.005
     NEURON:
       mixing_coeff: 0.4
       relatedness_type: "symmetric_unit_level"
+      tau: 0.005
 
   CONST:
     FILTER:
       mixing_coeff: 0
+      tau: 0.005
     NEURON:
       mixing_coeff: 0.25
+      tau: 0.005
 
 LARGE_FC_MNIST:
   <<: *DEFAULT
@@ -41,27 +37,35 @@ LARGE_FC_MNIST:
   OURS:
     FILTER:
       mixing_coeff: 0
+      tau: 0.005
     NEURON:
       mixing_coeff: 0.8
       relatedness_type: "symmetric_unit_level"
+      tau: 0.005
 
   CONST:
     FILTER:
       mixing_coeff: 0
+      tau: 0.005
     NEURON:
       mixing_coeff: 0.75
+      tau: 0.005
 
 XLARGE_FC_MNIST:
   <<: *DEFAULT
   OURS:
     FILTER:
       mixing_coeff: 0
+      tau: 0.00000025
     NEURON:
       mixing_coeff: 0.25
       relatedness_type: "symmetric_unit_level"
+      tau: 0.00000025
 
   CONST:
     FILTER:
       mixing_coeff: 0
+      tau: 0.00000025
     NEURON:
-      mixing_coeff: 0.15
+      mixing_coeff: 0.75
+      tau: 0.00000025
