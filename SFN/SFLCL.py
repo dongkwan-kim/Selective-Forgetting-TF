@@ -1,7 +1,7 @@
 import os
 import re
 from pprint import pprint
-from typing import Tuple
+from typing import Tuple, List
 import math
 
 import tensorflow as tf
@@ -69,7 +69,9 @@ class SFLCL(SFN):
         self.dropout_type = config.dropout_type if "dropout_type" in config else "dropout"
         self.keep_prob = config.keep_prob if "keep_prob" in config else 1
         self.use_batch_normalization = config.use_batch_normalization
+
         self.gpu_names = get_available_gpu_names(config.gpu_num_list)
+        self.gpu_num_list = config.gpu_num_list
         assert len(self.gpu_names) <= 1, "Not support multi-GPU, yet"
 
         self.checkpoint_dir = config.checkpoint_dir
@@ -83,9 +85,13 @@ class SFLCL(SFN):
         self.set_layer_types()
         self.attr_to_save += ["max_iter", "l1_lambda", "l2_lambda", "keep_prob" "gpu_names", "use_batch_normalization"]
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
+        cprint("GPU info: {}".format(self.get_real_device_info()), "green")
+
+    def get_real_device_info(self) -> List[str]:
+        return ["/gpu:{}".format(gn) for gn in self.gpu_num_list]
 
     def save(self, model_name=None):
-        model_name = "{}_{}".format(str(self), "_".join(self.gpu_names))
+        model_name = "{}_{}".format(str(self), "_".join(self.get_real_device_info()))
         super().save(model_name=model_name)
 
     def restore(self, model_name=None):
@@ -280,7 +286,8 @@ class SFLCL(SFN):
                 loss_sum += loss_val
 
             if epoch % print_iter == 0 or epoch == self.max_iter - 1:
-                print('\n OVERALL EVALUATION at ITERATION {}'.format(epoch))
+                cprint('\n OVERALL EVALUATION at ITERATION {} on Devices {}'.format(
+                    epoch, self.get_real_device_info()), "green")
                 self.predict_perform(test_x, test_labels)
                 print("   [*] loss: {}".format(loss_sum))
 

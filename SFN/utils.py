@@ -84,8 +84,9 @@ def get_available_gpu_names(gpu_num_list: List[int] = None) -> List[str]:
     """
     local_device_protos = device_lib.list_local_devices()
     gpu_names = [x.name for x in local_device_protos if x.device_type == 'GPU']
-    if gpu_num_list is not None:
-        gpu_names = [x for x in gpu_names if int(x.split(":")[-1]) in gpu_num_list]
+    # TODO: Not use right now.
+    # if gpu_num_list is not None:
+    #    gpu_names = [x for x in gpu_names if int(x.split(":")[-1]) in gpu_num_list]
 
     return gpu_names
 
@@ -99,10 +100,10 @@ def with_tf_device_gpu(func):
         if len(model.gpu_names) == 0:
             x = func(*args, **kwargs)
         else:
-            cprint("\n\n# We are using GPUs: {}\n\n".format(model.gpu_names), "green")
             for name in model.gpu_names:
-                gpu_util = get_gpu_utility(int(name.split(":")[-1]))
-                assert gpu_util <= 75, "{} ({} %) >= 75%".format(name, gpu_util)
+                # TODO: Not use right now.
+                # gpu_util = get_gpu_utility(int(name.split(":")[-1]))
+                # assert gpu_util <= 75, "{} ({} %) >= 75%".format(name, gpu_util)
                 with tf.device(name):
                     x = func(*args, **kwargs)
         return x
