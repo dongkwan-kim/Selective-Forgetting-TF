@@ -110,6 +110,14 @@ def with_tf_device_gpu(func):
     return wrapped
 
 
+def with_tf_device_cpu(func):
+    def wrapped(*args, **kwargs):
+        with tf.device("/cpu:0"):
+            x = func(*args, **kwargs)
+        return x
+    return wrapped
+
+
 def tf_session_with_config(**kwargs):
     config = tf.ConfigProto(
         log_device_placement=True,

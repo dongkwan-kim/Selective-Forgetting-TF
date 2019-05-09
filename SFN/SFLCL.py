@@ -11,7 +11,8 @@ from termcolor import cprint
 from tqdm import trange
 
 from SFNBase import SFN
-from utils import get_dims_from_config, print_all_vars, get_available_gpu_names, with_tf_device_gpu
+from utils import get_dims_from_config, print_all_vars, get_available_gpu_names, \
+    with_tf_device_gpu, with_tf_device_cpu
 
 
 def parse_pool_key(pool_name):
@@ -93,12 +94,14 @@ class SFLCL(SFN):
             self.build_model()
         return restored
 
+    @with_tf_device_cpu
     def create_variable(self, scope, name, shape, trainable=True, **kwargs) -> tf.Variable:
         with tf.variable_scope(scope):
             w = tf.get_variable(name, shape, trainable=trainable, **kwargs)
             self.params[w.name] = w
         return w
 
+    @with_tf_device_cpu
     def get_variable(self, scope, name, trainable=True) -> tf.Variable:
         with tf.variable_scope(scope, reuse=True):
             w = tf.get_variable(name, trainable=trainable)
