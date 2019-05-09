@@ -62,11 +62,12 @@ ALEXNET_VARIANT: &ALEXNET_VARIANT
   conv5_size: 3
   pool5_ksize: 3
   fc0: 4096
-  fc1: 2048
-  fc2: 2048
+  fc1: 1024
+  fc2: 1024
   dropout_type: "dropout"
   keep_prob: 0.5
-  # one_step_neurons: 23
+  use_batch_normalization: True
+  # one_step_neurons: 40
   one_step_filters: 27
 
 ALEXNETV_MNIST:

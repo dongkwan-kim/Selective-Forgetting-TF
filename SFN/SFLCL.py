@@ -1,7 +1,7 @@
 import os
 import re
 from pprint import pprint
-from typing import Tuple
+from typing import Tuple, List
 import math
 
 import tensorflow as tf
@@ -11,12 +11,33 @@ from termcolor import cprint
 from tqdm import trange
 
 from SFNBase import SFN
-from utils import get_dims_from_config, print_all_vars
+from utils import get_dims_from_config, print_all_vars, get_available_gpu_names, \
+    with_tf_device_gpu, with_tf_device_cpu
 
 
 def parse_pool_key(pool_name):
     p = re.compile("pool(\\d+)_ksize")
     return int(p.findall(pool_name)[0])
+
+
+def _get_batch_normalized_conv(beta: tf.Variable,
+                               gamma: tf.Variable,
+                               h_conv: tf.Tensor,
+                               is_training: tf.Variable) -> tf.Tensor:
+    """Ref. https://gist.github.com/tomokishii/0ce3bdac1588b5cca9fa5fbdf6e1c412"""
+
+    def mean_var_with_update():
+        ema_apply_op = ema.apply([batch_mean, batch_variance])
+        with tf.control_dependencies([ema_apply_op]):
+            return tf.identity(batch_mean), tf.identity(batch_variance)
+
+    batch_mean, batch_variance = tf.nn.moments(h_conv, [0, 1, 2], name='moments')
+    ema = tf.train.ExponentialMovingAverage(decay=0.5)
+    mean, variance = tf.cond(is_training,
+                             mean_var_with_update,
+                             lambda: (ema.average(batch_mean), ema.average(batch_variance)))
+    h_conv = tf.nn.batch_normalization(h_conv, mean, variance, beta, gamma, 1e-3)
+    return h_conv
 
 
 class SFLCL(SFN):
@@ -47,6 +68,12 @@ class SFLCL(SFN):
         self.l2_lambda = config.l2_lambda
         self.dropout_type = config.dropout_type if "dropout_type" in config else "dropout"
         self.keep_prob = config.keep_prob if "keep_prob" in config else 1
+        self.use_batch_normalization = config.use_batch_normalization
+
+        self.gpu_names = get_available_gpu_names(config.gpu_num_list)
+        self.gpu_num_list = config.gpu_num_list
+        assert len(self.gpu_names) <= 1, "Not support multi-GPU, yet"
+
         self.checkpoint_dir = config.checkpoint_dir
         if not os.path.isdir(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
@@ -56,7 +83,16 @@ class SFLCL(SFN):
 
         self.create_model_variables()
         self.set_layer_types()
+        self.attr_to_save += ["max_iter", "l1_lambda", "l2_lambda", "keep_prob" "gpu_names", "use_batch_normalization"]
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
+        cprint("GPU info: {}".format(self.get_real_device_info()), "green")
+
+    def get_real_device_info(self) -> List[str]:
+        return ["/gpu:{}".format(gn) for gn in self.gpu_num_list]
+
+    def save(self, model_name=None):
+        model_name = "{}_{}".format(str(self), "_".join(self.get_real_device_info()))
+        super().save(model_name=model_name)
 
     def restore(self, model_name=None):
         restored = super().restore(model_name)
@@ -64,12 +100,14 @@ class SFLCL(SFN):
             self.build_model()
         return restored
 
-    def create_variable(self, scope, name, shape, trainable=True) -> tf.Variable:
+    @with_tf_device_cpu
+    def create_variable(self, scope, name, shape, trainable=True, **kwargs) -> tf.Variable:
         with tf.variable_scope(scope):
-            w = tf.get_variable(name, shape, trainable=trainable)
+            w = tf.get_variable(name, shape, trainable=trainable, **kwargs)
             self.params[w.name] = w
         return w
 
+    @with_tf_device_cpu
     def get_variable(self, scope, name, trainable=True) -> tf.Variable:
         with tf.variable_scope(scope, reuse=True):
             w = tf.get_variable(name, trainable=trainable)
@@ -103,13 +141,15 @@ class SFLCL(SFN):
     def predict_perform(self, xs, ys, number_to_print=8) -> list:
         X = tf.get_default_graph().get_tensor_by_name("X:0")
         keep_prob = tf.get_default_graph().get_tensor_by_name("keep_prob:0")
+        is_training = tf.get_default_graph().get_tensor_by_name("is_training:0")
         test_preds_list = []
 
         # (10000, 32, 32, 3) is too big, so divide to batches.
         test_batch_size = len(xs) // 5
         for i in range(5):
-            partial_xs = xs[i*test_batch_size:(i+1)*test_batch_size]
-            test_preds_list.append(self.sess.run(self.yhat, feed_dict={X: partial_xs, keep_prob: 1}))
+            partial_xs = xs[i * test_batch_size:(i + 1) * test_batch_size]
+            test_preds_list.append(self.sess.run(self.yhat,
+                                                 feed_dict={X: partial_xs, keep_prob: 1, is_training: False}))
         test_preds = np.concatenate(test_preds_list)
 
         half_number_to_print = int(number_to_print / 2)
@@ -147,23 +187,42 @@ class SFLCL(SFN):
             prev_n_filters = self.conv_dims[i - 2]
             w_conv = self.create_variable("conv%d" % (i // 2), "weight", (k_size, k_size, prev_n_filters, n_filters))
             b_conv = self.create_variable("conv%d" % (i // 2), "biases", (n_filters,))
+
+            if self.use_batch_normalization:
+                beta = self.create_variable("bn%d" % (i // 2), "beta", (n_filters,),
+                                            initializer=tf.constant_initializer(0.0))
+                gamma = self.create_variable("bn%d" % (i // 2), "gamma", (n_filters,),
+                                             initializer=tf.constant_initializer(1.0))
+
         for i in range(1, len(self.dims)):
             prev_dims, curr_dims = self.dims[i - 1], self.dims[i]
             w_fc = self.create_variable("fc%d" % i, "weight", (prev_dims, curr_dims))
             b_fc = self.create_variable("fc%d" % i, "biases", (curr_dims,))
 
     def build_model(self):
+
         xn_filters, xsize = self.conv_dims[0], self.conv_dims[1]
         X = tf.placeholder(tf.float32, [None, xsize, xsize, xn_filters], name="X")
         Y = tf.placeholder(tf.float32, [None, self.n_classes], name="Y")
         keep_prob = tf.placeholder(tf.float32, name="keep_prob")
+        is_training = tf.placeholder(tf.bool, name="is_training")
 
         h_conv = X
         for conv_num, i in enumerate(range(2, len(self.conv_dims), 2)):
             w_conv = self.get_variable("conv%d" % (i // 2), "weight", True)
             b_conv = self.get_variable("conv%d" % (i // 2), "biases", True)
-            h_conv = tf.nn.relu(tf.nn.conv2d(h_conv, w_conv, strides=[1, 1, 1, 1], padding="SAME") + b_conv)
+            h_conv = tf.nn.conv2d(h_conv, w_conv, strides=[1, 1, 1, 1], padding="SAME") + b_conv
 
+            # batch normalization
+            if self.use_batch_normalization:
+                beta = self.get_variable("bn%d" % (i // 2), "beta", True)
+                gamma = self.get_variable("bn%d" % (i // 2), "gamma", True)
+                h_conv = _get_batch_normalized_conv(beta, gamma, h_conv, is_training)
+
+            # activation
+            h_conv = tf.nn.relu(h_conv)
+
+            # max pooling
             if conv_num + 1 in self.pool_pos_to_dims:
                 pool_dim = self.pool_pos_to_dims[conv_num + 1]
                 pool_ksize = [1, pool_dim, pool_dim, 1]
@@ -185,11 +244,12 @@ class SFLCL(SFN):
         self.yhat = tf.nn.sigmoid(h_fc)
         self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=h_fc, labels=Y))
 
-        return X, Y, keep_prob
+        return X, Y, keep_prob, is_training
 
+    @with_tf_device_gpu
     def initial_train(self, print_iter=100, *args):
 
-        X, Y, keep_prob = self.build_model()
+        X, Y, keep_prob, is_training = self.build_model()
 
         # Add L1 & L2 loss regularizer
         l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(
@@ -217,11 +277,17 @@ class SFLCL(SFN):
             for _ in range(num_batches):
                 batch_x, batch_y = self.get_next_batch(train_x, train_labels)
                 _, loss_val = self.sess.run([opt, self.loss],
-                                            feed_dict={X: batch_x, Y: batch_y, keep_prob: self.keep_prob})
+                                            feed_dict={
+                                                X: batch_x,
+                                                Y: batch_y,
+                                                keep_prob: self.keep_prob,
+                                                is_training: True,
+                                            })
                 loss_sum += loss_val
 
             if epoch % print_iter == 0 or epoch == self.max_iter - 1:
-                print('\n OVERALL EVALUATION at ITERATION {}'.format(epoch))
+                cprint('\n OVERALL EVALUATION at ITERATION {} on Devices {}'.format(
+                    epoch, self.get_real_device_info()), "green")
                 self.predict_perform(test_x, test_labels)
                 print("   [*] loss: {}".format(loss_sum))
 

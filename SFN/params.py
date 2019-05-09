@@ -34,6 +34,10 @@ class MyParams(HParams):
             self.run_magic(value_magician)
 
     def add_hparam_by_type(self, k, v):
+
+        if v == "None":
+            v = None
+
         if self.update_type == "UNIQUE_OR_ERROR":
             assert k not in self.values(), "{} cannot be updated at UNIQUE condition".format(k)
             self.add_hparam(k, v)
