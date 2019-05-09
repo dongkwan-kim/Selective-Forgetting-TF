@@ -1,3 +1,5 @@
+from typing import List
+
 from copy import deepcopy
 from termcolor import cprint
 from pprint import pprint
@@ -6,6 +8,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.client import device_lib
 import re
 
 
@@ -16,9 +19,41 @@ def sum_set(s: set, *args):
     return s
 
 
+def get_gpu_utility(gpu_id):
+    import subprocess
+    sp = subprocess.Popen(['nvidia-smi', '-q'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out_str = sp.communicate()
+    out_list = out_str[0].decode("utf-8").split("\n")
+
+    seen_id = -1
+    for item in out_list:
+        items = [x.strip() for x in item.split(':')]
+        if len(items) == 2:
+            key, val = items
+            if key == "Minor Number":
+                seen_id = int(val)
+            if seen_id == gpu_id and key == "Gpu":
+                return int(val.split(" ")[0])
+    else:
+        raise EnvironmentError("There's no GPU of no {}".format(gpu_id))
+
+
+# Project Utils
+
 def get_project_dir():
     return os.path.abspath(os.path.join(__file__, os.pardir, os.pardir))
 
+
+def get_dims_from_config(config, search="dims", with_key=False) -> list:
+    dims_config = sorted([(k, v) for k, v in config.values().items() if search in k],
+                         key=lambda t: t[0])
+    if not with_key:
+        return [v for _, v in dims_config]
+    else:
+        return dims_config
+
+
+# Tensorflow Utils
 
 def parse_var_name(var_name):
     # prefix, task_id, scope, var_type
@@ -40,13 +75,49 @@ def print_ckpt_vars(model_path, prefix: str = None, color=None):
     pprint(vars_in_checkpoint)
 
 
-def get_dims_from_config(config, search="dims", with_key=False) -> list:
-    dims_config = sorted([(k, v) for k, v in config.values().items() if search in k],
-                         key=lambda t: t[0])
-    if not with_key:
-        return [v for _, v in dims_config]
-    else:
-        return dims_config
+def get_available_gpu_names(gpu_num_list: List[int] = None) -> List[str]:
+    """
+    :param gpu_num_list e.g. [1, 2]
+    :return e.g. ['/device:GPU:0', '/device:GPU:1', '/device:GPU:2', '/device:GPU:3']
+
+    Ref. https://stackoverflow.com/a/38580201
+    """
+    local_device_protos = device_lib.list_local_devices()
+    gpu_names = [x.name for x in local_device_protos if x.device_type == 'GPU']
+    if gpu_num_list is not None:
+        gpu_names = [x for x in gpu_names if int(x.split(":")[-1]) in gpu_num_list]
+
+    return gpu_names
+
+
+def with_tf_device_gpu(func):
+
+    def wrapped(*args, **kwargs):
+        x = None
+        model = args[0]
+
+        if len(model.gpu_names) == 0:
+            x = func(*args, **kwargs)
+        else:
+            cprint("\n\n# We are using GPUs: {}\n\n".format(model.gpu_names), "green")
+            for name in model.gpu_names:
+                gpu_util = get_gpu_utility(int(name.split(":")[-1]))
+                assert gpu_util <= 75, "{} ({} %) >= 75%".format(name, gpu_util)
+                with tf.device(name):
+                    x = func(*args, **kwargs)
+        return x
+
+    return wrapped
+
+
+def tf_session_with_config(**kwargs):
+    config = tf.ConfigProto(
+        log_device_placement=True,
+        allow_soft_placement=True,
+        **kwargs,
+    )
+    config.gpu_options.allow_growth = True
+    return tf.Session(config=config)
 
 
 # Matrix utils

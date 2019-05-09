@@ -11,7 +11,7 @@ from termcolor import cprint
 from tqdm import trange
 
 from SFNBase import SFN
-from utils import get_dims_from_config, print_all_vars
+from utils import get_dims_from_config, print_all_vars, get_available_gpu_names, with_tf_device_gpu
 
 
 def parse_pool_key(pool_name):
@@ -68,6 +68,8 @@ class SFLCL(SFN):
         self.dropout_type = config.dropout_type if "dropout_type" in config else "dropout"
         self.keep_prob = config.keep_prob if "keep_prob" in config else 1
         self.use_batch_normalization = config.use_batch_normalization
+        self.gpu_names = get_available_gpu_names(config.gpu_num_list)
+        assert len(self.gpu_names) <= 1, "Not support multi-GPU, yet"
 
         self.checkpoint_dir = config.checkpoint_dir
         if not os.path.isdir(self.checkpoint_dir):
@@ -78,7 +80,12 @@ class SFLCL(SFN):
 
         self.create_model_variables()
         self.set_layer_types()
+        self.attr_to_save += ["max_iter", "l1_lambda", "l2_lambda", "keep_prob" "gpu_names", "use_batch_normalization"]
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
+
+    def save(self, model_name=None):
+        model_name = "{}_{}".format(str(self), "_".join(self.gpu_names))
+        super().save(model_name=model_name)
 
     def restore(self, model_name=None):
         restored = super().restore(model_name)
@@ -230,6 +237,7 @@ class SFLCL(SFN):
 
         return X, Y, keep_prob, is_training
 
+    @with_tf_device_gpu
     def initial_train(self, print_iter=100, *args):
 
         X, Y, keep_prob, is_training = self.build_model()

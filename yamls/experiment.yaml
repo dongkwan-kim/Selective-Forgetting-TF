@@ -10,6 +10,7 @@ basic: &BASIC
   importance_criteria: first_Taylor_approximation
   need_coreset: False
   online_importance: False
+  gpu_num_list: [0]
   coreset_size: 1000
 
 SFDEN_FORGET: &SFDEN_FORGET
