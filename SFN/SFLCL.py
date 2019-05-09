@@ -95,6 +95,7 @@ class SFLCL(SFN):
         super().save(model_name=model_name)
 
     def restore(self, model_name=None):
+        model_name = "{}_{}".format(str(self), "_".join(self.get_real_device_info()))
         restored = super().restore(model_name)
         if restored:
             self.build_model()
