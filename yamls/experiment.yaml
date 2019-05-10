@@ -38,12 +38,13 @@ SFDEN_RETRAIN:
 SFEWC_FORGET:
   <<: *BASIC
   max_iter: 20
-  l1_lambda: 0.0
-  l2_lambda: 0.0001
-  ewc_lambda: 0.05
+  l1_lambda: 0.0001
+  l2_lambda: 0.0
+  ewc_lambda: 0.3
   retrain_task_iter: 80
   retrain_max_iter_per_task: 150
-  online_importance: True
+  need_coreset: True
+  online_importance: False
   expr_type: FORGET
   model: SFEWC
   support_model: ["XLARGE_FC_MNIST"]
