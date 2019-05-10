@@ -85,20 +85,21 @@ class SFLCL(SFN):
         self.set_layer_types()
         self.attr_to_save += ["max_iter", "l1_lambda", "l2_lambda", "keep_prob", "gpu_names", "use_batch_normalization"]
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
-        cprint("GPU info: {}".format(self.get_real_device_info()), "green")
+        cprint("Device info: {}".format(self.get_real_device_info()), "green")
 
     def get_real_device_info(self) -> List[str]:
-        return ["/gpu:{}".format(gn) for gn in self.gpu_num_list]
+        if self.gpu_num_list:
+            return ["gpu-{}".format(gn) for gn in self.gpu_num_list]
+        else:
+            return ["cpu"]
 
-    def save(self, model_name=None):
-        model_name = "{}_{}".format(str(self), "_".join(self.get_real_device_info()))
-        super().save(model_name=model_name)
+    def save(self, model_name=None, model_middle_path=None):
+        model_middle_path = model_middle_path or "_".join(self.get_real_device_info())
+        super().save(model_name=model_name, model_middle_path=model_middle_path)
 
-    def restore(self, model_name=None):
-        model_name = "{}_{}".format(str(self), "_".join(self.get_real_device_info()))
-        restored = super().restore(model_name)
-        if restored:
-            self.build_model()
+    def restore(self, model_name=None, model_middle_path=None, build_model=True):
+        model_middle_path = model_middle_path or "_".join(self.get_real_device_info())
+        restored = super().restore(model_name, model_middle_path, build_model)
         return restored
 
     @with_tf_device_cpu
@@ -314,6 +315,7 @@ class SFLCL(SFN):
         return tuple(x_and_label_list)
 
     # shape = (|h|+|f|,) or tuple of (|f1|), (|f2|), (|h1|,), (|h2|,)
+    @with_tf_device_gpu
     def get_importance_vector(self, task_id, importance_criteria: str,
                               layer_separate=False, use_coreset=False) -> tuple or np.ndarray:
         print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)
