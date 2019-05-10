@@ -92,7 +92,6 @@ def get_available_gpu_names(gpu_num_list: List[int] = None) -> List[str]:
 
 
 def with_tf_device_gpu(func):
-
     def wrapped(*args, **kwargs):
         x = None
         model = args[0]
@@ -116,6 +115,7 @@ def with_tf_device_cpu(func):
         with tf.device("/cpu:0"):
             x = func(*args, **kwargs)
         return x
+
     return wrapped
 
 
@@ -170,7 +170,7 @@ def get_zero_expanded_matrix(base_matrix: np.ndarray, indexes_to_zero, add_rows=
 
     base_shape = base_matrix.shape
     rowwise_ret_shape = (base_shape[0] + len(indexes_to_zero), base_shape[1]) if add_rows else \
-                        (base_shape[1] + len(indexes_to_zero), base_shape[0])
+        (base_shape[1] + len(indexes_to_zero), base_shape[0])
 
     rowwise_base_list = list(base_matrix) if add_rows else list(np.transpose(base_matrix))
     zero_expanded_list = []
@@ -215,7 +215,6 @@ def draw_importance_bar_chart(iv, prev_first_layer, curr_first_layer, prev_secon
 
 def build_line_of_list(x_or_x_list, y_list, label_y_list, xlabel, ylabel, title, file_name,
                        highlight_ylabels=None, is_x_list=True, marker="o", **kwargs):
-
     if not is_x_list:
         x_or_x_list = [deepcopy(x_or_x_list) for _ in range(len(y_list))]
 

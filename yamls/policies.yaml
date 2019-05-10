@@ -65,3 +65,18 @@ XLARGE_FC_MNIST:
       mixing_coeff: 0
     NEURON:
       mixing_coeff: 0.15
+
+ALEXNETV_CIFAR10:
+  <<: *DEFAULT
+  OURS:
+    FILTER:
+      mixing_coeff: 0
+    NEURON:
+      mixing_coeff: 0.25
+      relatedness_type: "symmetric_unit_level"
+
+  CONST:
+    FILTER:
+      mixing_coeff: 0
+    NEURON:
+      mixing_coeff: 0.15
