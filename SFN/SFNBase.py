@@ -22,6 +22,7 @@ def get_utype_from_layer_type(layer_type: str or List[str]) -> UnitType or List[
         "conv": UnitType.FILTER,
         "fc": UnitType.NEURON,
         "layer": UnitType.NEURON,  # TODO: Replace layer to fc
+        "bn": UnitType.NONE,
     }
     if isinstance(layer_type, str):
         return layer_type_to_utype[layer_type]

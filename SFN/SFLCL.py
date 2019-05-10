@@ -69,6 +69,7 @@ class SFLCL(SFN):
         self.dropout_type = config.dropout_type if "dropout_type" in config else "dropout"
         self.keep_prob = config.keep_prob if "keep_prob" in config else 1
         self.use_batch_normalization = config.use_batch_normalization
+        assert not self.use_batch_normalization, "Not support batch_norm, yet"
 
         self.gpu_names = get_available_gpu_names(config.gpu_num_list)
         self.gpu_num_list = config.gpu_num_list
