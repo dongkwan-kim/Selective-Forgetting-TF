@@ -22,6 +22,7 @@ def get_utype_from_layer_type(layer_type: str or List[str]) -> UnitType or List[
         "conv": UnitType.FILTER,
         "fc": UnitType.NEURON,
         "layer": UnitType.NEURON,  # TODO: Replace layer to fc
+        "bn": UnitType.NONE,
     }
     if isinstance(layer_type, str):
         return layer_type_to_utype[layer_type]
@@ -153,9 +154,10 @@ class SFN:
 
     # Save & Restore
 
-    def save(self, model_name=None):
+    def save(self, model_name=None, model_middle_path=None):
         model_name = model_name or str(self)
-        model_path = os.path.join(self.checkpoint_dir, "{}.ckpt".format(model_name))
+        checkpoint_dir = os.path.join(self.checkpoint_dir, model_middle_path or "")
+        model_path = os.path.join(checkpoint_dir, "{}.ckpt".format(model_name))
 
         # Model Save
         saver = tf.train.Saver()
@@ -163,11 +165,12 @@ class SFN:
         print_all_vars("Saved: {}".format(model_path), "blue")
 
         # Attribute Save
-        self.save_attr(model_name)
+        self.save_attr(model_name, model_middle_path=model_middle_path)
 
-    def save_attr(self, model_name=None, attr=None):
+    def save_attr(self, model_name=None, attr=None, model_middle_path=None):
         model_name = model_name or str(self)
-        attr_path = os.path.join(self.checkpoint_dir, "{}_attr.pkl".format(model_name))
+        checkpoint_dir = os.path.join(self.checkpoint_dir, model_middle_path or "")
+        attr_path = os.path.join(checkpoint_dir, "{}_attr.pkl".format(model_name))
         attr = attr or self.attr_to_save
         with open(attr_path, "wb") as f:
             pickle.dump({k: self.__dict__[k] for k in attr}, f)
@@ -175,35 +178,39 @@ class SFN:
         for a in attr:
             print("\t - {}".format(a))
 
-    def restore(self, model_name=None) -> bool:
+    def restore(self, model_name=None, model_middle_path=None, build_model=False) -> bool:
         model_name = model_name or str(self)
-        model_path = os.path.join(self.checkpoint_dir, "{}.ckpt".format(model_name))
+        checkpoint_dir = os.path.join(self.checkpoint_dir, model_middle_path or "")
+        model_path = os.path.join(checkpoint_dir, "{}.ckpt".format(model_name))
 
         if not os.path.isfile("{}.meta".format(model_path)):
             return False
 
         try:
             # Attribute Restore
-            self.restore_attr(model_name)
+            self.restore_attr(model_name, model_middle_path)
 
             # Recreate variables
             self.create_model_variables()
+            if build_model:
+                self.build_model()
 
             # Model Restore
             self.sess = tf.Session()
             self.sess.run(tf.global_variables_initializer())
             saver = tf.train.Saver()
-            saver.restore(self.sess, tf.train.latest_checkpoint(self.checkpoint_dir))
+            saver.restore(self.sess, tf.train.latest_checkpoint(checkpoint_dir))
             print_all_vars("Restored: {}".format(model_path), "blue")
             return True
 
         except Exception as e:
-            print("Restore Failed: {}".format(model_path), str(e))
+            cprint("Restore Failed: {}\n\t{}".format(model_path, str(e)), "red")
             return False
 
-    def restore_attr(self, model_name=None):
+    def restore_attr(self, model_name=None, model_middle_path=None):
         model_name = model_name or str(self)
-        attr_path = os.path.join(self.checkpoint_dir, "{}_attr.pkl".format(model_name))
+        checkpoint_dir = os.path.join(self.checkpoint_dir, model_middle_path or "")
+        attr_path = os.path.join(checkpoint_dir, "{}_attr.pkl".format(model_name))
         with open(attr_path, "rb") as f:
             attr_dict: dict = pickle.load(f)
             self.__dict__.update(attr_dict)
@@ -212,6 +219,9 @@ class SFN:
             print("\t - {}".format(a))
 
     def create_model_variables(self):
+        raise NotImplementedError
+
+    def build_model(self):
         raise NotImplementedError
 
     # Data batch

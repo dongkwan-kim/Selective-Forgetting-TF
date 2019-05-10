@@ -9,6 +9,7 @@ class LabelType(enum.Enum):
 class UnitType(enum.Enum):
     FILTER = 0
     NEURON = 1
+    NONE = 2
 
     def __str__(self):
         return self.name
