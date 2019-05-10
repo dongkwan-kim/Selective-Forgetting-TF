@@ -10,7 +10,7 @@ from DEN.ops import ROC_AUC
 from termcolor import cprint
 
 from SFNBase import SFN
-from utils import get_dims_from_config, print_all_vars
+from utils import get_dims_from_config, print_all_vars, with_tf_device_gpu, with_tf_device_cpu
 
 
 class SFEWC(SFN):
@@ -47,17 +47,20 @@ class SFEWC(SFN):
         self.create_model_variables()
         self.set_layer_types()
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
+        cprint("Device info: {}".format(self.get_real_device_info()), "green")
 
     def restore(self, model_name=None, model_middle_path=None, build_model=True):
         restored = super().restore(model_name, model_middle_path, build_model)
         return restored
 
+    @with_tf_device_cpu
     def create_variable(self, scope, name, shape, trainable=True) -> tf.Variable:
         with tf.variable_scope(scope):
             w = tf.get_variable(name, shape, trainable=trainable)
             self.params[w.name] = w
         return w
 
+    @with_tf_device_cpu
     def get_variable(self, scope, name, trainable=True) -> tf.Variable:
         with tf.variable_scope(scope, reuse=True):
             w = tf.get_variable(name, trainable=trainable)
@@ -181,6 +184,7 @@ class SFEWC(SFN):
                 ewc_loss += tf.reduce_sum(tf.multiply(fm_of_t, tf.square(param_tf_vars - param_values)))
         return ewc_loss
 
+    @with_tf_device_gpu
     def initial_train(self, print_iter=100, *args):
 
         avg_perf = []
@@ -250,6 +254,7 @@ class SFEWC(SFN):
                 val_perf = self.get_performance(val_preds, val_labels_t)
                 print(" [*] iter: %d, val loss: %.4f, val perf: %.4f" % (epoch, val_loss_val, val_perf))
 
+    @with_tf_device_gpu
     def get_importance_vector(self, task_id, importance_criteria: str,
                               layer_separate=False, use_coreset=False) -> tuple or np.ndarray:
 
