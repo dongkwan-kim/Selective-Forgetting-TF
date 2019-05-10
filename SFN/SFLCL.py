@@ -83,7 +83,7 @@ class SFLCL(SFN):
 
         self.create_model_variables()
         self.set_layer_types()
-        self.attr_to_save += ["max_iter", "l1_lambda", "l2_lambda", "keep_prob" "gpu_names", "use_batch_normalization"]
+        self.attr_to_save += ["max_iter", "l1_lambda", "l2_lambda", "keep_prob", "gpu_names", "use_batch_normalization"]
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
         cprint("GPU info: {}".format(self.get_real_device_info()), "green")
 
