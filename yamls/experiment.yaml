@@ -6,11 +6,11 @@ basic: &BASIC
   l2_lambda: 0.0001
   n_tasks: 10
   task_to_forget: 6
-  steps_to_forget: 50
+  steps_to_forget: 25
   importance_criteria: first_Taylor_approximation
   need_coreset: False
   online_importance: False
-  gpu_num_list: [0]
+  gpu_num_list: [1]
   coreset_size: 1000
 
 SFDEN_FORGET: &SFDEN_FORGET
@@ -44,7 +44,7 @@ SFEWC_FORGET:
   ewc_lambda: 0.4
   retrain_task_iter: 80
   retrain_max_iter_per_task: 150
-  need_coreset: False
+  need_coreset: True
   online_importance: False
   expr_type: FORGET
   model: SFEWC
