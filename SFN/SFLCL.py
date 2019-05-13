@@ -11,7 +11,7 @@ from termcolor import cprint
 from tqdm import trange
 
 from SFNBase import SFN
-from utils import get_dims_from_config, print_all_vars, get_available_gpu_names, \
+from utils import get_dims_from_config, print_all_vars, \
     with_tf_device_gpu, with_tf_device_cpu
 
 from cges.cges import cges
@@ -73,10 +73,6 @@ class SFLCL(SFN):
         self.use_batch_normalization = config.use_batch_normalization
         assert not self.use_batch_normalization, "Not support batch_norm, yet"
 
-        self.gpu_names = get_available_gpu_names(config.gpu_num_list)
-        self.gpu_num_list = config.gpu_num_list
-        assert len(self.gpu_names) <= 1, "Not support multi-GPU, yet"
-
         self.checkpoint_dir = config.checkpoint_dir
         if not os.path.isdir(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
@@ -97,12 +93,6 @@ class SFLCL(SFN):
         self.attr_to_save += ["max_iter", "l1_lambda", "l2_lambda", "keep_prob", "gpu_names", "use_batch_normalization"]
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
         cprint("Device info: {}".format(self.get_real_device_info()), "green")
-
-    def get_real_device_info(self) -> List[str]:
-        if self.gpu_num_list:
-            return ["gpu-{}".format(gn) for gn in self.gpu_num_list]
-        else:
-            return ["cpu"]
 
     def save(self, model_name=None, model_middle_path=None):
         model_middle_path = model_middle_path or "_".join(self.get_real_device_info())

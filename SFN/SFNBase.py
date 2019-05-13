@@ -12,7 +12,7 @@ from tqdm import trange
 
 from data import Coreset, DataLabel
 from enums import UnitType
-from utils import build_line_of_list, print_all_vars, get_zero_expanded_matrix, parse_var_name
+from utils import build_line_of_list, print_all_vars, get_zero_expanded_matrix, parse_var_name, get_available_gpu_names
 from utils_importance import *
 
 
@@ -50,6 +50,10 @@ class SFN:
         self.importance_criteria = config.importance_criteria
         self.online_importance = config.online_importance
 
+        self.gpu_names = get_available_gpu_names(config.gpu_num_list)
+        self.gpu_num_list = config.gpu_num_list
+        assert len(self.gpu_names) <= 1, "Not support multi-GPU, yet"
+
         self.prediction_history: Dict[str, List] = defaultdict(list)
         self.pruning_rate_history: Dict[str, List] = defaultdict(list)
         self.layer_to_removed_neuron_set: Dict[str, set] = defaultdict(set)
@@ -73,6 +77,12 @@ class SFN:
 
     def __repr__(self):
         return "{}_{}_{}".format(self.__class__.__name__, self.n_tasks, "_".join(map(str, self.dims)))
+
+    def get_real_device_info(self) -> List[str]:
+        if self.gpu_num_list:
+            return ["gpu-{}".format(gn) for gn in self.gpu_num_list]
+        else:
+            return ["cpu"]
 
     def set_layer_types(self, *args, **kwargs):
         """Set self.layer_types, the list of types (prefix of scope) (e.g. layer, conv, fc, ...)"""

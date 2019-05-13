@@ -8,7 +8,7 @@ from DEN.ops import ROC_AUC
 from termcolor import cprint
 
 from SFNBase import SFN
-from utils import get_dims_from_config, print_all_vars
+from utils import get_dims_from_config, print_all_vars, with_tf_device_cpu, with_tf_device_gpu
 
 
 class SFHPS(SFN):
@@ -41,17 +41,20 @@ class SFHPS(SFN):
         self.create_model_variables()
         self.set_layer_types()
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
+        cprint("Device info: {}".format(self.get_real_device_info()), "green")
 
     def restore(self, model_name=None, model_middle_path=None, build_model=True):
         restored = super().restore(model_name, model_middle_path, build_model)
         return restored
 
+    @with_tf_device_cpu
     def create_variable(self, scope, name, shape, trainable=True) -> tf.Variable:
         with tf.variable_scope(scope):
             w = tf.get_variable(name, shape, trainable=trainable)
             self.params[w.name] = w
         return w
 
+    @with_tf_device_cpu
     def get_variable(self, scope, name, trainable=True) -> tf.Variable:
         with tf.variable_scope(scope, reuse=True):
             w = tf.get_variable(name, trainable=trainable)
@@ -141,6 +144,7 @@ class SFHPS(SFN):
 
         return X, Y_list
 
+    @with_tf_device_gpu
     def initial_train(self, print_iter=100):
 
         X, Y_list = self.build_model()
@@ -201,6 +205,7 @@ class SFHPS(SFN):
                 _, loss_val = self.sess.run([train_step, loss], feed_dict={X: batch_x, Y: batch_y})
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
+    @with_tf_device_gpu
     def get_importance_vector(self, task_id, importance_criteria: str,
                               layer_separate=False, use_coreset=False) -> tuple or np.ndarray:
         print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)
