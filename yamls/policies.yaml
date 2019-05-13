@@ -58,16 +58,16 @@ XLARGE_FC_MNIST:
       mixing_coeff: 0
       tau: 0
     NEURON:
-      mixing_coeff: 0.9875
+      mixing_coeff: 0.994
       relatedness_type: "symmetric_unit_level"
-      tau: 0.005
+      tau: 0.00075
 
   CONST:
     FILTER:
       mixing_coeff: 0
       tau: 0
     NEURON:
-      mixing_coeff: 0.99
+      mixing_coeff: 0.994
       tau: 0
 
 ALEXNETV_CIFAR10:
@@ -75,7 +75,7 @@ ALEXNETV_CIFAR10:
   OURS:
     FILTER:
       mixing_coeff: 0.995
-      relatedness_type: "asymmetric_unit_level"
+      relatedness_type: "symmetric_unit_level"
       tau: 1.5 # su: 0.000025, au: 1.5
     NEURON:
       mixing_coeff: 0

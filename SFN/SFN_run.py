@@ -184,6 +184,8 @@ if __name__ == '__main__':
             model.get_importance_matrix(use_coreset=params.need_coreset)
         model.save()
 
+    model.normalize_importance_matrix_about_task()
+
     if params.expr_type == "FORGET" or params.expr_type == "CRITERIA":
         policies_for_expr = ["RANDOM", "MEAN", "MAX", "CONST", "OURS"]
         # noinspection PyTypeChecker
