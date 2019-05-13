@@ -14,6 +14,8 @@ from SFNBase import SFN
 from utils import get_dims_from_config, print_all_vars, get_available_gpu_names, \
     with_tf_device_gpu, with_tf_device_cpu
 
+from cges.cges import cges
+
 
 def parse_pool_key(pool_name):
     p = re.compile("pool(\\d+)_ksize")
@@ -79,6 +81,14 @@ class SFLCL(SFN):
         if not os.path.isdir(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
 
+        # CGES params
+        self.use_cges = True
+        self.cges_lambda = config.cges_lambda
+        self.cges_mu = config.cges_mu
+        self.cges_chvar = config.cges_chvar
+        self.group_layerwise = [eval(str(gl)) for gl in config.group_layerwise]
+        self.exclusive_layerwise = [eval(str(el)) for el in config.exclusive_layerwise]
+
         self.yhat = None
         self.loss = None
 
@@ -96,10 +106,14 @@ class SFLCL(SFN):
 
     def save(self, model_name=None, model_middle_path=None):
         model_middle_path = model_middle_path or "_".join(self.get_real_device_info())
+        if self.use_cges:
+            model_middle_path = os.path.join("cges", model_middle_path)
         super().save(model_name=model_name, model_middle_path=model_middle_path)
 
     def restore(self, model_name=None, model_middle_path=None, build_model=True):
         model_middle_path = model_middle_path or "_".join(self.get_real_device_info())
+        if self.use_cges:
+            model_middle_path = os.path.join("cges", model_middle_path)
         restored = super().restore(model_name, model_middle_path, build_model)
         return restored
 
@@ -250,7 +264,7 @@ class SFLCL(SFN):
         return X, Y, keep_prob, is_training
 
     @with_tf_device_gpu
-    def initial_train(self, print_iter=100, *args):
+    def initial_train(self, print_iter=10, *args):
 
         X, Y, keep_prob, is_training = self.build_model()
 
@@ -266,7 +280,15 @@ class SFLCL(SFN):
         regularization_loss = tf.contrib.layers.apply_regularization(l1_l2_regularizer, vars_of_task)
         self.loss += regularization_loss
 
-        opt = tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt").minimize(self.loss)
+        if self.use_cges:
+            cges_op, op_list = cges(self.init_lr, self.cges_lambda, self.cges_mu, self.cges_chvar,
+                                    group_layerwise=self.group_layerwise,
+                                    exclusive_layerwise=self.exclusive_layerwise,
+                                    variable_filter=lambda name: "weight" in name)
+            opt = tf.train.GradientDescentOptimizer(learning_rate=self.init_lr, name="opt").minimize(self.loss)
+        else:
+            opt = tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt").minimize(self.loss)
+            cges_op = []
 
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
@@ -286,6 +308,9 @@ class SFLCL(SFN):
                                                 keep_prob: self.keep_prob,
                                                 is_training: True,
                                             })
+                if self.use_cges:
+                    _ = self.sess.run(cges_op)
+
                 loss_sum += loss_val
 
             if epoch % print_iter == 0 or epoch == self.max_iter - 1:
