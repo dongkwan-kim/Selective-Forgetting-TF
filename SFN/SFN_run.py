@@ -21,12 +21,12 @@ def load_experiment_and_model_params() -> MyParams:
 
             # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET, SFEWC_FORGET,
             # SFLCL10_FORGET, SFLCL20_FORGET, SFLCL100_FORGET
-            to_yaml_path("experiment.yaml"): "SFLCL10_FORGET",
+            to_yaml_path("experiment.yaml"): "SFDEN_FORGET",
 
             # SMALL_FC_MNIST, LARGE_FC_MNIST, XLARGE_FC_MNIST
             # SMALL_CONV_MNIST, ALEXNETV_MNIST,
             # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-            to_yaml_path("models.yaml"): "ALEXNETV_CIFAR10",
+            to_yaml_path("models.yaml"): "SMALL_FC_MNIST",
 
         },
         value_magician={
@@ -183,8 +183,6 @@ if __name__ == '__main__':
         if not model.online_importance:
             model.get_importance_matrix(use_coreset=params.need_coreset)
         model.save()
-
-    model.normalize_importance_matrix_about_task()
 
     if params.expr_type == "FORGET" or params.expr_type == "CRITERIA":
         policies_for_expr = ["RANDOM", "MEAN", "MAX", "CONST", "OURS"]
