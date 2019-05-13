@@ -55,6 +55,7 @@ SFHPS_FORGET:
   task_iter: 500
   l1_lambda: 1e-05
   l2_lambda: 1e-06
+  need_coreset: False
   expr_type: FORGET
   model: SFHPS
   support_model: ["LARGE_FC_MNIST"]
