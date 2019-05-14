@@ -14,7 +14,7 @@ from SFNBase import SFN
 from utils import get_dims_from_config, print_all_vars, \
     with_tf_device_gpu, with_tf_device_cpu
 
-from cges.cges import cges
+from cges.cges import cges, get_sparsity_of_variable
 
 
 def parse_pool_key(pool_name):
@@ -78,12 +78,14 @@ class SFLCL(SFN):
             os.makedirs(self.checkpoint_dir)
 
         # CGES params
-        self.use_cges = True
-        self.cges_lambda = config.cges_lambda
-        self.cges_mu = config.cges_mu
-        self.cges_chvar = config.cges_chvar
-        self.group_layerwise = [eval(str(gl)) for gl in config.group_layerwise]
-        self.exclusive_layerwise = [eval(str(el)) for el in config.exclusive_layerwise]
+        self.use_cges = config.use_cges
+        if self.use_cges:
+            self.lr_decay_rate = config.lr_decay_rate
+            self.cges_lambda = config.cges_lambda
+            self.cges_mu = config.cges_mu
+            self.cges_chvar = config.cges_chvar
+            self.group_layerwise = [eval(str(gl)) for gl in config.group_layerwise]
+            self.exclusive_layerwise = [eval(str(el)) for el in config.exclusive_layerwise]
 
         self.yhat = None
         self.loss = None
@@ -95,15 +97,17 @@ class SFLCL(SFN):
         cprint("Device info: {}".format(self.get_real_device_info()), "green")
 
     def save(self, model_name=None, model_middle_path=None):
-        model_middle_path = model_middle_path or "_".join(self.get_real_device_info())
-        if self.use_cges:
-            model_middle_path = os.path.join("cges", model_middle_path)
+        if not self.use_cges:
+            model_middle_path = model_middle_path or "_".join(self.get_real_device_info())
+        else:
+            model_middle_path = model_middle_path or "cges-{}".format("_".join(self.get_real_device_info()))
         super().save(model_name=model_name, model_middle_path=model_middle_path)
 
     def restore(self, model_name=None, model_middle_path=None, build_model=True):
-        model_middle_path = model_middle_path or "_".join(self.get_real_device_info())
-        if self.use_cges:
-            model_middle_path = os.path.join("cges", model_middle_path)
+        if not self.use_cges:
+            model_middle_path = model_middle_path or "_".join(self.get_real_device_info())
+        else:
+            model_middle_path = model_middle_path or "cges-{}".format("_".join(self.get_real_device_info()))
         restored = super().restore(model_name, model_middle_path, build_model)
         return restored
 
@@ -254,7 +258,7 @@ class SFLCL(SFN):
         return X, Y, keep_prob, is_training
 
     @with_tf_device_gpu
-    def initial_train(self, print_iter=10, *args):
+    def initial_train(self, print_iter=100, *args):
 
         X, Y, keep_prob, is_training = self.build_model()
 
@@ -271,11 +275,24 @@ class SFLCL(SFN):
         self.loss += regularization_loss
 
         if self.use_cges:
-            cges_op, op_list = cges(self.init_lr, self.cges_lambda, self.cges_mu, self.cges_chvar,
+
+            global_step = tf.get_variable("global_step", shape=[], initializer=tf.zeros_initializer())
+            decayed_learning_rate = tf.train.exponential_decay(
+                learning_rate=self.init_lr,
+                global_step=global_step,
+                decay_steps=self.max_iter,
+                decay_rate=self.lr_decay_rate,
+                staircase=True,
+                name="decayed_learning_rate",
+            )
+
+            cges_op, op_list = cges(decayed_learning_rate, self.cges_lambda, self.cges_mu, self.cges_chvar,
                                     group_layerwise=self.group_layerwise,
                                     exclusive_layerwise=self.exclusive_layerwise,
                                     variable_filter=lambda name: "weight" in name)
-            opt = tf.train.GradientDescentOptimizer(learning_rate=self.init_lr, name="opt").minimize(self.loss)
+            opt = tf.train.GradientDescentOptimizer(
+                learning_rate=decayed_learning_rate,
+                name="opt").minimize(self.loss, global_step=global_step)
         else:
             opt = tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt").minimize(self.loss)
             cges_op = []
@@ -308,6 +325,16 @@ class SFLCL(SFN):
                     epoch, self.get_real_device_info()), "green")
                 self.predict_perform(test_x, test_labels)
                 print("   [*] loss: {}".format(loss_sum))
+
+                if self.use_cges:
+                    cprint("\n SPARSITY COMPUTATION at ITERATION {} on Devices {}".format(
+                        epoch, self.get_real_device_info()), "green")
+                    variable_to_be_sparsed = [v for v in tf.trainable_variables() if "weight" in v.name]
+                    tsp, sp_list = get_sparsity_of_variable(self.sess, variables=variable_to_be_sparsed)
+                    print("   [*] Total sparsity: {}".format(tsp))
+                    print("   [*] Sparsities:")
+                    for v, s in zip(variable_to_be_sparsed, sp_list):
+                        print("     - {}: {}".format(v.name, s))
 
     def get_data_stream_from_task_as_class_data(self, shuffle=True, base_seed=42) -> Tuple[np.ndarray, ...]:
         """a method that combines data divided by class"""

@@ -10,7 +10,7 @@ basic: &BASIC
   importance_criteria: first_Taylor_approximation
   need_coreset: True
   online_importance: False
-  gpu_num_list: [1]
+  gpu_num_list: [0]
   coreset_size: 1000
   use_cges: False
 
@@ -85,21 +85,25 @@ SFLCL10_FORGET:
   max_iter: 2000
   l1_lambda: 0.0
   l2_lambda: 1e-05
+  need_coreset: False
   expr_type: FORGET
   model: SFLCL
   support_model: ["SMALL_CONV_MNIST", "ALEXNETV_MNIST", "ALEXNETV_CIFAR10"]
 
 SFLCL10_CGES:
   <<: *BASIC
-  max_iter: 2000
+  lr: 0.05
+  lr_decay_rate: 0.999
+  max_iter: 50 #2000
   l1_lambda: 0.0
   l2_lambda: 0.0
   use_cges: True
-  cges_lambda: 0.0
-  cges_mu: 0.0
-  cges_chvar: 0.0
-  group_layerwise: [1., 1., 1. / 15, 1. / 64, 1. / 144, 1. / 256, 1. / 256, 1.]
-  exclusive_layerwise: [1., 0.5, 15., 64., 144., 256., 256., 1.]
+  cges_lambda: 0.000003
+  cges_mu: 0.8
+  cges_chvar: 0.2
+  group_layerwise: [1., 1., 0.9, 0.9, 0.9, 1., 1., 1. / 16]
+  exclusive_layerwise: [1., 1.1, 1.1, 1.1, 1.1, 2., 2., 16.]
+  need_coreset: False
   expr_type: FORGET
   model: SFLCL
   support_model: ["SMALL_CONV_MNIST", "ALEXNETV_MNIST", "ALEXNETV_CIFAR10"]
@@ -110,6 +114,7 @@ SFLCL20_FORGET:
   n_tasks: 20
   l1_lambda: 1e-06
   l2_lambda: 1e-06
+  need_coreset: False
   expr_type: FORGET
   model: SFLCL
   support_model: ["ALEXNETV_COARSE_CIFAR100"]
@@ -120,6 +125,7 @@ SFLCL100_FORGET:
   n_tasks: 100
   l1_lambda: 1e-06
   l2_lambda: 1e-06
+  need_coreset: False
   expr_type: FORGET
   model: SFLCL
   support_model: ["ALEXNETV_CIFAR100"]

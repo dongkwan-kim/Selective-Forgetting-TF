@@ -21,13 +21,13 @@ def load_experiment_and_model_params() -> MyParams:
 
             # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET, SFEWC_FORGET,
             # SFLCL10_FORGET, SFLCL20_FORGET, SFLCL100_FORGET,
-            # SFLCL10_CGES, SFHPS_CGES,
-            to_yaml_path("experiment.yaml"): "SFHPS_CGES",
+            # SFLCL10_CGES,
+            to_yaml_path("experiment.yaml"): "SFLCL10_CGES",
 
             # SMALL_FC_MNIST, LARGE_FC_MNIST, XLARGE_FC_MNIST
             # SMALL_CONV_MNIST, ALEXNETV_MNIST,
             # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-            to_yaml_path("models.yaml"): "LARGE_FC_MNIST",
+            to_yaml_path("models.yaml"): "ALEXNETV_MNIST",
 
         },
         value_magician={
