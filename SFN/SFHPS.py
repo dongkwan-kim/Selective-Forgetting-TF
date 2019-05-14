@@ -31,7 +31,6 @@ class SFHPS(SFN):
         self.max_iter = config.max_iter
         self.task_iter = config.task_iter
         self.init_lr = config.lr
-        self.lr_decay_rate = config.lr_decay_rate
         self.l1_lambda = config.l1_lambda
         self.l2_lambda = config.l2_lambda
         self.checkpoint_dir = config.checkpoint_dir
@@ -39,12 +38,14 @@ class SFHPS(SFN):
             os.makedirs(self.checkpoint_dir)
 
         # CGES params
-        self.use_cges = True
-        self.cges_lambda = config.cges_lambda
-        self.cges_mu = config.cges_mu
-        self.cges_chvar = config.cges_chvar
-        self.group_layerwise = [eval(str(gl)) for gl in config.group_layerwise]
-        self.exclusive_layerwise = [eval(str(el)) for el in config.exclusive_layerwise]
+        self.use_cges = config.use_cges
+        if self.use_cges:
+            self.lr_decay_rate = config.lr_decay_rate
+            self.cges_lambda = config.cges_lambda
+            self.cges_mu = config.cges_mu
+            self.cges_chvar = config.cges_chvar
+            self.group_layerwise = [eval(str(gl)) for gl in config.group_layerwise]
+            self.exclusive_layerwise = [eval(str(el)) for el in config.exclusive_layerwise]
 
         self.yhat_list = []
         self.loss_list = []

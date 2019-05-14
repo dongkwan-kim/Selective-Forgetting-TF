@@ -12,6 +12,7 @@ basic: &BASIC
   online_importance: False
   gpu_num_list: [1]
   coreset_size: 1000
+  use_cges: False
 
 SFDEN_FORGET: &SFDEN_FORGET
   <<: *BASIC
@@ -68,6 +69,7 @@ SFHPS_CGES:
   task_iter: 3000
   l1_lambda: 0.0
   l2_lambda: 0.0
+  use_cges: True
   cges_lambda: 0.0001
   cges_mu: 0.8
   cges_chvar: 0.2
@@ -92,6 +94,7 @@ SFLCL10_CGES:
   max_iter: 2000
   l1_lambda: 0.0
   l2_lambda: 0.0
+  use_cges: True
   cges_lambda: 0.0
   cges_mu: 0.0
   cges_chvar: 0.0
