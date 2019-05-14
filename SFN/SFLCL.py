@@ -79,11 +79,13 @@ class SFLCL(SFN):
 
         # CGES params
         self.use_cges = True
-        self.cges_lambda = config.cges_lambda
-        self.cges_mu = config.cges_mu
-        self.cges_chvar = config.cges_chvar
-        self.group_layerwise = [eval(str(gl)) for gl in config.group_layerwise]
-        self.exclusive_layerwise = [eval(str(el)) for el in config.exclusive_layerwise]
+        if self.use_cges:
+            self.lr_decay_rate = config.lr_decay_rate
+            self.cges_lambda = config.cges_lambda
+            self.cges_mu = config.cges_mu
+            self.cges_chvar = config.cges_chvar
+            self.group_layerwise = [eval(str(gl)) for gl in config.group_layerwise]
+            self.exclusive_layerwise = [eval(str(el)) for el in config.exclusive_layerwise]
 
         self.yhat = None
         self.loss = None
@@ -273,11 +275,24 @@ class SFLCL(SFN):
         self.loss += regularization_loss
 
         if self.use_cges:
-            cges_op, op_list = cges(self.init_lr, self.cges_lambda, self.cges_mu, self.cges_chvar,
+
+            global_step = tf.get_variable("global_step", shape=[], initializer=tf.zeros_initializer())
+            decayed_learning_rate = tf.train.exponential_decay(
+                learning_rate=self.init_lr,
+                global_step=global_step,
+                decay_steps=self.max_iter,
+                decay_rate=self.lr_decay_rate,
+                staircase=True,
+                name="decayed_learning_rate",
+            )
+
+            cges_op, op_list = cges(decayed_learning_rate, self.cges_lambda, self.cges_mu, self.cges_chvar,
                                     group_layerwise=self.group_layerwise,
                                     exclusive_layerwise=self.exclusive_layerwise,
                                     variable_filter=lambda name: "weight" in name)
-            opt = tf.train.GradientDescentOptimizer(learning_rate=self.init_lr, name="opt").minimize(self.loss)
+            opt = tf.train.GradientDescentOptimizer(
+                learning_rate=decayed_learning_rate,
+                name="opt").minimize(self.loss, global_step=global_step)
         else:
             opt = tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt").minimize(self.loss)
             cges_op = []
@@ -314,9 +329,12 @@ class SFLCL(SFN):
                 if self.use_cges:
                     cprint("\n SPARSITY COMPUTATION at ITERATION {} on Devices {}".format(
                         epoch, self.get_real_device_info()), "green")
-                    tsp, sp_list = get_sparsity_of_variable(self.sess, variable_filter=lambda name: "weight" in name)
+                    variable_to_be_sparsed = [v for v in tf.trainable_variables() if "weight" in v.name]
+                    tsp, sp_list = get_sparsity_of_variable(self.sess, variables=variable_to_be_sparsed)
                     print("   [*] Total sparsity: {}".format(tsp))
-                    print("   [*] Sparsities: {}".format(sp_list))
+                    print("   [*] Sparsities:")
+                    for v, s in zip(variable_to_be_sparsed, sp_list):
+                        print("     - {}: {}".format(v.name, s))
 
     def get_data_stream_from_task_as_class_data(self, shuffle=True, base_seed=42) -> Tuple[np.ndarray, ...]:
         """a method that combines data divided by class"""
