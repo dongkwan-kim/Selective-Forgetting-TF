@@ -31,6 +31,7 @@ class SFHPS(SFN):
         self.max_iter = config.max_iter
         self.task_iter = config.task_iter
         self.init_lr = config.lr
+        self.lr_decay_rate = config.lr_decay_rate
         self.l1_lambda = config.l1_lambda
         self.l2_lambda = config.l2_lambda
         self.checkpoint_dir = config.checkpoint_dir
@@ -162,7 +163,7 @@ class SFHPS(SFN):
         return X, Y_list
 
     @with_tf_device_gpu
-    def initial_train(self, print_iter=100):
+    def initial_train(self, print_iter=1000):
 
         X, Y_list = self.build_model()
 
@@ -183,13 +184,28 @@ class SFHPS(SFN):
             opt_list = []
             cges_op_list = []
             for t, loss in enumerate(self.loss_list):
-                cges_op, _ = cges(self.init_lr, self.cges_lambda, self.cges_mu, self.cges_chvar,
+
+                global_step = tf.get_variable("global_step%d" % (t + 1),
+                                              shape=[], initializer=tf.zeros_initializer())
+                decayed_learning_rate = tf.train.exponential_decay(
+                    learning_rate=self.init_lr,
+                    global_step=global_step,
+                    decay_steps=self.task_iter,
+                    decay_rate=self.lr_decay_rate,
+                    staircase=True,
+                    name="decayed_learning_rate%d" % (t + 1)
+                )
+
+                cges_op, _ = cges(decayed_learning_rate, self.cges_lambda, self.cges_mu, self.cges_chvar,
                                   group_layerwise=self.group_layerwise,
                                   exclusive_layerwise=self.exclusive_layerwise,
                                   variable_filter=lambda name: ("weight:0" in name or
                                                                 "weight_{}:0".format(t + 1) in name))
-                opt_list.append(tf.train.GradientDescentOptimizer(learning_rate=self.init_lr,
-                                                                  name="opt%d" % (t + 1)).minimize(loss))
+
+                opt_list.append(tf.train.GradientDescentOptimizer(
+                    learning_rate=decayed_learning_rate,
+                    name="opt%d" % (t + 1)).minimize(loss, global_step=global_step))
+
                 cges_op_list.append(cges_op)
 
         else:
@@ -222,7 +238,8 @@ class SFHPS(SFN):
             start_train_idx = next_train_idx % len(self.trainXs[0])
 
             if task_iter % print_iter == 0 or task_iter == self.task_iter - 1:
-                print('\n OVERALL EVALUATION at ITERATION {}'.format(task_iter))
+                cprint('\n OVERALL EVALUATION at ITERATION {} on Devices {}'.format(
+                    task_iter, self.get_real_device_info()), "green")
                 overall_perfs = []
                 for t in range(self.n_tasks):
                     temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.get_test_labels(t + 1))
@@ -233,9 +250,12 @@ class SFHPS(SFN):
                 if self.use_cges:
                     cprint("\n SPARSITY COMPUTATION at ITERATION {} on Devices {}".format(
                         task_iter, self.get_real_device_info()), "green")
-                    tsp, sp_list = get_sparsity_of_variable(self.sess, variable_filter=lambda name: "weight" in name)
+                    variable_to_be_sparsed = [v for v in tf.trainable_variables() if "weight" in v.name]
+                    tsp, sp_list = get_sparsity_of_variable(self.sess, variables=variable_to_be_sparsed)
                     print("   [*] Total sparsity: {}".format(tsp))
-                    print("   [*] Sparsities: {}".format(sp_list))
+                    print("   [*] Sparsities:")
+                    for v, s in zip(variable_to_be_sparsed, sp_list):
+                        print("     - {}: {}".format(v.name, s))
 
     def _train_at_task(self, X, Y, loss, train_step, data):
         train_xs_t, train_labels_t, val_xs_t, val_labels_t, test_xs_t, test_labels_t = data
