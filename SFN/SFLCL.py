@@ -78,7 +78,7 @@ class SFLCL(SFN):
             os.makedirs(self.checkpoint_dir)
 
         # CGES params
-        self.use_cges = True
+        self.use_cges = config.use_cges
         if self.use_cges:
             self.lr_decay_rate = config.lr_decay_rate
             self.cges_lambda = config.cges_lambda
