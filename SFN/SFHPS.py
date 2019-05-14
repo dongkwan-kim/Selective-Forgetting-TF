@@ -8,7 +8,9 @@ from DEN.ops import ROC_AUC
 from termcolor import cprint
 
 from SFNBase import SFN
-from utils import get_dims_from_config, print_all_vars
+from utils import get_dims_from_config, print_all_vars, with_tf_device_cpu, with_tf_device_gpu
+
+from cges.cges import cges, get_sparsity_of_variable
 
 
 class SFHPS(SFN):
@@ -35,23 +37,43 @@ class SFHPS(SFN):
         if not os.path.isdir(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
 
+        # CGES params
+        self.use_cges = config.use_cges
+        if self.use_cges:
+            self.lr_decay_rate = config.lr_decay_rate
+            self.cges_lambda = config.cges_lambda
+            self.cges_mu = config.cges_mu
+            self.cges_chvar = config.cges_chvar
+            self.group_layerwise = [eval(str(gl)) for gl in config.group_layerwise]
+            self.exclusive_layerwise = [eval(str(el)) for el in config.exclusive_layerwise]
+
         self.yhat_list = []
         self.loss_list = []
 
         self.create_model_variables()
         self.set_layer_types()
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
+        cprint("Device info: {}".format(self.get_real_device_info()), "green")
+
+    def save(self, model_name=None, model_middle_path=None):
+        if self.use_cges:
+            model_middle_path = "cges/"
+        super().save(model_name=model_name, model_middle_path=model_middle_path)
 
     def restore(self, model_name=None, model_middle_path=None, build_model=True):
+        if self.use_cges:
+            model_middle_path = "cges/"
         restored = super().restore(model_name, model_middle_path, build_model)
         return restored
 
+    @with_tf_device_cpu
     def create_variable(self, scope, name, shape, trainable=True) -> tf.Variable:
         with tf.variable_scope(scope):
             w = tf.get_variable(name, shape, trainable=trainable)
             self.params[w.name] = w
         return w
 
+    @with_tf_device_cpu
     def get_variable(self, scope, name, trainable=True) -> tf.Variable:
         with tf.variable_scope(scope, reuse=True):
             w = tf.get_variable(name, trainable=trainable)
@@ -134,14 +156,15 @@ class SFHPS(SFN):
             y = tf.matmul(bottom, w) + b
 
             yhat = tf.nn.sigmoid(y)
-            loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y_list[t-1]))
+            loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y_list[t - 1]))
 
             self.yhat_list.append(yhat)
             self.loss_list.append(loss)
 
         return X, Y_list
 
-    def initial_train(self, print_iter=100):
+    @with_tf_device_gpu
+    def initial_train(self, print_iter=1000):
 
         X, Y_list = self.build_model()
 
@@ -158,8 +181,38 @@ class SFHPS(SFN):
             regularization_loss = tf.contrib.layers.apply_regularization(l1_l2_regularizer, vars_of_task)
             self.loss_list[i] += regularization_loss
 
-        opt_list = [tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt%d" % (i+1)).minimize(loss)
-                    for i, loss in enumerate(self.loss_list)]
+        if self.use_cges:
+            opt_list = []
+            cges_op_list = []
+            for t, loss in enumerate(self.loss_list):
+
+                global_step = tf.get_variable("global_step%d" % (t + 1),
+                                              shape=[], initializer=tf.zeros_initializer())
+                decayed_learning_rate = tf.train.exponential_decay(
+                    learning_rate=self.init_lr,
+                    global_step=global_step,
+                    decay_steps=self.task_iter,
+                    decay_rate=self.lr_decay_rate,
+                    staircase=True,
+                    name="decayed_learning_rate%d" % (t + 1)
+                )
+
+                cges_op, _ = cges(decayed_learning_rate, self.cges_lambda, self.cges_mu, self.cges_chvar,
+                                  group_layerwise=self.group_layerwise,
+                                  exclusive_layerwise=self.exclusive_layerwise,
+                                  variable_filter=lambda name: ("weight:0" in name or
+                                                                "weight_{}:0".format(t + 1) in name))
+
+                opt_list.append(tf.train.GradientDescentOptimizer(
+                    learning_rate=decayed_learning_rate,
+                    name="opt%d" % (t + 1)).minimize(loss, global_step=global_step))
+
+                cges_op_list.append(cges_op)
+
+        else:
+            opt_list = [tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt%d" % (i + 1)).minimize(loss)
+                        for i, loss in enumerate(self.loss_list)]
+            cges_op_list = []
 
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
@@ -180,16 +233,30 @@ class SFHPS(SFN):
                         self.data_labels.get_test_labels(t + 1))
                 self._train_at_task(X, Y_list[t], self.loss_list[t], opt_list[t], data)
 
+                if self.use_cges:
+                    _ = self.sess.run(cges_op_list[t])
+
             start_train_idx = next_train_idx % len(self.trainXs[0])
 
             if task_iter % print_iter == 0 or task_iter == self.task_iter - 1:
-                print('\n OVERALL EVALUATION at ITERATION {}'.format(task_iter))
+                cprint('\n OVERALL EVALUATION at ITERATION {} on Devices {}'.format(
+                    task_iter, self.get_real_device_info()), "green")
                 overall_perfs = []
                 for t in range(self.n_tasks):
                     temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.get_test_labels(t + 1))
                     overall_perfs.append(temp_perf)
                 avg_perfs.append(sum(overall_perfs) / float(self.n_tasks))
                 print("   [*] avg_perf: %.4f" % avg_perfs[-1])
+
+                if self.use_cges:
+                    cprint("\n SPARSITY COMPUTATION at ITERATION {} on Devices {}".format(
+                        task_iter, self.get_real_device_info()), "green")
+                    variable_to_be_sparsed = [v for v in tf.trainable_variables() if "weight" in v.name]
+                    tsp, sp_list = get_sparsity_of_variable(self.sess, variables=variable_to_be_sparsed)
+                    print("   [*] Total sparsity: {}".format(tsp))
+                    print("   [*] Sparsities:")
+                    for v, s in zip(variable_to_be_sparsed, sp_list):
+                        print("     - {}: {}".format(v.name, s))
 
     def _train_at_task(self, X, Y, loss, train_step, data):
         train_xs_t, train_labels_t, val_xs_t, val_labels_t, test_xs_t, test_labels_t = data
@@ -201,6 +268,7 @@ class SFHPS(SFN):
                 _, loss_val = self.sess.run([train_step, loss], feed_dict={X: batch_x, Y: batch_y})
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
+    @with_tf_device_gpu
     def get_importance_vector(self, task_id, importance_criteria: str,
                               layer_separate=False, use_coreset=False) -> tuple or np.ndarray:
         print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)

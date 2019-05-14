@@ -12,7 +12,7 @@ from tqdm import trange
 
 from data import Coreset, DataLabel
 from enums import UnitType
-from utils import build_line_of_list, print_all_vars, get_zero_expanded_matrix, parse_var_name
+from utils import build_line_of_list, print_all_vars, get_zero_expanded_matrix, parse_var_name, get_available_gpu_names
 from utils_importance import *
 
 
@@ -50,6 +50,10 @@ class SFN:
         self.importance_criteria = config.importance_criteria
         self.online_importance = config.online_importance
 
+        self.gpu_names = get_available_gpu_names(config.gpu_num_list)
+        self.gpu_num_list = config.gpu_num_list
+        assert len(self.gpu_names) <= 1, "Not support multi-GPU, yet"
+
         self.prediction_history: Dict[str, List] = defaultdict(list)
         self.pruning_rate_history: Dict[str, List] = defaultdict(list)
         self.layer_to_removed_neuron_set: Dict[str, set] = defaultdict(set)
@@ -73,6 +77,12 @@ class SFN:
 
     def __repr__(self):
         return "{}_{}_{}".format(self.__class__.__name__, self.n_tasks, "_".join(map(str, self.dims)))
+
+    def get_real_device_info(self) -> List[str]:
+        if self.gpu_num_list:
+            return ["gpu-{}".format(gn) for gn in self.gpu_num_list]
+        else:
+            return ["cpu"]
 
     def set_layer_types(self, *args, **kwargs):
         """Set self.layer_types, the list of types (prefix of scope) (e.g. layer, conv, fc, ...)"""
@@ -256,6 +266,7 @@ class SFN:
 
         mean_perf_except_t = None
         min_perf_except_t = None
+        max_decline_except_t = None
 
         for policy, history in self.prediction_history.items():
 
@@ -277,30 +288,44 @@ class SFN:
             history_txn_except_t = np.delete(history_txn, task_id - 1, axis=0)
             history_n_mean_except_t = np.mean(history_txn_except_t, axis=0)
             history_n_min_except_t = np.min(history_txn_except_t, axis=0)
+            history_n_max_decline_except_t = np.max(history_txn_except_t[:, [0]] - history_txn_except_t, axis=0)
 
             if mean_perf_except_t is None:
                 mean_perf_except_t = history_n_mean_except_t
                 min_perf_except_t = history_n_min_except_t
+                max_decline_except_t = history_n_max_decline_except_t
             else:
                 mean_perf_except_t = np.vstack((mean_perf_except_t, history_n_mean_except_t))
                 min_perf_except_t = np.vstack((min_perf_except_t, history_n_min_except_t))
+                max_decline_except_t = np.vstack((max_decline_except_t, history_n_max_decline_except_t))
 
         policy_keys = [policy for policy in self.prediction_history.keys()]
-        build_line_of_list(x_or_x_list=[self.pruning_rate_history[policy] for policy in policy_keys],
+        pruning_rate_as_x_list = [self.pruning_rate_history[policy] for policy in policy_keys]
+
+        build_line_of_list(x_or_x_list=pruning_rate_as_x_list,
                            y_list=mean_perf_except_t,
                            label_y_list=policy_keys,
                            xlabel="Pruning rate", ylabel="Mean of Average Per-task AUROC",
                            ylim=ylim or [0.5, 1],
-                           title="Mean Performance Without Task-{}".format(task_id),
+                           title="Mean Perf. Without Task-{}".format(task_id),
                            file_name="{}_{}_MeanAcc{}".format(
                                file_prefix, self.importance_criteria.split("_")[0], file_extension),
                            highlight_ylabels=highlight_ylabels)
-        build_line_of_list(x_or_x_list=[self.pruning_rate_history[policy] for policy in policy_keys],
+        build_line_of_list(x_or_x_list=pruning_rate_as_x_list,
+                           y_list=max_decline_except_t,
+                           label_y_list=policy_keys,
+                           xlabel="Pruning rate", ylabel="Max of decline Per-task AUROC",
+                           ylim=ylim or [-0.05, 0.5],
+                           title="Max Decline of Perf. Without Task-{}".format(task_id),
+                           file_name="{}_{}_MaxDecline{}".format(
+                               file_prefix, self.importance_criteria.split("_")[0], file_extension),
+                           highlight_ylabels=highlight_ylabels)
+        build_line_of_list(x_or_x_list=pruning_rate_as_x_list,
                            y_list=min_perf_except_t,
                            label_y_list=policy_keys,
                            xlabel="Pruning rate", ylabel="Min of Average Per-task AUROC",
                            ylim=ylim or [0.5, 1],
-                           title="Minimum Performance Without Task-{}".format(task_id),
+                           title="Minimum Perf. Without Task-{}".format(task_id),
                            file_name="{}_{}_MinAcc{}".format(
                                file_prefix, self.importance_criteria.split("_")[0], file_extension),
                            highlight_ylabels=highlight_ylabels)
@@ -416,6 +441,10 @@ class SFN:
 
         elif relatedness_type == "symmetric_unit_level":
             rho = np.tanh(tau / (_e + np.abs(i_mat_to_remember - mean_i_mat_to_forget)))  # (T - |S|, |H|)
+
+        elif relatedness_type == "asymmetric_unit_level":
+            rho = np.tanh(tau * np.abs(i_mat_to_remember)
+                          / (_e + np.abs(i_mat_to_remember - mean_i_mat_to_forget)))  # (T - |S|, |H|)
 
         elif relatedness_type == "constant":
             rho = np.ones(i_mat_to_remember.shape)

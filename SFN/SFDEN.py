@@ -10,7 +10,8 @@ from SFNBase import SFN
 
 import tensorflow as tf
 import numpy as np
-from utils import build_line_of_list, get_zero_expanded_matrix, parse_var_name
+from utils import build_line_of_list, get_zero_expanded_matrix, parse_var_name, print_all_vars, with_tf_device_cpu, \
+    with_tf_device_gpu
 
 
 class SFDEN(DEN, SFN):
@@ -26,6 +27,9 @@ class SFDEN(DEN, SFN):
         DEN.__init__(self, config)
         self.attr_to_save += ["T", "time_stamp"]
         self.set_layer_types()
+
+        print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
+        cprint("Device info: {}".format(self.get_real_device_info()), "green")
 
     # Variable, params, ... attributes Manipulation
 
@@ -55,6 +59,7 @@ class SFDEN(DEN, SFN):
         self.sess = tf.Session()
         self.load_params(params)
 
+    @with_tf_device_cpu
     def get_variables_for_sfden(self, layer_id: int, stamp: list, task_id: int, var_prefix: str,
                                 is_bottom=False, is_forgotten=False):
         """
@@ -107,6 +112,7 @@ class SFDEN(DEN, SFN):
 
     # Train DEN: code from github.com/dongkwan-kim/DEN/blob/master/DEN/DEN_run.py
 
+    @with_tf_device_gpu
     def initial_train(self):
         params = dict()
         avg_perf = []
@@ -247,6 +253,7 @@ class SFDEN(DEN, SFN):
     # Importance vectors
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
+    @with_tf_device_gpu
     def get_importance_vector(self, task_id, importance_criteria: str,
                               layer_separate=False, use_coreset=False) -> tuple or np.ndarray:
         print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)

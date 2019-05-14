@@ -41,3 +41,4 @@ Werkzeug==0.15.2
 wrapt==1.11.1
 git+https://github.com/dongkwan-kim/DEN.git
 git+https://github.com/dongkwan-kim/reject.git
+git+https://github.com/dongkwan-kim/CGES.git

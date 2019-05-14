@@ -17,19 +17,19 @@ SMALL_FC_MNIST:
   OURS:
     FILTER:
       mixing_coeff: 0
-      tau: 0.005
+      tau: 0
     NEURON:
-      mixing_coeff: 0.4
+      mixing_coeff: 0.63
       relatedness_type: "symmetric_unit_level"
       tau: 0.005
 
   CONST:
     FILTER:
       mixing_coeff: 0
-      tau: 0.005
+      tau: 0
     NEURON:
-      mixing_coeff: 0.25
-      tau: 0.005
+      mixing_coeff: 0.5
+      tau: 0
 
 LARGE_FC_MNIST:
   <<: *DEFAULT
@@ -37,50 +37,75 @@ LARGE_FC_MNIST:
   OURS:
     FILTER:
       mixing_coeff: 0
-      tau: 0.005
+      tau: 0
     NEURON:
-      mixing_coeff: 0.8
+      mixing_coeff: 0.85
       relatedness_type: "symmetric_unit_level"
       tau: 0.005
 
   CONST:
     FILTER:
       mixing_coeff: 0
-      tau: 0.005
+      tau: 0
     NEURON:
-      mixing_coeff: 0.75
-      tau: 0.005
+      mixing_coeff: 0.5
+      tau: 0
 
 XLARGE_FC_MNIST:
   <<: *DEFAULT
   OURS:
     FILTER:
       mixing_coeff: 0
-      tau: 0.00000025
+      tau: 0
     NEURON:
-      mixing_coeff: 0.25
+      mixing_coeff: 0.994
       relatedness_type: "symmetric_unit_level"
-      tau: 0.00000025
+      tau: 0.00075
 
   CONST:
     FILTER:
       mixing_coeff: 0
-      tau: 0.00000025
+      tau: 0
     NEURON:
-      mixing_coeff: 0.75
-      tau: 0.00000025
+      mixing_coeff: 0.994
+      tau: 0
 
 ALEXNETV_CIFAR10:
   <<: *DEFAULT
   OURS:
     FILTER:
-      mixing_coeff: 0
-    NEURON:
-      mixing_coeff: 0.25
+      mixing_coeff: 0.995
       relatedness_type: "symmetric_unit_level"
+      tau: 1.5
+    NEURON:
+      mixing_coeff: 0
+      relatedness_type: "symmetric_unit_level"
+      tau: 0
 
   CONST:
     FILTER:
-      mixing_coeff: 0
+      mixing_coeff: 0.75
+      tau: 0
     NEURON:
-      mixing_coeff: 0.15
+      mixing_coeff: 0
+      tau: 0
+
+ALEXNETV_MNIST:
+  <<: *DEFAULT
+  OURS:
+    FILTER:
+      mixing_coeff: 0.995
+      relatedness_type: "symmetric_unit_level"
+      tau: 1.5
+    NEURON:
+      mixing_coeff: 0
+      relatedness_type: "symmetric_unit_level"
+      tau: 0
+
+  CONST:
+    FILTER:
+      mixing_coeff: 0.4
+      tau: 0
+    NEURON:
+      mixing_coeff: 0
+      tau: 0
