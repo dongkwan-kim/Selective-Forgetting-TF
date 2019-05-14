@@ -27,7 +27,7 @@ def load_experiment_and_model_params() -> MyParams:
             # SMALL_FC_MNIST, LARGE_FC_MNIST, XLARGE_FC_MNIST
             # SMALL_CONV_MNIST, ALEXNETV_MNIST,
             # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-            to_yaml_path("models.yaml"): "ALEXNETV_CIFAR10",
+            to_yaml_path("models.yaml"): "ALEXNETV_MNIST",
 
         },
         value_magician={
