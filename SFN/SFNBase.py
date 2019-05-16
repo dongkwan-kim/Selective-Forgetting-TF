@@ -262,11 +262,12 @@ class SFN:
                 mean_perf = np.mean(perf_except_t)
                 print("\t".join([str(pruning_rate)] + [str(x) for x in perf] + [str(mean_perf)]))
 
-    def draw_chart_summary(self, task_id, file_prefix=None, file_extension=".png", ylim=None, highlight_ylabels=None):
+    def draw_chart_summary(self, task_id_or_ids, file_prefix=None, file_extension=".png", ylim=None, highlight_ylabels=None):
 
         mean_perf_except_t = None
         min_perf_except_t = None
         max_decline_except_t = None
+        task_id_list = [task_id_or_ids] if isinstance(task_id_or_ids, int) else task_id_or_ids
 
         for policy, history in self.prediction_history.items():
 
@@ -283,9 +284,9 @@ class SFN:
                                title="AUROC by {} Neuron Deletion".format(policy),
                                file_name="{}_{}_{}{}".format(
                                    file_prefix, self.importance_criteria.split("_")[0], policy, file_extension),
-                               highlight_ylabels=[task_id])
+                               highlight_ylabels=task_id_list)
 
-            history_txn_except_t = np.delete(history_txn, task_id - 1, axis=0)
+            history_txn_except_t = np.delete(history_txn, [tid - 1 for tid in task_id_list], axis=0)
             history_n_mean_except_t = np.mean(history_txn_except_t, axis=0)
             history_n_min_except_t = np.min(history_txn_except_t, axis=0)
             history_n_max_decline_except_t = np.max(history_txn_except_t[:, [0]] - history_txn_except_t, axis=0)
@@ -307,7 +308,7 @@ class SFN:
                            label_y_list=policy_keys,
                            xlabel="Pruning rate", ylabel="Mean of Average Per-task AUROC",
                            ylim=ylim or [0.5, 1],
-                           title="Mean Perf. Without Task-{}".format(task_id),
+                           title="Mean Perf. Without Task-{}".format(task_id_list),
                            file_name="{}_{}_MeanAcc{}".format(
                                file_prefix, self.importance_criteria.split("_")[0], file_extension),
                            highlight_ylabels=highlight_ylabels)
@@ -316,7 +317,7 @@ class SFN:
                            label_y_list=policy_keys,
                            xlabel="Pruning rate", ylabel="Max of decline Per-task AUROC",
                            ylim=ylim or [-0.05, 0.5],
-                           title="Max Decline of Perf. Without Task-{}".format(task_id),
+                           title="Max Decline of Perf. Without Task-{}".format(task_id_list),
                            file_name="{}_{}_MaxDecline{}".format(
                                file_prefix, self.importance_criteria.split("_")[0], file_extension),
                            highlight_ylabels=highlight_ylabels)
@@ -325,7 +326,7 @@ class SFN:
                            label_y_list=policy_keys,
                            xlabel="Pruning rate", ylabel="Min of Average Per-task AUROC",
                            ylim=ylim or [0.5, 1],
-                           title="Minimum Perf. Without Task-{}".format(task_id),
+                           title="Minimum Perf. Without Task-{}".format(task_id_list),
                            file_name="{}_{}_MinAcc{}".format(
                                file_prefix, self.importance_criteria.split("_")[0], file_extension),
                            highlight_ylabels=highlight_ylabels)
@@ -523,7 +524,9 @@ class SFN:
             unit_indexes = self.get_random_units(number_of_units, utype)
         elif policy == "ALL_MEAN":
             unit_indexes = self.get_units_with_task_related_deviation([], number_of_units, utype,
-                                                                      mixing_coeff=0, relatedness_type="constant")
+                                                                      mixing_coeff=0,
+                                                                      relatedness_type="constant",
+                                                                      tau=0)
         elif policy == "ALL_CONST":
             unit_indexes = self.get_units_with_task_related_deviation([], number_of_units, utype,
                                                                       relatedness_type="constant", **kwargs)
