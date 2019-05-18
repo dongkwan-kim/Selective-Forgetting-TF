@@ -578,11 +578,12 @@ class SFN:
         self.params[b.name] = b
 
     def sequentially_selective_forget_and_predict(self,
-                                                  task_to_forget,
+                                                  task_to_forget: list or int,
                                                   utype_to_one_step_units: dict,
                                                   steps_to_forget,
                                                   policy,
-                                                  params_of_utype: dict):
+                                                  params_of_utype: dict,
+                                                  fast_skip: bool = False):
 
         cprint("\n SEQUENTIALLY SELECTIVE FORGET {} task_id-{} from {}".format(
             policy, task_to_forget, self.n_tasks), "green")
@@ -590,6 +591,10 @@ class SFN:
             cprint("\t {}: total {}".format(utype, one_step_units * steps_to_forget), "green")
 
         for i in range(steps_to_forget + 1):
+
+            if fast_skip and i < 0.5 * (steps_to_forget + 1) and i % 4 != 0:
+                cprint("Fast Skipped: {}/{} in policy {}".format(i, steps_to_forget + 1, policy), "red")
+                continue
 
             list_of_unit_indices_by_layer = []
             for utype, one_step_units in utype_to_one_step_units.items():
