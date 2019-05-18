@@ -1,3 +1,5 @@
+from typing import Tuple, List
+
 import os
 from pprint import pprint
 import math
@@ -10,7 +12,7 @@ from termcolor import cprint
 from SFNBase import SFN
 from utils import get_dims_from_config, print_all_vars, with_tf_device_cpu, with_tf_device_gpu
 
-from cges.cges import cges, get_sparsity_of_variable
+from cges.cges import cges
 
 
 class SFHPS(SFN):
@@ -182,32 +184,7 @@ class SFHPS(SFN):
             self.loss_list[i] += regularization_loss
 
         if self.use_cges:
-            opt_list = []
-            cges_op_list = []
-            for t, loss in enumerate(self.loss_list):
-
-                global_step = tf.get_variable("global_step%d" % (t + 1),
-                                              shape=[], initializer=tf.zeros_initializer())
-                decayed_learning_rate = tf.train.exponential_decay(
-                    learning_rate=self.init_lr,
-                    global_step=global_step,
-                    decay_steps=self.task_iter,
-                    decay_rate=self.lr_decay_rate,
-                    staircase=True,
-                    name="decayed_learning_rate%d" % (t + 1)
-                )
-
-                cges_op, _ = cges(decayed_learning_rate, self.cges_lambda, self.cges_mu, self.cges_chvar,
-                                  group_layerwise=self.group_layerwise,
-                                  exclusive_layerwise=self.exclusive_layerwise,
-                                  variable_filter=lambda name: ("weight:0" in name or
-                                                                "weight_{}:0".format(t + 1) in name))
-
-                opt_list.append(tf.train.GradientDescentOptimizer(
-                    learning_rate=decayed_learning_rate,
-                    name="opt%d" % (t + 1)).minimize(loss, global_step=global_step))
-
-                cges_op_list.append(cges_op)
+            opt_list, cges_op_list = self._get_cges_op_list_with_opt_list()
 
         else:
             opt_list = [tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt%d" % (i + 1)).minimize(loss)
@@ -249,14 +226,7 @@ class SFHPS(SFN):
                 print("   [*] avg_perf: %.4f" % avg_perfs[-1])
 
                 if self.use_cges:
-                    cprint("\n SPARSITY COMPUTATION at ITERATION {} on Devices {}".format(
-                        task_iter, self.get_real_device_info()), "green")
-                    variable_to_be_sparsed = [v for v in tf.trainable_variables() if "weight" in v.name]
-                    tsp, sp_list = get_sparsity_of_variable(self.sess, variables=variable_to_be_sparsed)
-                    print("   [*] Total sparsity: {}".format(tsp))
-                    print("   [*] Sparsities:")
-                    for v, s in zip(variable_to_be_sparsed, sp_list):
-                        print("     - {}: {}".format(v.name, s))
+                    self.print_sparsity(task_iter)
 
     def _train_at_task(self, X, Y, loss, train_step, data):
         train_xs_t, train_labels_t, val_xs_t, val_labels_t, test_xs_t, test_labels_t = data
@@ -266,6 +236,33 @@ class SFHPS(SFN):
             for _ in range(num_batches):
                 batch_x, batch_y = self.get_next_batch(train_xs_t, train_labels_t)
                 _, loss_val = self.sess.run([train_step, loss], feed_dict={X: batch_x, Y: batch_y})
+
+    def _get_cges_op_list_with_opt_list(self) -> Tuple[List, List]:
+        opt_list, cges_op_list = [], []
+        for t, loss in enumerate(self.loss_list):
+            global_step = tf.get_variable("global_step%d" % (t + 1),
+                                          shape=[], initializer=tf.zeros_initializer())
+            decayed_learning_rate = tf.train.exponential_decay(
+                learning_rate=self.init_lr,
+                global_step=global_step,
+                decay_steps=self.task_iter,
+                decay_rate=self.lr_decay_rate,
+                staircase=True,
+                name="decayed_learning_rate%d" % (t + 1)
+            )
+
+            cges_op, _ = cges(decayed_learning_rate, self.cges_lambda, self.cges_mu, self.cges_chvar,
+                              group_layerwise=self.group_layerwise,
+                              exclusive_layerwise=self.exclusive_layerwise,
+                              variable_filter=lambda name: ("weight:0" in name or
+                                                            "weight_{}:0".format(t + 1) in name))
+            cges_op_list.append(cges_op)
+
+            opt_list.append(tf.train.GradientDescentOptimizer(
+                learning_rate=decayed_learning_rate,
+                name="opt%d" % (t + 1)).minimize(loss, global_step=global_step))
+
+        return opt_list, cges_op_list
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
     @with_tf_device_gpu

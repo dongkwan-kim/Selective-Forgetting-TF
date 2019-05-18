@@ -7,6 +7,7 @@ import math
 import numpy as np
 import numpy.linalg as npl
 import tensorflow as tf
+from cges.cges import get_sparsity_of_variable
 from termcolor import cprint
 from tqdm import trange
 
@@ -958,3 +959,13 @@ class SFN:
                 value_sfn = value_preprocess(name, value_sfn, retrained_value)
 
             self.sess.run(tf.assign(tensor_sfn, value_sfn))
+
+    def print_sparsity(self, iteration, variable_key="weight"):
+        cprint("\n SPARSITY COMPUTATION at ITERATION {} on Devices {}".format(
+            iteration, self.get_real_device_info()), "green")
+        variable_to_be_sparsed = [v for v in tf.trainable_variables() if variable_key in v.name]
+        tsp, sp_list = get_sparsity_of_variable(self.sess, variables=variable_to_be_sparsed)
+        print("   [*] Total sparsity: {}".format(tsp))
+        print("   [*] Sparsities:")
+        for v, s in zip(variable_to_be_sparsed, sp_list):
+            print("     - {}: {}".format(v.name, s))
