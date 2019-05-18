@@ -52,29 +52,10 @@ SFEWC_FORGET:
 
 SFHPS_FORGET:
   <<: *BASIC
-  max_iter: 1
-  task_iter: 500
-  l1_lambda: 1e-05
-  l2_lambda: 1e-06
-  need_coreset: False
-  expr_type: FORGET
-  model: SFHPS
-  support_model: ["LARGE_FC_MNIST"]
-
-SFHPS_CGES:
-  <<: *BASIC
-  lr: 0.05
-  lr_decay_rate: 0.99
-  max_iter: 1
-  task_iter: 3000
-  l1_lambda: 0.0
+  batch_size: 2000
+  max_iter: 40
+  l1_lambda: 5e-06
   l2_lambda: 0.0
-  use_cges: True
-  cges_lambda: 0.0001
-  cges_mu: 0.8
-  cges_chvar: 0.2
-  group_layerwise: [1., 1., 1. / 15]
-  exclusive_layerwise: [1.5, 1.5, 15.]
   need_coreset: False
   expr_type: FORGET
   model: SFHPS

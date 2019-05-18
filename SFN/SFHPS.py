@@ -8,6 +8,7 @@ import tensorflow as tf
 import numpy as np
 from DEN.ops import ROC_AUC
 from termcolor import cprint
+from tqdm import trange
 
 from SFNBase import SFN
 from utils import get_dims_from_config, print_all_vars, with_tf_device_cpu, with_tf_device_gpu
@@ -31,7 +32,6 @@ class SFHPS(SFN):
         self.n_layers = len(self.dims) - 1
         self.n_classes = config.n_classes
         self.max_iter = config.max_iter
-        self.task_iter = config.task_iter
         self.init_lr = config.lr
         self.l1_lambda = config.l1_lambda
         self.l2_lambda = config.l2_lambda
@@ -50,7 +50,7 @@ class SFHPS(SFN):
             self.exclusive_layerwise = [eval(str(el)) for el in config.exclusive_layerwise]
 
         self.yhat_list = []
-        self.loss_list = []
+        self.loss = None
 
         self.create_model_variables()
         self.set_layer_types()
@@ -107,7 +107,7 @@ class SFHPS(SFN):
         return float(np.mean(perf_list))
 
     def predict_perform(self, task_id, xs, ys):
-        X = tf.get_default_graph().get_tensor_by_name("X:0")
+        X = tf.get_default_graph().get_tensor_by_name("X_{}:0".format(task_id))
         yhat = self.yhat_list[task_id - 1]
         test_preds = self.sess.run(yhat, feed_dict={X: xs})
         test_perf = self.get_performance(test_preds, ys)
@@ -121,6 +121,15 @@ class SFHPS(SFN):
             temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.get_test_labels(t + 1))
             temp_perfs.append(temp_perf)
         return temp_perfs
+
+    def evaluate_overall(self, iteration):
+        cprint('\n OVERALL EVALUATION at ITERATION {} on Devices {}'.format(
+            iteration, self.get_real_device_info()), "green")
+        overall_perfs = []
+        for t in range(self.n_tasks):
+            temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.get_test_labels(t + 1))
+            overall_perfs.append(temp_perf)
+        print("   [*] avg_perf: %.4f" % np.mean(overall_perfs))
 
     def set_layer_types(self):
         for i in range(self.n_layers - 1):
@@ -142,127 +151,68 @@ class SFHPS(SFN):
 
     def build_model(self):
 
-        X = tf.placeholder(tf.float32, [None, self.dims[0]], name="X")
+        X_list = [tf.placeholder(tf.float32, [None, self.dims[0]], name="X_%d" % (t + 1))
+                  for t in range(self.n_tasks)]
         Y_list = [tf.placeholder(tf.float32, [None, self.n_classes], name="Y_%d" % (t + 1))
                   for t in range(self.n_tasks)]
+        loss_list = []
 
-        bottom = X
-        for i in range(1, self.n_layers):
-            w = self.get_variable('layer%d' % i, 'weight', True)
-            b = self.get_variable('layer%d' % i, 'biases', True)
-            bottom = tf.nn.relu(tf.matmul(bottom, w) + b)
+        for t, (X, Y) in enumerate(zip(X_list, Y_list)):
+            bottom = X
+            for i in range(1, self.n_layers):
+                w = self.get_variable('layer%d' % i, 'weight', True)
+                b = self.get_variable('layer%d' % i, 'biases', True)
+                bottom = tf.nn.relu(tf.matmul(bottom, w) + b)
 
-        for t in range(1, self.n_tasks + 1):
-            w = self.get_variable("layer%d" % self.n_layers, "weight_%d" % t, True)
-            b = self.get_variable("layer%d" % self.n_layers, "biases_%d" % t, True)
+            w = self.get_variable("layer%d" % self.n_layers, "weight_%d" % (t + 1), True)
+            b = self.get_variable("layer%d" % self.n_layers, "biases_%d" % (t + 1), True)
             y = tf.matmul(bottom, w) + b
 
             yhat = tf.nn.sigmoid(y)
-            loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y_list[t - 1]))
-
             self.yhat_list.append(yhat)
-            self.loss_list.append(loss)
 
-        return X, Y_list
+            loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y))
+            loss_list.append(loss)
+
+        self.loss = sum(loss_list)
+
+        return X_list, Y_list
 
     @with_tf_device_gpu
-    def initial_train(self, print_iter=1000):
+    def initial_train(self, print_iter=10):
 
-        X, Y_list = self.build_model()
+        X_list, Y_list = self.build_model()
 
         # Add L1 & L2 loss regularizer
         l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(
             scale_l1=self.l1_lambda,
             scale_l2=self.l2_lambda,
         )
-        for i in range(len(self.loss_list)):
-            vars_of_task = []
-            for var in tf.trainable_variables():
-                if "_" not in var.name or "_{}:".format(i + 1) in var.name:
-                    vars_of_task.append(var)
-            regularization_loss = tf.contrib.layers.apply_regularization(l1_l2_regularizer, vars_of_task)
-            self.loss_list[i] += regularization_loss
-
-        if self.use_cges:
-            opt_list, cges_op_list = self._get_cges_op_list_with_opt_list()
-
-        else:
-            opt_list = [tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt%d" % (i + 1)).minimize(loss)
-                        for i, loss in enumerate(self.loss_list)]
-            cges_op_list = []
+        variables = [var for var in tf.trainable_variables() if "weight" in var.name or "biases" in var.name]
+        self.loss += tf.contrib.layers.apply_regularization(l1_l2_regularizer, variables)
+        opt = tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt").minimize(self.loss)
 
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
 
-        avg_perfs = []
         start_train_idx = 0
-        for task_iter in range(self.task_iter):
+        batch_size_per_task = self.batch_size // self.n_tasks
+        num_batches_per_task = int(math.ceil(len(self.trainXs[0]) / batch_size_per_task))
+        for epoch in trange(self.max_iter):
 
-            # Feed train data size of which is "self.max_iter * self.batch_size"
-            next_train_idx = min(start_train_idx + self.max_iter * self.batch_size, len(self.trainXs[0]))
+            next_train_idx = min(start_train_idx + batch_size_per_task, len(self.trainXs[0]))
 
-            for t in range(self.n_tasks):
-                data = (self.trainXs[t][start_train_idx:next_train_idx],
-                        self.data_labels.get_train_labels(t + 1)[start_train_idx:next_train_idx],
-                        self.valXs[t],
-                        self.data_labels.get_validation_labels(t + 1),
-                        self.testXs[t],
-                        self.data_labels.get_test_labels(t + 1))
-                self._train_at_task(X, Y_list[t], self.loss_list[t], opt_list[t], data)
+            for _ in range(num_batches_per_task):
+                x_feed_dict = {X: self.trainXs[t][start_train_idx:next_train_idx] for t, X in enumerate(X_list)}
+                y_feed_dict = {Y: self.data_labels.get_train_labels(t + 1)[start_train_idx:next_train_idx]
+                               for t, Y in enumerate(Y_list)}
 
-                if self.use_cges:
-                    _ = self.sess.run(cges_op_list[t])
+                _, loss_val = self.sess.run([opt, self.loss], feed_dict={**x_feed_dict, **y_feed_dict})
 
             start_train_idx = next_train_idx % len(self.trainXs[0])
 
-            if task_iter % print_iter == 0 or task_iter == self.task_iter - 1:
-                cprint('\n OVERALL EVALUATION at ITERATION {} on Devices {}'.format(
-                    task_iter, self.get_real_device_info()), "green")
-                overall_perfs = []
-                for t in range(self.n_tasks):
-                    temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.get_test_labels(t + 1))
-                    overall_perfs.append(temp_perf)
-                avg_perfs.append(sum(overall_perfs) / float(self.n_tasks))
-                print("   [*] avg_perf: %.4f" % avg_perfs[-1])
-
-                if self.use_cges:
-                    self.print_sparsity(task_iter)
-
-    def _train_at_task(self, X, Y, loss, train_step, data):
-        train_xs_t, train_labels_t, val_xs_t, val_labels_t, test_xs_t, test_labels_t = data
-        for epoch in range(self.max_iter):
-            self.initialize_batch()
-            num_batches = int(math.ceil(len(train_xs_t) / self.batch_size))
-            for _ in range(num_batches):
-                batch_x, batch_y = self.get_next_batch(train_xs_t, train_labels_t)
-                _, loss_val = self.sess.run([train_step, loss], feed_dict={X: batch_x, Y: batch_y})
-
-    def _get_cges_op_list_with_opt_list(self) -> Tuple[List, List]:
-        opt_list, cges_op_list = [], []
-        for t, loss in enumerate(self.loss_list):
-            global_step = tf.get_variable("global_step%d" % (t + 1),
-                                          shape=[], initializer=tf.zeros_initializer())
-            decayed_learning_rate = tf.train.exponential_decay(
-                learning_rate=self.init_lr,
-                global_step=global_step,
-                decay_steps=self.task_iter,
-                decay_rate=self.lr_decay_rate,
-                staircase=True,
-                name="decayed_learning_rate%d" % (t + 1)
-            )
-
-            cges_op, _ = cges(decayed_learning_rate, self.cges_lambda, self.cges_mu, self.cges_chvar,
-                              group_layerwise=self.group_layerwise,
-                              exclusive_layerwise=self.exclusive_layerwise,
-                              variable_filter=lambda name: ("weight:0" in name or
-                                                            "weight_{}:0".format(t + 1) in name))
-            cges_op_list.append(cges_op)
-
-            opt_list.append(tf.train.GradientDescentOptimizer(
-                learning_rate=decayed_learning_rate,
-                name="opt%d" % (t + 1)).minimize(loss, global_step=global_step))
-
-        return opt_list, cges_op_list
+            if epoch % print_iter == 0 or epoch == self.max_iter - 1:
+                self.evaluate_overall(epoch)
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
     @with_tf_device_gpu
@@ -270,7 +220,7 @@ class SFHPS(SFN):
                               layer_separate=False, use_coreset=False) -> tuple or np.ndarray:
         print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)
 
-        X = tf.get_default_graph().get_tensor_by_name("X:0")
+        X = tf.get_default_graph().get_tensor_by_name("X_%d:0" % task_id)
         Y = tf.get_default_graph().get_tensor_by_name("Y_%d:0" % task_id)
 
         hidden_layer_list = []
@@ -324,7 +274,7 @@ class SFHPS(SFN):
         self.sess = tf.Session()
         self.load_params(params)
         self.sess.run(tf.global_variables_initializer())
-        self.loss_list = []
+        self.loss = None
         self.yhat_list = []
         self.build_model()
 
