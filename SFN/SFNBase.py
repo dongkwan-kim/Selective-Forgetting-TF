@@ -262,7 +262,9 @@ class SFN:
                 mean_perf = np.mean(perf_except_t)
                 print("\t".join([str(pruning_rate)] + [str(x) for x in perf] + [str(mean_perf)]))
 
-    def draw_chart_summary(self, task_id_or_ids, file_prefix=None, file_extension=".png", ylim=None, highlight_ylabels=None):
+    def draw_chart_summary(self, task_id_or_ids,
+                           file_prefix=None, file_extension=".png", ylim=None, highlight_ylabels=None,
+                           **kwargs):
 
         mean_perf_except_t = None
         min_perf_except_t = None
@@ -284,7 +286,8 @@ class SFN:
                                title="AUROC by {} Neuron Deletion".format(policy),
                                file_name="{}_{}_{}{}".format(
                                    file_prefix, self.importance_criteria.split("_")[0], policy, file_extension),
-                               highlight_ylabels=task_id_list)
+                               highlight_ylabels=task_id_list,
+                               **kwargs)
 
             history_txn_except_t = np.delete(history_txn, [tid - 1 for tid in task_id_list], axis=0)
             history_n_mean_except_t = np.mean(history_txn_except_t, axis=0)
@@ -311,7 +314,8 @@ class SFN:
                            title="Mean Perf. Without Task-{}".format(task_id_list),
                            file_name="{}_{}_MeanAcc{}".format(
                                file_prefix, self.importance_criteria.split("_")[0], file_extension),
-                           highlight_ylabels=highlight_ylabels)
+                           highlight_ylabels=highlight_ylabels,
+                           **kwargs)
         build_line_of_list(x_or_x_list=pruning_rate_as_x_list,
                            y_list=max_decline_except_t,
                            label_y_list=policy_keys,
@@ -320,7 +324,8 @@ class SFN:
                            title="Max Decline of Perf. Without Task-{}".format(task_id_list),
                            file_name="{}_{}_MaxDecline{}".format(
                                file_prefix, self.importance_criteria.split("_")[0], file_extension),
-                           highlight_ylabels=highlight_ylabels)
+                           highlight_ylabels=highlight_ylabels,
+                           **kwargs)
         build_line_of_list(x_or_x_list=pruning_rate_as_x_list,
                            y_list=min_perf_except_t,
                            label_y_list=policy_keys,
@@ -329,7 +334,8 @@ class SFN:
                            title="Minimum Perf. Without Task-{}".format(task_id_list),
                            file_name="{}_{}_MinAcc{}".format(
                                file_prefix, self.importance_criteria.split("_")[0], file_extension),
-                           highlight_ylabels=highlight_ylabels)
+                           highlight_ylabels=highlight_ylabels,
+                           **kwargs)
 
     # Utils for sequential experiments
 
