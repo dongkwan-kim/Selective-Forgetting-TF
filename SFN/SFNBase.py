@@ -460,6 +460,10 @@ class SFN:
         else:
             raise ValueError("{} does not have an appropriate relatedness_type".format(relatedness_type))
 
+        if relatedness_type != "constant":
+            cprint("rho: {} +- {}".format(np.mean(rho), np.std(rho)), "red")
+            assert 0.3 < np.mean(rho) < 0.7
+
         related_deviation = np.mean(rho * deviation_i_mat_to_remember, axis=0)  # (T - |S|, |H|) -> (|H|,)
         assert related_deviation.shape == (n_units,), \
             "related_deviation.shape, {}, is not ({},)".format(related_deviation.shape, n_units)
