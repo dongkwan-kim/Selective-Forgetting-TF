@@ -5,7 +5,7 @@ basic: &BASIC
   l1_lambda: 1e-05
   l2_lambda: 0.0001
   n_tasks: 10
-  task_to_forget: 6
+  task_to_forget: [6]
   steps_to_forget: 25
   importance_criteria: first_Taylor_approximation
   need_coreset: True
