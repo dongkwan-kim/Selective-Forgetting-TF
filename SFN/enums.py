@@ -13,3 +13,12 @@ class UnitType(enum.Enum):
 
     def __str__(self):
         return self.name
+
+
+class MaskType(enum.Enum):
+    ADAPTIVE = 0
+    TARGETED = 1
+    RELAXED = 2
+
+    def __str__(self):
+        return self.name

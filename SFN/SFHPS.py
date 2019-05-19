@@ -11,9 +11,10 @@ from termcolor import cprint
 from tqdm import trange
 
 from SFNBase import SFN
-from utils import get_dims_from_config, print_all_vars, with_tf_device_cpu, with_tf_device_gpu
-
-from cges.cges import cges
+from enums import MaskType
+from mask import Mask
+from utils import get_dims_from_config, print_all_vars, with_tf_device_cpu, with_tf_device_gpu, get_middle_path_name, \
+    cprint_stats_of_mask_pair
 
 
 class SFHPS(SFN):
@@ -49,8 +50,13 @@ class SFHPS(SFN):
             self.group_layerwise = [eval(str(gl)) for gl in config.group_layerwise]
             self.exclusive_layerwise = [eval(str(el)) for el in config.exclusive_layerwise]
 
+        self.use_set_based_mask = config.use_set_based_mask
+        if self.use_set_based_mask:
+            self.mask_type = MaskType.TARGETED
+            self.excl_partial_loss_list = []
+
         self.yhat_list = []
-        self.loss = None
+        self.partial_loss_list = []
 
         self.create_model_variables()
         self.set_layer_types()
@@ -58,13 +64,17 @@ class SFHPS(SFN):
         cprint("Device info: {}".format(self.get_real_device_info()), "green")
 
     def save(self, model_name=None, model_middle_path=None):
-        if self.use_cges:
-            model_middle_path = "cges/"
+        model_middle_path = get_middle_path_name({
+            "sbm": self.use_set_based_mask,
+            "cges": self.use_cges
+        })
         super().save(model_name=model_name, model_middle_path=model_middle_path)
 
     def restore(self, model_name=None, model_middle_path=None, build_model=True):
-        if self.use_cges:
-            model_middle_path = "cges/"
+        model_middle_path = get_middle_path_name({
+            "sbm": self.use_set_based_mask,
+            "cges": self.use_cges
+        })
         restored = super().restore(model_name, model_middle_path, build_model)
         return restored
 
@@ -108,8 +118,9 @@ class SFHPS(SFN):
 
     def predict_perform(self, task_id, xs, ys):
         X = tf.get_default_graph().get_tensor_by_name("X_{}:0".format(task_id))
+        is_training = tf.get_default_graph().get_tensor_by_name("is_training:0")
         yhat = self.yhat_list[task_id - 1]
-        test_preds = self.sess.run(yhat, feed_dict={X: xs})
+        test_preds = self.sess.run(yhat, feed_dict={X: xs, is_training: False})
         test_perf = self.get_performance(test_preds, ys)
         print(" [*] Evaluation, Task:%s, test perf: %.4f" % (str(task_id), test_perf))
         return test_perf
@@ -155,64 +166,106 @@ class SFHPS(SFN):
                   for t in range(self.n_tasks)]
         Y_list = [tf.placeholder(tf.float32, [None, self.n_classes], name="Y_%d" % (t + 1))
                   for t in range(self.n_tasks)]
-        loss_list = []
+        is_training = tf.placeholder(tf.bool, name="is_training")
 
         for t, (X, Y) in enumerate(zip(X_list, Y_list)):
             bottom = X
+            excl_bottom = X if self.use_set_based_mask else None
             for i in range(1, self.n_layers):
                 w = self.get_variable('layer%d' % i, 'weight', True)
                 b = self.get_variable('layer%d' % i, 'biases', True)
                 bottom = tf.nn.relu(tf.matmul(bottom, w) + b)
 
+                if self.use_set_based_mask:
+                    bottom, residuals = Mask(i).get_masked_tensor(bottom, is_training, with_residuals=True)
+                    mask = residuals["cond_mask"]
+                    excl_bottom = tf.nn.relu(tf.matmul(excl_bottom, w) + b)
+                    excl_bottom = Mask.get_exclusive_masked_tensor(excl_bottom, mask, is_training)
+
             w = self.get_variable("layer%d" % self.n_layers, "weight_%d" % (t + 1), True)
             b = self.get_variable("layer%d" % self.n_layers, "biases_%d" % (t + 1), True)
-            y = tf.matmul(bottom, w) + b
 
+            y = tf.matmul(bottom, w) + b
             yhat = tf.nn.sigmoid(y)
             self.yhat_list.append(yhat)
-
             loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y))
-            loss_list.append(loss)
+            self.partial_loss_list.append(loss)
 
-        self.loss = sum(loss_list)
+            if self.use_set_based_mask:
+                excl_y = tf.matmul(excl_bottom, w) + b
+                excl_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=excl_y, labels=Y))
+                self.excl_partial_loss_list.append(excl_loss)
 
-        return X_list, Y_list
+        return X_list, Y_list, is_training
 
     @with_tf_device_gpu
     def initial_train(self, print_iter=10):
 
-        X_list, Y_list = self.build_model()
+        X_list, Y_list, is_training = self.build_model()
 
         # Add L1 & L2 loss regularizer
         l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(
             scale_l1=self.l1_lambda,
             scale_l2=self.l2_lambda,
         )
-        variables = [var for var in tf.trainable_variables() if "weight" in var.name or "biases" in var.name]
-        self.loss += tf.contrib.layers.apply_regularization(l1_l2_regularizer, variables)
-        opt = tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt").minimize(self.loss)
+        shared_variables = [var for var in tf.trainable_variables() if "weight:0" in var.name or "biases:0" in var.name]
+        regularized_loss = tf.contrib.layers.apply_regularization(l1_l2_regularizer, shared_variables)
 
-        self.sess = tf.Session()
-        self.sess.run(tf.global_variables_initializer())
-
-        start_train_idx = 0
+        train_labels = [self.data_labels.get_train_labels(t + 1) for t in range(self.n_tasks)]
         batch_size_per_task = self.batch_size // self.n_tasks
         num_batches_per_task = int(math.ceil(len(self.trainXs[0]) / batch_size_per_task))
-        for epoch in trange(self.max_iter):
 
-            next_train_idx = min(start_train_idx + batch_size_per_task, len(self.trainXs[0]))
+        if not self.use_set_based_mask:
+            loss = sum(self.partial_loss_list) + regularized_loss
+            opt = tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt").minimize(loss)
 
-            for _ in range(num_batches_per_task):
-                x_feed_dict = {X: self.trainXs[t][start_train_idx:next_train_idx] for t, X in enumerate(X_list)}
-                y_feed_dict = {Y: self.data_labels.get_train_labels(t + 1)[start_train_idx:next_train_idx]
-                               for t, Y in enumerate(Y_list)}
+            self.sess = tf.Session()
+            self.sess.run(tf.global_variables_initializer())
 
-                _, loss_val = self.sess.run([opt, self.loss], feed_dict={**x_feed_dict, **y_feed_dict})
+            for epoch in trange(self.max_iter):
+                start_train_idx = 0
+                for _ in range(num_batches_per_task):
+                    next_train_idx = min(start_train_idx + batch_size_per_task, len(self.trainXs[0]))
 
-            start_train_idx = next_train_idx % len(self.trainXs[0])
+                    x_feed_dict = {X: self.trainXs[t][start_train_idx:next_train_idx] for t, X in enumerate(X_list)}
+                    y_feed_dict = {Y: train_labels[t][start_train_idx:next_train_idx] for t, Y in enumerate(Y_list)}
 
-            if epoch % print_iter == 0 or epoch == self.max_iter - 1:
-                self.evaluate_overall(epoch)
+                    _, loss_val = self.sess.run([opt, loss],
+                                                feed_dict={is_training: True, **x_feed_dict, **y_feed_dict})
+
+                    start_train_idx = next_train_idx % len(self.trainXs[0])
+
+                if epoch % print_iter == 0 or epoch == self.max_iter - 1:
+                    self.evaluate_overall(epoch)
+        else:
+            loss_with_excl = [
+                pl + sum(epl for i, epl in enumerate(self.excl_partial_loss_list) if i != t) + regularized_loss
+                for t, pl in enumerate(self.partial_loss_list)
+            ]
+            opt_with_excl = [tf.train.AdamOptimizer(learning_rate=self.init_lr).minimize(loss)
+                             for loss in loss_with_excl]
+
+            self.sess = tf.Session()
+            self.sess.run(tf.global_variables_initializer())
+
+            target_t = 0
+            for epoch in trange(self.max_iter):
+                start_train_idx = 0
+                for _ in range(num_batches_per_task):
+                    next_train_idx = min(start_train_idx + batch_size_per_task, len(self.trainXs[0]))
+
+                    x_feed_dict = {X: self.trainXs[t][start_train_idx:next_train_idx] for t, X in enumerate(X_list)}
+                    y_feed_dict = {Y: train_labels[t][start_train_idx:next_train_idx] for t, Y in enumerate(Y_list)}
+
+                    _, loss_val = self.sess.run([opt_with_excl[target_t], loss_with_excl[target_t]],
+                                                feed_dict={is_training: True, **x_feed_dict, **y_feed_dict})
+
+                    start_train_idx = next_train_idx % len(self.trainXs[0])
+                    target_t = (target_t + 1) % self.n_tasks
+
+                if epoch % print_iter == 0 or epoch == self.max_iter - 1:
+                    self.evaluate_overall(epoch)
+                    cprint_stats_of_mask_pair(self, 3, 6, batch_size_per_task, X_list, is_training, mask_id=1)
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
     @with_tf_device_gpu
@@ -274,7 +327,8 @@ class SFHPS(SFN):
         self.sess = tf.Session()
         self.load_params(params)
         self.sess.run(tf.global_variables_initializer())
-        self.loss = None
+        self.partial_loss_list = []
+        self.excl_partial_loss_list = []
         self.yhat_list = []
         self.build_model()
 

@@ -13,6 +13,7 @@ basic: &BASIC
   gpu_num_list: [0]
   coreset_size: 1000
   use_cges: False
+  use_set_based_mask: False
 
 SFDEN_FORGET: &SFDEN_FORGET
   <<: *BASIC
@@ -52,14 +53,26 @@ SFEWC_FORGET:
 
 SFHPS_FORGET:
   <<: *BASIC
-  batch_size: 2000
+  batch_size: 1000
   max_iter: 40
-  l1_lambda: 5e-06
+  l1_lambda: 1e-05
   l2_lambda: 0.0
   need_coreset: False
   expr_type: FORGET
   model: SFHPS
   support_model: ["LARGE_FC_MNIST"]
+
+SFHPS_MASK:
+  <<: *BASIC
+  batch_size: 1000
+  max_iter: 40
+  l1_lambda: 1e-05
+  l2_lambda: 0.0
+  need_coreset: False
+  use_set_based_mask: True
+  expr_type: FORGET
+  model: SFHPS
+  support_model: ["NOT_XLARGE_FC_MNIST"]
 
 SFLCL10_FORGET:
   <<: *BASIC
