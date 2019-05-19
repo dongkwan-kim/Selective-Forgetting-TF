@@ -64,11 +64,11 @@ def get_middle_path_name(name_to_bool_variable: Dict[str, bool], adapter_str: st
 
 
 def cprint_stats_of_mask_pair(model, task_id_a, task_id_b,
-                              batch_size_per_task, X_list, is_training, mask_id=1):
+                              batch_size_per_task, X, is_training, mask_id=1):
 
     def get_indices(tid, si):
         return set(Mask.get_mask_stats_by_idx(model.sess, mask_id, feed_dict={
-            X_list[0]: model.trainXs[tid][si:si + batch_size_per_task],
+            X: model.trainXs[tid][si:si + batch_size_per_task],
             is_training: True,
         })["indices"])
 
@@ -92,14 +92,14 @@ def cprint_stats_of_mask_pair(model, task_id_a, task_id_b,
     cprint(gi_b_1, "blue")
     cprint(gi_b_2, "blue")
     cprint(gi_b_3, "blue")
-    cprint("Mask3: {} / {} / {}".format(len(gi_a_1), len(gi_a_2), len(gi_a_3)), "red")
-    cprint("Mask6: {} / {} / {}".format(len(gi_b_1), len(gi_b_2), len(gi_b_3)), "blue")
+    cprint("Mask3 size: {} / {} / {}".format(len(gi_a_1), len(gi_a_2), len(gi_a_3)), "red")
+    cprint("Mask6 size: {} / {} / {}".format(len(gi_b_1), len(gi_b_2), len(gi_b_3)), "blue")
     cprint("Mask3: intersection {} / union {}".format(len(int_a), len(uni_a)), "red")
     cprint("Mask6: intersection {} / union {}".format(len(int_b), len(uni_b)), "blue")
     cprint("Symmetric Diff {}<->{}: intersect {} over {} / union {} over {}".format(
         task_id_a, task_id_b,
         len(int_a ^ int_b), len(int_a | int_b), len(uni_a ^ uni_b), len(uni_a | uni_b)
-    ))
+    ), "yellow")
     cprint("--------------------------------------", "yellow")
 
 

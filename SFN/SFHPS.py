@@ -265,7 +265,7 @@ class SFHPS(SFN):
 
                 if epoch % print_iter == 0 or epoch == self.max_iter - 1:
                     self.evaluate_overall(epoch)
-                    cprint_stats_of_mask_pair(self, 3, 6, batch_size_per_task, X_list, is_training, mask_id=1)
+                    cprint_stats_of_mask_pair(self, 3, 6, batch_size_per_task, X_list[0], is_training, mask_id=1)
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
     @with_tf_device_gpu
