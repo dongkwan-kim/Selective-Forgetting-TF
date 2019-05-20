@@ -31,7 +31,8 @@ def tune_policy_param(sfn, n_to_search, _flags):
                 fast_skip=True,
             )
             sfn.recover_old_params()
-            return sfn.get_area_under_forgetting_curve(_flags.task_to_forget, policy_name)
+            au_mean_fc, au_min_fc = sfn.get_area_under_forgetting_curve(_flags.task_to_forget, policy_name)
+            return 0.2 * au_mean_fc + 0.8 * au_min_fc
         except AssertionError as e:
             mean_rho = float(str(e).split(" = ")[-1])
             if mean_rho > 0.9:
@@ -39,7 +40,7 @@ def tune_policy_param(sfn, n_to_search, _flags):
             else:
                 return mean_rho - 0.1
 
-    eps = 5e-6
+    eps = 5e-4
     param_bounds = {
         "taux100": (eps, 1 - eps),
         "mixing_coeff": (eps, 1 - eps),
@@ -97,4 +98,4 @@ if __name__ == '__main__':
     model.normalize_importance_matrix_about_task()
 
     # noinspection PyTypeChecker
-    tune_policy_param(model, 15, params)
+    tune_policy_param(model, 20, params)

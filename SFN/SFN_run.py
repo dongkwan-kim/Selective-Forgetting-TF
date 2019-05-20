@@ -86,6 +86,11 @@ def experiment_forget(sfn, _flags, _policies):
         highlight_ylabels=["OURS"],
     )
 
+    print("Area Under Forgetting Curve")
+    for policy_name in _policies:
+        au_mean_fc, au_min_fc = sfn.get_area_under_forgetting_curve(_flags.task_to_forget, policy_name)
+        print("\t".join(str(x) for x in [policy_name, au_mean_fc, au_min_fc]))
+
 
 def experiment_forget_and_retrain(sfn, _flags, _policies):
     policy_params = load_params_of_policy(_flags.mtype)

@@ -250,7 +250,8 @@ class SFN:
 
     # Data visualization
 
-    def print_summary(self, task_id):
+    def print_summary(self, task_id_or_ids):
+        task_id_list = [task_id_or_ids] if isinstance(task_id_or_ids, int) else task_id_or_ids
         for policy, history in self.prediction_history.items():
             print("== {} ==".format(policy))
             print("\t".join(
@@ -260,7 +261,7 @@ class SFN:
             ))
             pruning_rate_as_x = self.pruning_rate_history[policy]
             for i, (pruning_rate, perf) in enumerate(zip(pruning_rate_as_x, history)):
-                perf_except_t = np.delete(perf, task_id - 1)
+                perf_except_t = np.delete(perf, [tid - 1 for tid in task_id_list])
                 mean_perf = np.mean(perf_except_t)
                 print("\t".join([str(pruning_rate)] + [str(x) for x in perf] + [str(mean_perf)]))
 
@@ -833,7 +834,7 @@ class SFN:
         for i_vec in np.concatenate(self.importance_matrix_tuple, axis=1):
             print("\t".join(str(importance) for importance in i_vec))
 
-    def get_area_under_forgetting_curve(self, task_id_or_ids, policy_name, ratio=0.4):
+    def get_area_under_forgetting_curve(self, task_id_or_ids, policy_name):
         task_id_list = [task_id_or_ids] if isinstance(task_id_or_ids, int) else task_id_or_ids
 
         # Ys
@@ -849,7 +850,7 @@ class SFN:
         au_mean_fc = np.trapz(history_n_mean_except_t, x=pruning_rate_as_x)
         au_min_fc = np.trapz(history_n_min_except_t, x=pruning_rate_as_x)
 
-        return au_mean_fc * ratio + au_min_fc * (1 - ratio)
+        return au_mean_fc, au_min_fc
 
     # Retrain after forgetting
 

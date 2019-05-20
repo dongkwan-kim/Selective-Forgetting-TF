@@ -6,7 +6,7 @@ SMALL_FC_MNIST:
   n_classes: 10
   dtype: PERMUTED_MNIST
   mtype: SMALL_FC_MNIST
-  one_step_neurons: 10
+  one_step_neurons: 11
 
 LARGE_FC_MNIST:
   dims0: 784
@@ -38,7 +38,7 @@ XLARGE_FC_MNIST:
   n_classes: 10
   dtype: PERMUTED_MNIST
   mtype: XLARGE_FC_MNIST
-  one_step_neurons: 163
+  one_step_neurons: 164
 
 SMALL_CONV_MNIST:
   conv0_filters: 1
