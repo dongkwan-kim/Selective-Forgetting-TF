@@ -39,9 +39,9 @@ LARGE_FC_MNIST:
       mixing_coeff: 0
       tau: 0
     NEURON:
-      mixing_coeff: 0.6
+      mixing_coeff: 0.999499999999603
       relatedness_type: "symmetric_unit_level"
-      tau: 0.004
+      tau: 0.006332326434859624
 
   CONST:
     FILTER:
@@ -58,9 +58,9 @@ NOT_XLARGE_FC_MNIST:
       mixing_coeff: 0
       tau: 0
     NEURON:
-      mixing_coeff: 0.7
+      mixing_coeff: 0.5533920034895132
       relatedness_type: "symmetric_unit_level"
-      tau: 0.002
+      tau: 0.004623377406921828
 
   CONST:
     FILTER:
