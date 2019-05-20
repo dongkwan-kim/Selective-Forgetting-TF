@@ -13,6 +13,7 @@ from utils import build_line_of_list, get_project_dir
 from enums import UnitType
 
 np.random.seed(1004)
+tf.random.set_random_seed(1004)
 
 
 def load_experiment_and_model_params() -> MyParams:
@@ -21,13 +22,14 @@ def load_experiment_and_model_params() -> MyParams:
 
             # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET, SFEWC_FORGET,
             # SFLCL10_FORGET, SFLCL20_FORGET, SFLCL100_FORGET,
-            # SFLCL10_CGES,
-            to_yaml_path("experiment.yaml"): "SFHPS_FORGET",
+            # SFLCL10_CGES, SFHPS_MASK, SFLCL10_MASK
+            to_yaml_path("experiment.yaml"): "SFLCL10_MASK",
 
             # SMALL_FC_MNIST, LARGE_FC_MNIST, XLARGE_FC_MNIST
             # SMALL_CONV_MNIST, ALEXNETV_MNIST,
             # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-            to_yaml_path("models.yaml"): "LARGE_FC_MNIST",
+            # NOT_XLARGE_FC_MNIST,
+            to_yaml_path("models.yaml"): "ALEXNETV_MNIST",
 
         },
         value_magician={

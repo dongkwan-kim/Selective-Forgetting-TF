@@ -76,10 +76,21 @@ SFHPS_MASK:
 
 SFLCL10_FORGET:
   <<: *BASIC
-  max_iter: 2000
+  max_iter: 200
   l1_lambda: 0.0
   l2_lambda: 1e-05
   need_coreset: False
+  expr_type: FORGET
+  model: SFLCL
+  support_model: ["SMALL_CONV_MNIST", "ALEXNETV_MNIST", "ALEXNETV_CIFAR10"]
+
+SFLCL10_MASK:
+  <<: *BASIC
+  max_iter: 300
+  l1_lambda: 0.0
+  l2_lambda: 1e-05
+  need_coreset: False
+  use_set_based_mask: True
   expr_type: FORGET
   model: SFLCL
   support_model: ["SMALL_CONV_MNIST", "ALEXNETV_MNIST", "ALEXNETV_CIFAR10"]
