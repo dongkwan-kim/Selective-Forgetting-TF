@@ -1,6 +1,7 @@
 absl-py==0.7.1
 art==3.5
 astor==0.7.1
+bayesian-optimization==1.0.1
 certifi==2019.3.9
 chardet==3.0.4
 coverage==4.5.3

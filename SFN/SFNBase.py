@@ -463,7 +463,7 @@ class SFN:
 
         if relatedness_type != "constant":
             cprint("rho: {} +- {}".format(np.mean(rho), np.std(rho)), "red")
-            assert 0.3 < np.mean(rho) < 0.7
+            assert 0.3 < np.mean(rho) < 0.7, "np.mean(rho) = {}".format(np.mean(rho))
 
         related_deviation = np.mean(rho * deviation_i_mat_to_remember, axis=0)  # (T - |S|, |H|) -> (|H|,)
         assert related_deviation.shape == (n_units,), \
@@ -832,6 +832,24 @@ class SFN:
     def pprint_importance_matrix(self):
         for i_vec in np.concatenate(self.importance_matrix_tuple, axis=1):
             print("\t".join(str(importance) for importance in i_vec))
+
+    def get_area_under_forgetting_curve(self, task_id_or_ids, policy_name, ratio=0.4):
+        task_id_list = [task_id_or_ids] if isinstance(task_id_or_ids, int) else task_id_or_ids
+
+        # Ys
+        history = self.prediction_history[policy_name]
+        history_txn = np.transpose(history)
+        history_txn_except_t = np.delete(history_txn, [tid - 1 for tid in task_id_list], axis=0)
+        history_n_mean_except_t = np.mean(history_txn_except_t, axis=0)
+        history_n_min_except_t = np.min(history_txn_except_t, axis=0)
+
+        # Xs
+        pruning_rate_as_x = self.pruning_rate_history[policy_name]
+
+        au_mean_fc = np.trapz(history_n_mean_except_t, x=pruning_rate_as_x)
+        au_min_fc = np.trapz(history_n_min_except_t, x=pruning_rate_as_x)
+
+        return au_mean_fc * ratio + au_min_fc * (1 - ratio)
 
     # Retrain after forgetting
 

@@ -16,21 +16,11 @@ np.random.seed(1004)
 tf.random.set_random_seed(1004)
 
 
-def load_experiment_and_model_params() -> MyParams:
+def load_experiment_and_model_params(experiment_name, model_name) -> MyParams:
     loaded_params = MyParams(
         yaml_file_to_config_name={
-
-            # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET, SFEWC_FORGET,
-            # SFLCL10_FORGET, SFLCL20_FORGET, SFLCL100_FORGET,
-            # SFLCL10_CGES, SFHPS_MASK, SFLCL10_MASK
-            to_yaml_path("experiment.yaml"): "SFLCL10_MASK",
-
-            # SMALL_FC_MNIST, LARGE_FC_MNIST, XLARGE_FC_MNIST
-            # SMALL_CONV_MNIST, ALEXNETV_MNIST,
-            # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-            # NOT_XLARGE_FC_MNIST,
-            to_yaml_path("models.yaml"): "ALEXNETV_MNIST",
-
+            to_yaml_path("experiment.yaml"): experiment_name,
+            to_yaml_path("models.yaml"): model_name,
         },
         value_magician={
             "model": lambda p: {
@@ -173,7 +163,23 @@ def get_dataset(dtype: str, _flags, **kwargs) -> tuple:
 
 if __name__ == '__main__':
 
-    params = load_experiment_and_model_params()
+    params = load_experiment_and_model_params(
+
+        # SFDEN_FORGET, SFDEN_RETRAIN,
+        # SFHPS_FORGET, SFHPS_MASK,
+        # SFEWC_FORGET,
+        # SFLCL10_FORGET, SFLCL10_MASK
+        # SFLCL20_FORGET, SFLCL100_FORGET,
+        experiment_name="SFLCL10_MASK",
+
+        # SMALL_FC_MNIST,
+        # LARGE_FC_MNIST, NOT_XLARGE_FC_MNIST,
+        # XLARGE_FC_MNIST
+        # SMALL_CONV_MNIST, ALEXNETV_MNIST,
+        # ALEXNETV_CIFAR10,
+        # ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
+        model_name="ALEXNETV_MNIST",
+    )
 
     # noinspection PyTypeChecker
     labels, train_xs, val_xs, test_xs, coreset = get_dataset(params.dtype, params)
