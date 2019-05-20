@@ -4,6 +4,7 @@ from copy import deepcopy
 from termcolor import cprint
 from pprint import pprint
 import os
+from itertools import cycle
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -40,6 +41,15 @@ def get_gpu_utility(gpu_id):
         raise EnvironmentError("There's no GPU of no {}".format(gpu_id))
 
 
+def get_batch_iterator(xs_or_ys: np.ndarray, bsz: int):
+    c = cycle(xs_or_ys)
+
+    def batch_iterator():
+        return np.asarray([next(c) for _ in range(bsz)])
+
+    return batch_iterator
+
+
 # Project Utils
 
 def get_project_dir():
@@ -65,7 +75,6 @@ def get_middle_path_name(name_to_bool_variable: Dict[str, bool], adapter_str: st
 
 def cprint_stats_of_mask_pair(model, task_id_a, task_id_b,
                               batch_size_per_task, X, is_training, mask_id=1):
-
     def get_indices(tid, si):
         return set(Mask.get_mask_stats_by_idx(model.sess, mask_id, feed_dict={
             X: model.trainXs[tid][si:si + batch_size_per_task],
