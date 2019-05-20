@@ -10,7 +10,10 @@ def tune_policy_param(sfn, n_to_search, _flags):
     utype_to_one_step_units = get_one_step_unit_dict(_flags)
     policy_params = load_params_of_policy(_flags.mtype)
 
-    def black_box_function(tau, mixing_coeff):
+    def black_box_function(taux100, mixing_coeff):
+
+        tau = float(taux100 / 100)
+
         params_of_utype = policy_params.get("OURS")
         params_of_utype["FILTER"]["tau"] = tau
         params_of_utype["NEURON"]["tau"] = tau
@@ -31,14 +34,14 @@ def tune_policy_param(sfn, n_to_search, _flags):
             return sfn.get_area_under_forgetting_curve(_flags.task_to_forget, policy_name)
         except AssertionError as e:
             mean_rho = float(str(e).split(" = ")[-1])
-            if mean_rho > 0.7:
-                return - (mean_rho - 0.7)
+            if mean_rho > 0.9:
+                return - (mean_rho - 0.9)
             else:
-                return mean_rho - 0.3
+                return mean_rho - 0.1
 
     eps = 5e-6
     param_bounds = {
-        "tau": (eps, 0.02),
+        "taux100": (eps, 1 - eps),
         "mixing_coeff": (eps, 1 - eps),
     }
 
@@ -47,16 +50,15 @@ def tune_policy_param(sfn, n_to_search, _flags):
         pbounds=param_bounds,
         random_state=42,
     )
-    for i in range(3):
-        optimizer.probe(params={"tau": 0.01 * (0.1 ** i), "mixing_coeff": 0.5}, lazy=True)
 
     optimizer.maximize(
-        init_points=0,
+        init_points=2,
         n_iter=n_to_search,
     )
 
     for i, res in enumerate(optimizer.res):
         print("Iteration {}".format(i))
+        res["params"]["tau"] = float(res["params"]["taux100"] / 100)
         pprint(res)
     cprint(optimizer.max, "green")
 

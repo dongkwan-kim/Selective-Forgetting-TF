@@ -463,7 +463,7 @@ class SFN:
 
         if relatedness_type != "constant":
             cprint("rho: {} +- {}".format(np.mean(rho), np.std(rho)), "red")
-            assert 0.3 < np.mean(rho) < 0.7, "np.mean(rho) = {}".format(np.mean(rho))
+            assert 0.1 < np.mean(rho) < 0.9, "np.mean(rho) = {}".format(np.mean(rho))
 
         related_deviation = np.mean(rho * deviation_i_mat_to_remember, axis=0)  # (T - |S|, |H|) -> (|H|,)
         assert related_deviation.shape == (n_units,), \
