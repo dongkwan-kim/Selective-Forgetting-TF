@@ -561,7 +561,7 @@ class SFN:
         if len(indexes) == 0:
             return
 
-        print("\n REMOVE NEURONS {} ({}) - {}".format(scope, len(indexes), indexes))
+        print(" REMOVE NEURONS {} ({})".format(scope, len(indexes)))
         self.layer_to_removed_neuron_set[scope].update(set(indexes))
 
         w: tf.Variable = self.get_variable(scope, "weight", False)
