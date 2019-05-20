@@ -40,7 +40,7 @@ def tune_policy_param(sfn, n_to_search, _flags):
             else:
                 return mean_rho - 0.1
 
-    eps = 5e-6
+    eps = 5e-4
     param_bounds = {
         "taux100": (eps, 1 - eps),
         "mixing_coeff": (eps, 1 - eps),
