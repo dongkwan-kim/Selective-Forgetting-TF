@@ -5,7 +5,7 @@ from bayes_opt import BayesianOptimization
 import numpy as np
 
 
-def tune_hparam(sfn, n_to_search, _flags):
+def tune_policy_param(sfn, n_to_search, _flags):
 
     utype_to_one_step_units = get_one_step_unit_dict(_flags)
     policy_params = load_params_of_policy(_flags.mtype)
@@ -17,7 +17,7 @@ def tune_hparam(sfn, n_to_search, _flags):
         params_of_utype["FILTER"]["mixing_coeff"] = mixing_coeff
         params_of_utype["NEURON"]["mixing_coeff"] = mixing_coeff
 
-        policy_name = "OURS:t{}:mc{}".format(str(round(tau, 5)), str(round(mixing_coeff, 5)))
+        policy_name = "OURS:t{}:mc{}".format(str(round(tau, 7)), str(round(mixing_coeff, 7)))
         try:
             sfn.sequentially_selective_forget_and_predict(
                 task_to_forget=_flags.task_to_forget,
@@ -36,9 +36,9 @@ def tune_hparam(sfn, n_to_search, _flags):
             else:
                 return mean_rho - 0.3
 
-    eps = 1e-7
+    eps = 5e-6
     param_bounds = {
-        "tau": (eps, 0.01),
+        "tau": (eps, 0.02),
         "mixing_coeff": (eps, 1 - eps),
     }
 
@@ -47,8 +47,11 @@ def tune_hparam(sfn, n_to_search, _flags):
         pbounds=param_bounds,
         random_state=42,
     )
+    for i in range(3):
+        optimizer.probe(params={"tau": 0.01 * (0.1 ** i), "mixing_coeff": 0.5}, lazy=True)
+
     optimizer.maximize(
-        init_points=2,
+        init_points=0,
         n_iter=n_to_search,
     )
 
@@ -92,4 +95,4 @@ if __name__ == '__main__':
     model.normalize_importance_matrix_about_task()
 
     # noinspection PyTypeChecker
-    tune_hparam(model, 15, params)
+    tune_policy_param(model, 15, params)
