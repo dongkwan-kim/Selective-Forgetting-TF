@@ -196,7 +196,7 @@ if __name__ == '__main__':
     model.normalize_importance_matrix_about_task()
 
     if params.expr_type == "FORGET" or params.expr_type == "CRITERIA":
-        policies_for_expr = ["RANDOM", "MEAN", "MAX", "CONST", "OURS"]
+        policies_for_expr = ["RANDOM", "MEAN", "MAX", "OURS"]
         # noinspection PyTypeChecker
         experiment_forget(model, params, policies_for_expr)
     elif params.expr_type == "RETRAIN":
