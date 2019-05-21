@@ -9,21 +9,21 @@ class Mask:
                  mask_id: int,
                  alpha: float = None,
                  not_alpha: float = None,
-                 mask_type: MaskType = MaskType.TARGETED):
+                 hard_mask: np.ndarray = None,
+                 mask_type: MaskType = MaskType.ADAPTIVE):
 
         self.alpha = alpha or {
-            MaskType.TARGETED: 0.1,
-            MaskType.ADAPTIVE: 2.,
-            MaskType.RELAXED: 0,
+            MaskType.ADAPTIVE: 5.,
+            MaskType.HARD: 0.,
         }[mask_type]
 
         self.not_alpha = not_alpha or {
-            MaskType.TARGETED: 0.9,
-            MaskType.ADAPTIVE: - 4.0,
-            MaskType.RELAXED: 0,
+            MaskType.ADAPTIVE: - 5.0,
+            MaskType.HARD: 0.,
         }[mask_type]
 
         self.mask_id = mask_id
+        self.hard_mask = hard_mask
         self.mask_type = mask_type
 
     def get_masked_tensor(self,
@@ -36,18 +36,8 @@ class Mask:
         n_units = shape[-1]
         reduce_axis = list(range(len(shape) - 1))
 
-        if self.mask_type == MaskType.RELAXED:
-            with tf.variable_scope("mask", reuse=tf.AUTO_REUSE):
-                mask_var = tf.get_variable("mask_var_{}".format(self.mask_id), shape=[n_units, n_units])
-
-            reduced_prev_layer = tf.reduce_mean(tf.matmul(prev_layer, mask_var), axis=reduce_axis)
-            sampled_mask = 0.5 * (tf.nn.softsign(10 * reduced_prev_layer) + 1)
-
-            residuals = {
-                "mask_var": mask_var,
-            }
-
-        elif self.mask_type == MaskType.ADAPTIVE:
+        residuals = {}
+        if self.mask_type == MaskType.ADAPTIVE:
             probs_of_activation_h = 0.5 * (tf.nn.softsign(self.alpha * tf.reduce_mean(prev_layer, axis=reduce_axis)
                                                           + self.not_alpha) + 1)
             sampled_mask = tf.cast(
@@ -60,38 +50,19 @@ class Mask:
                 "probs_of_activation_h": probs_of_activation_h,
             }
 
-        elif self.mask_type == MaskType.TARGETED:
-            reduced_prev_layer = tf.reduce_mean(prev_layer, axis=reduce_axis)
-            k = int(n_units * self.alpha)
-            top_k = tf.nn.top_k(reduced_prev_layer, k=k)
-            top_k_values = top_k.values
-            min_top_k_value = tf.reduce_min(top_k_values)
+            cond_mask = tf.cond(
+                is_training,
+                lambda: sampled_mask,
+                lambda: tf.constant(1., shape=[n_units]),
+                name="mask_{}".format(self.mask_id),
+            )
 
-            top_k_mask = tf.cast(tf.math.greater(
-                reduced_prev_layer,
-                min_top_k_value,
-            ), dtype=tf.float32)
-
-            bottom_mask = tf.cast(tf.math.greater(
-                tf.random_uniform([n_units], minval=0, maxval=1),
-                self.not_alpha,  # probability of dropout.
-            ), dtype=tf.float32)
-
-            sampled_mask = tf.reduce_max([top_k_mask, bottom_mask], axis=0)
-            residuals = {
-                "k": k,
-                "top_k_mask": top_k_mask,
-            }
+        elif self.mask_type == MaskType.HARD:
+            cond_mask = self.hard_mask
+            assert cond_mask.get_shape().as_list()[-1] == n_units
 
         else:
             raise ValueError
-
-        cond_mask = tf.cond(
-            is_training,
-            lambda: sampled_mask,
-            lambda: tf.constant(1., shape=[n_units]),
-            name="mask_{}".format(self.mask_id),
-        )
 
         if len(shape) == 4:  # conv2d case
             # (n_units) -> (w, h, n_units)

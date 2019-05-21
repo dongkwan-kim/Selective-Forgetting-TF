@@ -17,8 +17,7 @@ class UnitType(enum.Enum):
 
 class MaskType(enum.Enum):
     ADAPTIVE = 0
-    TARGETED = 1
-    RELAXED = 2
+    HARD = 1
 
     def __str__(self):
         return self.name

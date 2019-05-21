@@ -52,7 +52,7 @@ class SFHPS(SFN):
 
         self.use_set_based_mask = config.use_set_based_mask
         if self.use_set_based_mask:
-            self.mask_type = MaskType.TARGETED
+            self.mask_type = MaskType.ADAPTIVE
             self.excl_partial_loss_list = []
 
         self.yhat_list = []
