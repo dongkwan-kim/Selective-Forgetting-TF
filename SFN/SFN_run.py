@@ -213,10 +213,10 @@ if __name__ == '__main__':
 
         # SFDEN_FORGET, SFDEN_RETRAIN, SFDEN_MULTIPLE_FORGET,
         # SFHPS_FORGET, SFHPS_MASK,
-        # SFEWC_FORGET,
+        # SFEWC_FORGET, SFEWC_MULTIPLE_FORGET,
         # SFLCL10_FORGET, SFLCL10_MASK
         # SFLCL20_FORGET, SFLCL100_FORGET,
-        experiment_name="SFDEN_MULTIPLE_FORGET",
+        experiment_name="SFEWC_MULTIPLE_FORGET",
 
         # SMALL_FC_MNIST,
         # LARGE_FC_MNIST, NOT_XLARGE_FC_MNIST,
@@ -224,7 +224,7 @@ if __name__ == '__main__':
         # SMALL_CONV_MNIST, ALEXNETV_MNIST,
         # ALEXNETV_CIFAR10,
         # ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-        model_name="SMALL_FC_MNIST",
+        model_name="XLARGE_FC_MNIST",
     )
 
     # noinspection PyTypeChecker
