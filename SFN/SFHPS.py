@@ -52,7 +52,9 @@ class SFHPS(SFN):
 
         self.use_set_based_mask = config.use_set_based_mask
         if self.use_set_based_mask:
-            self.mask_type = MaskType.ADAPTIVE
+            self.mask_type = config.mask_type
+            self.mask_alpha = config.mask_alpha
+            self.mask_not_alpha = config.mask_not_alpha
             self.excl_partial_loss_list = []
 
         self.yhat_list = []
@@ -177,7 +179,9 @@ class SFHPS(SFN):
                 bottom = tf.nn.relu(tf.matmul(bottom, w) + b)
 
                 if self.use_set_based_mask:
-                    bottom, residuals = Mask(i).get_masked_tensor(bottom, is_training, with_residuals=True)
+                    bottom, residuals = Mask(
+                        i, self.mask_alpha, self.mask_not_alpha, mask_type=self.mask_type,
+                    ).get_masked_tensor(bottom, is_training, with_residuals=True)
                     mask = residuals["cond_mask"]
                     excl_bottom = tf.nn.relu(tf.matmul(excl_bottom, w) + b)
                     excl_bottom = Mask.get_exclusive_masked_tensor(excl_bottom, mask, is_training)

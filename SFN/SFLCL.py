@@ -97,7 +97,9 @@ class SFLCL(SFN):
 
         self.use_set_based_mask = config.use_set_based_mask
         if self.use_set_based_mask:
-            self.mask_type = MaskType.ADAPTIVE
+            self.mask_type = config.mask_type
+            self.mask_alpha = config.mask_alpha
+            self.mask_not_alpha = config.mask_not_alpha
             self.excl_loss = None
 
         self.yhat = None
@@ -274,7 +276,9 @@ class SFLCL(SFN):
 
             # Mask
             if self.use_set_based_mask:
-                h_conv, residuals = Mask(conv_num).get_masked_tensor(h_conv, is_training, with_residuals=True)
+                h_conv, residuals = Mask(
+                    conv_num, self.mask_alpha, self.mask_not_alpha, mask_type=self.mask_type,
+                ).get_masked_tensor(h_conv, is_training, with_residuals=True)
                 mask = residuals["cond_mask"]
                 excl_h_conv = tf.nn.relu(excl_h_conv)
                 excl_h_conv = Mask.get_exclusive_masked_tensor(excl_h_conv, mask, is_training)

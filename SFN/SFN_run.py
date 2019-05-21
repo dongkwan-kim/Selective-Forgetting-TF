@@ -10,10 +10,9 @@ from SFLCL import SFLCL
 from params import MyParams, check_params, to_yaml_path
 from data import *
 from utils import build_line_of_list, get_project_dir
-from enums import UnitType
+from enums import UnitType, MaskType
 
 np.random.seed(1004)
-tf.random.set_random_seed(1004)
 
 
 def load_experiment_and_model_params(experiment_name, model_name) -> MyParams:
@@ -32,6 +31,10 @@ def load_experiment_and_model_params(experiment_name, model_name) -> MyParams:
             "checkpoint_dir": lambda p: os.path.join(
                 get_project_dir(), p.checkpoint_dir, p.model, p.mtype,
             ),
+            "mask_type": lambda p: {
+                "ADAPTIVE": MaskType.ADAPTIVE,
+                "HARD": MaskType.HARD,
+            }[p.mask_type],
         })
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(n) for n in loaded_params.gpu_num_list)
     check_params(loaded_params)
@@ -183,7 +186,7 @@ if __name__ == '__main__':
         # SMALL_CONV_MNIST, ALEXNETV_MNIST,
         # ALEXNETV_CIFAR10,
         # ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-        model_name="ALEXNETV_MNIST",
+        model_name="ALEXNETV_CIFAR10",
     )
 
     # noinspection PyTypeChecker
