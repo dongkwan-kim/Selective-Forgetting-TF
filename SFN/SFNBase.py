@@ -7,6 +7,7 @@ import math
 import numpy as np
 import numpy.linalg as npl
 import tensorflow as tf
+from cges.cges import get_sparsity_of_variable
 from termcolor import cprint
 from tqdm import trange
 
@@ -23,6 +24,7 @@ def get_utype_from_layer_type(layer_type: str or List[str]) -> UnitType or List[
         "fc": UnitType.NEURON,
         "layer": UnitType.NEURON,  # TODO: Replace layer to fc
         "bn": UnitType.NONE,
+        "mask": UnitType.NONE,
     }
     if isinstance(layer_type, str):
         return layer_type_to_utype[layer_type]
@@ -248,7 +250,8 @@ class SFN:
 
     # Data visualization
 
-    def print_summary(self, task_id):
+    def print_summary(self, task_id_or_ids):
+        task_id_list = [task_id_or_ids] if isinstance(task_id_or_ids, int) else task_id_or_ids
         for policy, history in self.prediction_history.items():
             print("== {} ==".format(policy))
             print("\t".join(
@@ -258,7 +261,7 @@ class SFN:
             ))
             pruning_rate_as_x = self.pruning_rate_history[policy]
             for i, (pruning_rate, perf) in enumerate(zip(pruning_rate_as_x, history)):
-                perf_except_t = np.delete(perf, task_id - 1)
+                perf_except_t = np.delete(perf, [tid - 1 for tid in task_id_list])
                 mean_perf = np.mean(perf_except_t)
                 print("\t".join([str(pruning_rate)] + [str(x) for x in perf] + [str(mean_perf)]))
 
@@ -459,6 +462,10 @@ class SFN:
         else:
             raise ValueError("{} does not have an appropriate relatedness_type".format(relatedness_type))
 
+        if relatedness_type != "constant":
+            cprint("rho: {} +- {}".format(np.mean(rho), np.std(rho)), "red")
+            assert 0.1 < np.mean(rho) < 0.9, "np.mean(rho) = {}".format(np.mean(rho))
+
         related_deviation = np.mean(rho * deviation_i_mat_to_remember, axis=0)  # (T - |S|, |H|) -> (|H|,)
         assert related_deviation.shape == (n_units,), \
             "related_deviation.shape, {}, is not ({},)".format(related_deviation.shape, n_units)
@@ -555,7 +562,7 @@ class SFN:
         if len(indexes) == 0:
             return
 
-        print("\n REMOVE NEURONS {} ({}) - {}".format(scope, len(indexes), indexes))
+        print(" REMOVE NEURONS {} ({})".format(scope, len(indexes)))
         self.layer_to_removed_neuron_set[scope].update(set(indexes))
 
         w: tf.Variable = self.get_variable(scope, "weight", False)
@@ -827,6 +834,24 @@ class SFN:
         for i_vec in np.concatenate(self.importance_matrix_tuple, axis=1):
             print("\t".join(str(importance) for importance in i_vec))
 
+    def get_area_under_forgetting_curve(self, task_id_or_ids, policy_name):
+        task_id_list = [task_id_or_ids] if isinstance(task_id_or_ids, int) else task_id_or_ids
+
+        # Ys
+        history = self.prediction_history[policy_name]
+        history_txn = np.transpose(history)
+        history_txn_except_t = np.delete(history_txn, [tid - 1 for tid in task_id_list], axis=0)
+        history_n_mean_except_t = np.mean(history_txn_except_t, axis=0)
+        history_n_min_except_t = np.min(history_txn_except_t, axis=0)
+
+        # Xs
+        pruning_rate_as_x = self.pruning_rate_history[policy_name]
+
+        au_mean_fc = np.trapz(history_n_mean_except_t, x=pruning_rate_as_x)
+        au_min_fc = np.trapz(history_n_min_except_t, x=pruning_rate_as_x)
+
+        return au_mean_fc, au_min_fc
+
     # Retrain after forgetting
 
     def retrain_after_forgetting(self, flags, policy, epoches_to_print: list = None, is_verbose: bool = True):
@@ -958,3 +983,13 @@ class SFN:
                 value_sfn = value_preprocess(name, value_sfn, retrained_value)
 
             self.sess.run(tf.assign(tensor_sfn, value_sfn))
+
+    def print_sparsity(self, iteration, variable_key="weight"):
+        cprint("\n SPARSITY COMPUTATION at ITERATION {} on Devices {}".format(
+            iteration, self.get_real_device_info()), "green")
+        variable_to_be_sparsed = [v for v in tf.trainable_variables() if variable_key in v.name]
+        tsp, sp_list = get_sparsity_of_variable(self.sess, variables=variable_to_be_sparsed)
+        print("   [*] Total sparsity: {}".format(tsp))
+        print("   [*] Sparsities:")
+        for v, s in zip(variable_to_be_sparsed, sp_list):
+            print("     - {}: {}".format(v.name, s))

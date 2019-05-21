@@ -10,25 +10,16 @@ from SFLCL import SFLCL
 from params import MyParams, check_params, to_yaml_path
 from data import *
 from utils import build_line_of_list, get_project_dir
-from enums import UnitType
+from enums import UnitType, MaskType
 
 np.random.seed(1004)
 
 
-def load_experiment_and_model_params() -> MyParams:
+def load_experiment_and_model_params(experiment_name, model_name) -> MyParams:
     loaded_params = MyParams(
         yaml_file_to_config_name={
-
-            # SFDEN_FORGET, SFDEN_RETRAIN, SFHPS_FORGET, SFEWC_FORGET,
-            # SFLCL10_FORGET, SFLCL20_FORGET, SFLCL100_FORGET,
-            # SFLCL10_CGES,
-            to_yaml_path("experiment.yaml"): "SFLCL10_CGES",
-
-            # SMALL_FC_MNIST, LARGE_FC_MNIST, XLARGE_FC_MNIST
-            # SMALL_CONV_MNIST, ALEXNETV_MNIST,
-            # ALEXNETV_CIFAR10, ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-            to_yaml_path("models.yaml"): "ALEXNETV_MNIST",
-
+            to_yaml_path("experiment.yaml"): experiment_name,
+            to_yaml_path("models.yaml"): model_name,
         },
         value_magician={
             "model": lambda p: {
@@ -40,6 +31,10 @@ def load_experiment_and_model_params() -> MyParams:
             "checkpoint_dir": lambda p: os.path.join(
                 get_project_dir(), p.checkpoint_dir, p.model, p.mtype,
             ),
+            "mask_type": lambda p: {
+                "ADAPTIVE": MaskType.ADAPTIVE,
+                "HARD": MaskType.HARD,
+            }[p.mask_type],
         })
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(n) for n in loaded_params.gpu_num_list)
     check_params(loaded_params)
@@ -93,6 +88,11 @@ def experiment_forget(sfn, _flags, _policies):
         file_extension=".pdf",
         highlight_ylabels=["OURS"],
     )
+
+    print("Area Under Forgetting Curve")
+    for policy_name in _policies:
+        au_mean_fc, au_min_fc = sfn.get_area_under_forgetting_curve(_flags.task_to_forget, policy_name)
+        print("\t".join(str(x) for x in [policy_name, au_mean_fc, au_min_fc]))
 
 
 def experiment_forget_and_retrain(sfn, _flags, _policies):
@@ -171,7 +171,23 @@ def get_dataset(dtype: str, _flags, **kwargs) -> tuple:
 
 if __name__ == '__main__':
 
-    params = load_experiment_and_model_params()
+    params = load_experiment_and_model_params(
+
+        # SFDEN_FORGET, SFDEN_RETRAIN,
+        # SFHPS_FORGET, SFHPS_MASK,
+        # SFEWC_FORGET,
+        # SFLCL10_FORGET, SFLCL10_MASK
+        # SFLCL20_FORGET, SFLCL100_FORGET,
+        experiment_name="SFLCL10_MASK",
+
+        # SMALL_FC_MNIST,
+        # LARGE_FC_MNIST, NOT_XLARGE_FC_MNIST,
+        # XLARGE_FC_MNIST
+        # SMALL_CONV_MNIST, ALEXNETV_MNIST,
+        # ALEXNETV_CIFAR10,
+        # ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
+        model_name="ALEXNETV_CIFAR10",
+    )
 
     # noinspection PyTypeChecker
     labels, train_xs, val_xs, test_xs, coreset = get_dataset(params.dtype, params)
@@ -188,7 +204,7 @@ if __name__ == '__main__':
     model.normalize_importance_matrix_about_task()
 
     if params.expr_type == "FORGET" or params.expr_type == "CRITERIA":
-        policies_for_expr = ["RANDOM", "MEAN", "MAX", "CONST", "OURS"]
+        policies_for_expr = ["RANDOM", "MEAN", "MAX", "OURS"]
         # noinspection PyTypeChecker
         experiment_forget(model, params, policies_for_expr)
     elif params.expr_type == "RETRAIN":

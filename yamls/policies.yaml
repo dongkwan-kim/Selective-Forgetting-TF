@@ -1,9 +1,5 @@
 DEFAULT: &DEFAULT
 
-  CONST:
-
-  ALL_CONST:
-
   MAX:
 
   MEAN:
@@ -12,6 +8,8 @@ DEFAULT: &DEFAULT
 
   ALL_MEAN:
 
+  ALL_CONST:
+
 SMALL_FC_MNIST:
   <<: *DEFAULT
   OURS:
@@ -19,17 +17,9 @@ SMALL_FC_MNIST:
       mixing_coeff: 0
       tau: 0
     NEURON:
-      mixing_coeff: 0.63
+      mixing_coeff: 0.6499202703720822
       relatedness_type: "symmetric_unit_level"
-      tau: 0.005
-
-  CONST:
-    FILTER:
-      mixing_coeff: 0
-      tau: 0
-    NEURON:
-      mixing_coeff: 0.5
-      tau: 0
+      tau: 0.007775754827717371
 
 LARGE_FC_MNIST:
   <<: *DEFAULT
@@ -39,17 +29,20 @@ LARGE_FC_MNIST:
       mixing_coeff: 0
       tau: 0
     NEURON:
-      mixing_coeff: 0.85
+      mixing_coeff: 0.8397466640225256
       relatedness_type: "symmetric_unit_level"
-      tau: 0.005
+      tau: 0.00029462054615651964
 
-  CONST:
+NOT_XLARGE_FC_MNIST:
+  <<: *DEFAULT
+  OURS:
     FILTER:
       mixing_coeff: 0
       tau: 0
     NEURON:
-      mixing_coeff: 0.5
-      tau: 0
+      mixing_coeff: 0.3746655787285152
+      relatedness_type: "symmetric_unit_level"
+      tau: 0.009502635921035063
 
 XLARGE_FC_MNIST:
   <<: *DEFAULT
@@ -58,54 +51,18 @@ XLARGE_FC_MNIST:
       mixing_coeff: 0
       tau: 0
     NEURON:
-      mixing_coeff: 0.994
+      mixing_coeff: 0.9995
       relatedness_type: "symmetric_unit_level"
-      tau: 0.00075
-
-  CONST:
-    FILTER:
-      mixing_coeff: 0
-      tau: 0
-    NEURON:
-      mixing_coeff: 0.994
-      tau: 0
+      tau: 0.0012170414877861668
 
 ALEXNETV_CIFAR10:
   <<: *DEFAULT
   OURS:
     FILTER:
-      mixing_coeff: 0.995
+      mixing_coeff: 0.9612109315331435 # 0.9612109315331435 for mask, 0.8330860308911593 for non-mask.
       relatedness_type: "symmetric_unit_level"
-      tau: 1.5
+      tau: 0.0002852492637731716 # 0.0002852492637731716 for mask, 0.004395123008309351 for non-mask.
     NEURON:
       mixing_coeff: 0
-      relatedness_type: "symmetric_unit_level"
-      tau: 0
-
-  CONST:
-    FILTER:
-      mixing_coeff: 0.75
-      tau: 0
-    NEURON:
-      mixing_coeff: 0
-      tau: 0
-
-ALEXNETV_MNIST:
-  <<: *DEFAULT
-  OURS:
-    FILTER:
-      mixing_coeff: 0.995
-      relatedness_type: "symmetric_unit_level"
-      tau: 1.5
-    NEURON:
-      mixing_coeff: 0
-      relatedness_type: "symmetric_unit_level"
-      tau: 0
-
-  CONST:
-    FILTER:
-      mixing_coeff: 0.4
-      tau: 0
-    NEURON:
-      mixing_coeff: 0
+      relatedness_type: ""
       tau: 0

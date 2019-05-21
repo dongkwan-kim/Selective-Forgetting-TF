@@ -11,10 +11,10 @@ from termcolor import cprint
 from tqdm import trange
 
 from SFNBase import SFN
+from enums import MaskType
+from mask import Mask
 from utils import get_dims_from_config, print_all_vars, \
-    with_tf_device_gpu, with_tf_device_cpu
-
-from cges.cges import cges, get_sparsity_of_variable
+    with_tf_device_gpu, with_tf_device_cpu, get_middle_path_name, cprint_stats_of_mask_pair, get_batch_iterator
 
 
 def parse_pool_key(pool_name):
@@ -40,6 +40,14 @@ def _get_batch_normalized_conv(beta: tf.Variable,
                              lambda: (ema.average(batch_mean), ema.average(batch_variance)))
     h_conv = tf.nn.batch_normalization(h_conv, mean, variance, beta, gamma, 1e-3)
     return h_conv
+
+
+def _get_xs_and_labels_wo_target(target_t, train_xs, train_labels):
+    xs_except_target = np.concatenate([xs() for i, xs in enumerate(train_xs) if i != target_t])
+    labels_except_target = np.concatenate([label() for i, label in enumerate(train_labels) if i != target_t])
+    permut = np.random.permutation(len(xs_except_target))
+    xs_except_target, labels_except_target = xs_except_target[permut], labels_except_target[permut]
+    return xs_except_target, labels_except_target
 
 
 class SFLCL(SFN):
@@ -87,8 +95,16 @@ class SFLCL(SFN):
             self.group_layerwise = [eval(str(gl)) for gl in config.group_layerwise]
             self.exclusive_layerwise = [eval(str(el)) for el in config.exclusive_layerwise]
 
+        self.use_set_based_mask = config.use_set_based_mask
+        if self.use_set_based_mask:
+            self.mask_type = config.mask_type
+            self.mask_alpha = config.mask_alpha
+            self.mask_not_alpha = config.mask_not_alpha
+            self.excl_loss = None
+
         self.yhat = None
         self.loss = None
+        self.validation_results = []
 
         self.create_model_variables()
         self.set_layer_types()
@@ -97,17 +113,19 @@ class SFLCL(SFN):
         cprint("Device info: {}".format(self.get_real_device_info()), "green")
 
     def save(self, model_name=None, model_middle_path=None):
-        if not self.use_cges:
-            model_middle_path = model_middle_path or "_".join(self.get_real_device_info())
-        else:
-            model_middle_path = model_middle_path or "cges-{}".format("_".join(self.get_real_device_info()))
+        model_middle_path = get_middle_path_name({
+            "sbm": self.use_set_based_mask,
+            "cges": self.use_cges,
+            **{d: True for d in self.get_real_device_info()}
+        })
         super().save(model_name=model_name, model_middle_path=model_middle_path)
 
     def restore(self, model_name=None, model_middle_path=None, build_model=True):
-        if not self.use_cges:
-            model_middle_path = model_middle_path or "_".join(self.get_real_device_info())
-        else:
-            model_middle_path = model_middle_path or "cges-{}".format("_".join(self.get_real_device_info()))
+        model_middle_path = get_middle_path_name({
+            "sbm": self.use_set_based_mask,
+            "cges": self.use_cges,
+            **{d: True for d in self.get_real_device_info()}
+        })
         restored = super().restore(model_name, model_middle_path, build_model)
         return restored
 
@@ -149,7 +167,7 @@ class SFLCL(SFN):
             perf_list.append(perf)
         return [float(p) for p in perf_list]
 
-    def predict_perform(self, xs, ys, number_to_print=8) -> list:
+    def predict_perform(self, xs, ys, number_to_print=8, with_residuals=False) -> list or tuple:
         X = tf.get_default_graph().get_tensor_by_name("X:0")
         keep_prob = tf.get_default_graph().get_tensor_by_name("keep_prob:0")
         is_training = tf.get_default_graph().get_tensor_by_name("is_training:0")
@@ -175,15 +193,30 @@ class SFLCL(SFN):
             if rank == half_number_to_print and len(test_perf) > 2 * half_number_to_print:
                 print("\t ...")
 
+        accuracy_value = accuracy(test_preds, ys)
         print("   [*] avg_perf: %.4f +- %.4f" % (float(np.mean(test_perf)), float(np.std(test_perf))))
-        print("   [*] accuracy: {} %".format(accuracy(test_preds, ys)))
-        return test_perf
+        print("   [*] accuracy: {} %".format(accuracy_value))
+        if with_residuals:
+            return test_perf, {
+                "accuracy": accuracy_value,
+            }
+        else:
+            return test_perf
 
     def predict_only_after_training(self, **kwargs) -> list:
         cprint("\n PREDICT ONLY AFTER " + ("TRAINING" if not self.retrained else "RE-TRAINING"), "yellow")
-        _, _, _, _, test_x, test_labels = self.get_data_stream_from_task_as_class_data(shuffle=False)
+        _, _, _, _, test_x, test_labels = self._get_data_stream_from_task_as_class_data(shuffle=False)
         perfs = self.predict_perform(test_x, test_labels, **kwargs)
         return perfs
+
+    def evaluate_overall(self, iteration, val_x, val_labels, loss_sum):
+        cprint('\n OVERALL EVALUATION at ITERATION {} on Devices {}'.format(
+            iteration, self.get_real_device_info()), "green")
+        validation_perf, residuals = self.predict_perform(val_x, val_labels, with_residuals=True)
+        self.validation_results.append((np.mean(validation_perf), residuals["accuracy"]))
+        print("   [*] max avg_perf: %.4f" % max(apf for apf, acc in self.validation_results))
+        print("   [*] max accuracy: {} %".format(max(acc for apf, acc in self.validation_results)))
+        print("   [*] training loss: {}".format(loss_sum))
 
     def set_layer_types(self):
         for i in range(2, len(self.conv_dims), 2):
@@ -218,125 +251,142 @@ class SFLCL(SFN):
         keep_prob = tf.placeholder(tf.float32, name="keep_prob")
         is_training = tf.placeholder(tf.bool, name="is_training")
 
+        excl_X = tf.placeholder(tf.float32, [None, xsize, xsize, xn_filters], name="excl_X")
+        excl_Y = tf.placeholder(tf.float32, [None, self.n_classes], name="excl_Y")
+
         h_conv = X
+        excl_h_conv = excl_X if self.use_set_based_mask else None
         for conv_num, i in enumerate(range(2, len(self.conv_dims), 2)):
             w_conv = self.get_variable("conv%d" % (i // 2), "weight", True)
             b_conv = self.get_variable("conv%d" % (i // 2), "biases", True)
             h_conv = tf.nn.conv2d(h_conv, w_conv, strides=[1, 1, 1, 1], padding="SAME") + b_conv
+            if self.use_set_based_mask:
+                excl_h_conv = tf.nn.conv2d(excl_h_conv, w_conv, strides=[1, 1, 1, 1], padding="SAME") + b_conv
 
             # batch normalization
             if self.use_batch_normalization:
                 beta = self.get_variable("bn%d" % (i // 2), "beta", True)
                 gamma = self.get_variable("bn%d" % (i // 2), "gamma", True)
                 h_conv = _get_batch_normalized_conv(beta, gamma, h_conv, is_training)
+                if self.use_set_based_mask:
+                    excl_h_conv = _get_batch_normalized_conv(beta, gamma, excl_h_conv, is_training)
 
             # activation
             h_conv = tf.nn.relu(h_conv)
+
+            # Mask
+            if self.use_set_based_mask:
+                h_conv, residuals = Mask(
+                    conv_num, self.mask_alpha, self.mask_not_alpha, mask_type=self.mask_type,
+                ).get_masked_tensor(h_conv, is_training, with_residuals=True)
+                mask = residuals["cond_mask"]
+                excl_h_conv = tf.nn.relu(excl_h_conv)
+                excl_h_conv = Mask.get_exclusive_masked_tensor(excl_h_conv, mask, is_training)
 
             # max pooling
             if conv_num + 1 in self.pool_pos_to_dims:
                 pool_dim = self.pool_pos_to_dims[conv_num + 1]
                 pool_ksize = [1, pool_dim, pool_dim, 1]
                 h_conv = tf.nn.max_pool(h_conv, ksize=pool_ksize, strides=[1, 2, 2, 1], padding="SAME")
+                if self.use_set_based_mask:
+                    excl_h_conv = tf.nn.max_pool(excl_h_conv, ksize=pool_ksize, strides=[1, 2, 2, 1], padding="SAME")
 
         h_fc = tf.reshape(h_conv, (-1, self.dims[0]))
+        excl_h_fc = tf.reshape(excl_h_conv, (-1, self.dims[0])) if self.use_set_based_mask else None
         for i in range(1, len(self.dims)):
             w_fc = self.get_variable("fc%d" % i, "weight", True)
             b_fc = self.get_variable("fc%d" % i, "biases", True)
             h_fc = tf.matmul(h_fc, w_fc) + b_fc
+            if self.use_set_based_mask:
+                excl_h_fc = tf.matmul(excl_h_fc, w_fc) + b_fc
 
             if i < len(self.dims) - 1:  # Do not activate the last layer.
                 h_fc = tf.nn.relu(h_fc)
+                if self.use_set_based_mask:
+                    excl_h_fc = tf.nn.relu(excl_h_fc)
+
                 if self.dropout_type == "dropout":
                     h_fc = tf.nn.dropout(h_fc, keep_prob)
+                    if self.use_set_based_mask:
+                        excl_h_fc = tf.nn.dropout(excl_h_fc, keep_prob)
                 else:
                     raise ValueError
 
         self.yhat = tf.nn.sigmoid(h_fc)
         self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=h_fc, labels=Y))
+        if self.use_set_based_mask:
+            self.excl_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=excl_h_fc, labels=excl_Y))
 
-        return X, Y, keep_prob, is_training
+        return X, Y, excl_X, excl_Y, keep_prob, is_training
 
     @with_tf_device_gpu
-    def initial_train(self, print_iter=100, *args):
+    def initial_train(self, print_iter=5, *args):
 
-        X, Y, keep_prob, is_training = self.build_model()
+        X, Y, excl_X, excl_Y, keep_prob, is_training = self.build_model()
 
         # Add L1 & L2 loss regularizer
         l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(
             scale_l1=self.l1_lambda,
             scale_l2=self.l2_lambda,
         )
-        vars_of_task = []
-        for var in tf.trainable_variables():
-            if "conv" in var.name or "fc" in var.name:
-                vars_of_task.append(var)
-        regularization_loss = tf.contrib.layers.apply_regularization(l1_l2_regularizer, vars_of_task)
-        self.loss += regularization_loss
+        variables = [var for var in tf.trainable_variables() if "conv" in var.name or "fc" in var.name]
+        regularization_loss = tf.contrib.layers.apply_regularization(l1_l2_regularizer, variables)
+        train_x, train_labels, val_x, val_labels, test_x, test_labels = self._get_data_stream_from_task_as_class_data()
+        num_batches = int(math.ceil(len(train_x) / self.batch_size))
 
-        if self.use_cges:
+        if not self.use_set_based_mask:
+            loss = self.loss + regularization_loss
+            opt = tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt").minimize(loss)
 
-            global_step = tf.get_variable("global_step", shape=[], initializer=tf.zeros_initializer())
-            decayed_learning_rate = tf.train.exponential_decay(
-                learning_rate=self.init_lr,
-                global_step=global_step,
-                decay_steps=self.max_iter,
-                decay_rate=self.lr_decay_rate,
-                staircase=True,
-                name="decayed_learning_rate",
-            )
+            self.sess = tf.Session()
+            self.sess.run(tf.global_variables_initializer())
 
-            cges_op, op_list = cges(decayed_learning_rate, self.cges_lambda, self.cges_mu, self.cges_chvar,
-                                    group_layerwise=self.group_layerwise,
-                                    exclusive_layerwise=self.exclusive_layerwise,
-                                    variable_filter=lambda name: "weight" in name)
-            opt = tf.train.GradientDescentOptimizer(
-                learning_rate=decayed_learning_rate,
-                name="opt").minimize(self.loss, global_step=global_step)
+            for epoch in trange(self.max_iter):
+                self.initialize_batch()
+                loss_sum = 0
+                for _ in range(num_batches):
+                    batch_x, batch_y = self.get_next_batch(train_x, train_labels)
+                    _, loss_val = self.sess.run(
+                        [opt, loss],
+                        feed_dict={X: batch_x, Y: batch_y, keep_prob: self.keep_prob, is_training: True},
+                    )
+                    loss_sum += loss_val
+
+                if epoch % print_iter == 0 or epoch == self.max_iter - 1:
+                    self.evaluate_overall(epoch, val_x, val_labels, loss_sum)
         else:
-            opt = tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt").minimize(self.loss)
-            cges_op = []
+            loss_with_excl = self.loss + self.excl_loss + regularization_loss
+            opt_with_excl = tf.train.AdamOptimizer(learning_rate=self.init_lr, name="opt").minimize(loss_with_excl)
 
-        self.sess = tf.Session()
-        self.sess.run(tf.global_variables_initializer())
+            self.sess = tf.Session()
+            self.sess.run(tf.global_variables_initializer())
 
-        train_x, train_labels, val_x, val_labels, test_x, test_labels = self.get_data_stream_from_task_as_class_data()
+            batch_size_per_task = self.batch_size // self.n_tasks
 
-        for epoch in trange(self.max_iter):
-            self.initialize_batch()
-            num_batches = int(math.ceil(len(train_x) / self.batch_size))
-            loss_sum = 0
-            for _ in range(num_batches):
-                batch_x, batch_y = self.get_next_batch(train_x, train_labels)
-                _, loss_val = self.sess.run([opt, self.loss],
-                                            feed_dict={
-                                                X: batch_x,
-                                                Y: batch_y,
-                                                keep_prob: self.keep_prob,
-                                                is_training: True,
-                                            })
-                if self.use_cges:
-                    _ = self.sess.run(cges_op)
+            xs_queues = [get_batch_iterator(self.trainXs[t], batch_size_per_task) for t in range(self.n_tasks)]
+            labels_queues = [get_batch_iterator(self.data_labels.get_train_labels(t + 1), batch_size_per_task)
+                             for t in range(self.n_tasks)]
 
-                loss_sum += loss_val
+            target_t = 0
+            for epoch in trange(self.max_iter):
+                loss_sum = 0
+                for _ in range(num_batches):
+                    xs_wo_target, labels_wo_target = _get_xs_and_labels_wo_target(target_t, xs_queues, labels_queues)
 
-            if epoch % print_iter == 0 or epoch == self.max_iter - 1:
-                cprint('\n OVERALL EVALUATION at ITERATION {} on Devices {}'.format(
-                    epoch, self.get_real_device_info()), "green")
-                self.predict_perform(test_x, test_labels)
-                print("   [*] loss: {}".format(loss_sum))
+                    feed_dict = {
+                        X: xs_queues[target_t](), Y: labels_queues[target_t](),
+                        excl_X: xs_wo_target, excl_Y: labels_wo_target,
+                        keep_prob: self.keep_prob, is_training: True,
+                    }
+                    _, loss_val = self.sess.run([opt_with_excl, loss_with_excl], feed_dict=feed_dict)
+                    loss_sum += loss_val
+                    target_t = (target_t + 1) % self.n_tasks
 
-                if self.use_cges:
-                    cprint("\n SPARSITY COMPUTATION at ITERATION {} on Devices {}".format(
-                        epoch, self.get_real_device_info()), "green")
-                    variable_to_be_sparsed = [v for v in tf.trainable_variables() if "weight" in v.name]
-                    tsp, sp_list = get_sparsity_of_variable(self.sess, variables=variable_to_be_sparsed)
-                    print("   [*] Total sparsity: {}".format(tsp))
-                    print("   [*] Sparsities:")
-                    for v, s in zip(variable_to_be_sparsed, sp_list):
-                        print("     - {}: {}".format(v.name, s))
+                if epoch % print_iter == 0 or epoch == self.max_iter - 1:
+                    self.evaluate_overall(epoch, val_x, val_labels, loss_sum)
+                    cprint_stats_of_mask_pair(self, 3, 6, batch_size_per_task, X, is_training, mask_id=1)
 
-    def get_data_stream_from_task_as_class_data(self, shuffle=True, base_seed=42) -> Tuple[np.ndarray, ...]:
+    def _get_data_stream_from_task_as_class_data(self, shuffle=True, base_seed=42) -> Tuple[np.ndarray, ...]:
         """a method that combines data divided by class"""
         train_labels = np.concatenate([self.data_labels.get_train_labels(t + 1) for t in range(self.n_tasks)])
         validation_labels = np.concatenate([self.data_labels.get_validation_labels(t + 1) for t in range(self.n_tasks)])
@@ -427,6 +477,7 @@ class SFLCL(SFN):
         self.load_params(params)
         self.sess.run(tf.global_variables_initializer())
         self.loss = None
+        self.excl_loss = None
         self.yhat = None
         self.build_model()
 
