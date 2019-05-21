@@ -53,7 +53,7 @@ def tune_policy_param(sfn, n_to_search, _flags):
     )
 
     optimizer.maximize(
-        init_points=2,
+        init_points=0,
         n_iter=n_to_search,
     )
 
@@ -61,7 +61,9 @@ def tune_policy_param(sfn, n_to_search, _flags):
         print("Iteration {}".format(i))
         res["params"]["tau"] = float(res["params"]["taux100"] / 100)
         pprint(res)
-    cprint(optimizer.max, "green")
+    max_res = optimizer.max
+    max_res["params"]["tau"] = float(max_res["params"]["taux100"] / 100)
+    cprint(max_res, "green")
 
 
 if __name__ == '__main__':
@@ -73,7 +75,7 @@ if __name__ == '__main__':
         # SFEWC_FORGET,
         # SFLCL10_FORGET, SFLCL10_MASK
         # SFLCL20_FORGET, SFLCL100_FORGET,
-        experiment_name="SFDEN_FORGET",
+        experiment_name="SFLCL10_MASK",
 
         # SMALL_FC_MNIST,
         # LARGE_FC_MNIST, NOT_XLARGE_FC_MNIST,
@@ -81,7 +83,7 @@ if __name__ == '__main__':
         # SMALL_CONV_MNIST, ALEXNETV_MNIST,
         # ALEXNETV_CIFAR10,
         # ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-        model_name="SMALL_FC_MNIST",
+        model_name="ALEXNETV_CIFAR10",
     )
 
     labels, train_xs, val_xs, test_xs, coreset = get_dataset(params.dtype, params)
@@ -98,4 +100,4 @@ if __name__ == '__main__':
     model.normalize_importance_matrix_about_task()
 
     # noinspection PyTypeChecker
-    tune_policy_param(model, 20, params)
+    tune_policy_param(model, 15, params)
