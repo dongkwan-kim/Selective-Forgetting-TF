@@ -29,6 +29,16 @@ SFDEN_FORGET: &SFDEN_FORGET
   model: SFDEN
   support_model: ["SMALL_FC_MNIST"]
 
+SFDEN_MULTIPLE_FORGET:
+  <<: *SFDEN_FORGET
+  task_to_forget_list: [[], [1, 2], [1, 2, 3, 4], [1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6, 7, 8]]
+  mixing_coeff_list: [0.0, 0.5962671826302948, 0.49135327161226205, 0.35998779364580585, 0.0005]
+  tau_list: [0.0, 0.004351855346370753, 5e-06, 0.008176911647015424, 5e-06]
+  need_coreset: True
+  expr_type: MULTIPLE_FORGET
+  model: SFDEN
+  support_model: ["SMALL_FC_MNIST"]
+
 SFDEN_RETRAIN:
   <<: *SFDEN_FORGET
   steps_to_forget: 15
