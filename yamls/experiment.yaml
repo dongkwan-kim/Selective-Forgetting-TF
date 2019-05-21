@@ -10,7 +10,7 @@ basic: &BASIC
   importance_criteria: first_Taylor_approximation
   need_coreset: True
   online_importance: False
-  gpu_num_list: [0]
+  gpu_num_list: [3]
   coreset_size: 1000
   use_cges: False
   use_set_based_mask: False
@@ -55,7 +55,7 @@ SFHPS_FORGET:
   <<: *BASIC
   batch_size: 1000
   max_iter: 40
-  l1_lambda: 1e-05
+  l1_lambda: 1e-04
   l2_lambda: 0.0
   need_coreset: False
   expr_type: FORGET
@@ -66,10 +66,13 @@ SFHPS_MASK:
   <<: *BASIC
   batch_size: 1000
   max_iter: 40
-  l1_lambda: 1e-05
+  l1_lambda: 1e-04
   l2_lambda: 0.0
   need_coreset: False
   use_set_based_mask: True
+  mask_type: ADAPTIVE
+  mask_alpha: 6.0
+  mask_not_alpha: -6.0
   expr_type: FORGET
   model: SFHPS
   support_model: ["NOT_XLARGE_FC_MNIST"]
@@ -77,8 +80,8 @@ SFHPS_MASK:
 SFLCL10_FORGET:
   <<: *BASIC
   max_iter: 200
-  l1_lambda: 0.0
-  l2_lambda: 1e-05
+  l1_lambda: 1e-06
+  l2_lambda: 0.0
   need_coreset: False
   expr_type: FORGET
   model: SFLCL
@@ -86,51 +89,14 @@ SFLCL10_FORGET:
 
 SFLCL10_MASK:
   <<: *BASIC
-  max_iter: 300
-  l1_lambda: 0.0
-  l2_lambda: 1e-05
+  max_iter: 200
+  l1_lambda: 1e-06
+  l2_lambda: 0.0
   need_coreset: False
   use_set_based_mask: True
+  mask_type: ADAPTIVE
+  mask_alpha: 15.0
+  mask_not_alpha: -4.0
   expr_type: FORGET
   model: SFLCL
   support_model: ["SMALL_CONV_MNIST", "ALEXNETV_MNIST", "ALEXNETV_CIFAR10"]
-
-SFLCL10_CGES:
-  <<: *BASIC
-  lr: 0.05
-  lr_decay_rate: 0.999
-  max_iter: 50 #2000
-  l1_lambda: 0.0
-  l2_lambda: 0.0
-  use_cges: True
-  cges_lambda: 0.000003
-  cges_mu: 0.8
-  cges_chvar: 0.2
-  group_layerwise: [1., 1., 0.9, 0.9, 0.9, 1., 1., 1. / 16]
-  exclusive_layerwise: [1., 1.1, 1.1, 1.1, 1.1, 2., 2., 16.]
-  need_coreset: False
-  expr_type: FORGET
-  model: SFLCL
-  support_model: ["SMALL_CONV_MNIST", "ALEXNETV_MNIST", "ALEXNETV_CIFAR10"]
-
-SFLCL20_FORGET:
-  <<: *BASIC
-  max_iter: 4000
-  n_tasks: 20
-  l1_lambda: 1e-06
-  l2_lambda: 1e-06
-  need_coreset: False
-  expr_type: FORGET
-  model: SFLCL
-  support_model: ["ALEXNETV_COARSE_CIFAR100"]
-
-SFLCL100_FORGET:
-  <<: *BASIC
-  max_iter: 5000
-  n_tasks: 100
-  l1_lambda: 1e-06
-  l2_lambda: 1e-06
-  need_coreset: False
-  expr_type: FORGET
-  model: SFLCL
-  support_model: ["ALEXNETV_CIFAR100"]
