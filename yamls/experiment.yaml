@@ -10,10 +10,11 @@ basic: &BASIC
   importance_criteria: first_Taylor_approximation
   need_coreset: True
   online_importance: False
-  gpu_num_list: [3]
+  gpu_num_list: [0]
   coreset_size: 1000
   use_cges: False
   use_set_based_mask: False
+  layerwise_pruning: True
 
 SFDEN_FORGET: &SFDEN_FORGET
   <<: *BASIC
@@ -91,24 +92,24 @@ SFHPS_MASK:
 
 SFLCL10_FORGET:
   <<: *BASIC
-  max_iter: 200
-  l1_lambda: 1e-06
+  max_iter: 250
+  l1_lambda: 2e-06
   l2_lambda: 0.0
   need_coreset: False
   expr_type: FORGET
   model: SFLCL
   support_model: ["SMALL_CONV_MNIST", "ALEXNETV_MNIST", "ALEXNETV_CIFAR10"]
 
-SFLCL10_MASK:
+SFLCL10_MASK: &SFLCL_MASK
   <<: *BASIC
-  max_iter: 200
-  l1_lambda: 1e-06
+  max_iter: 1000
+  l1_lambda: 2e-06
   l2_lambda: 0.0
   need_coreset: False
   use_set_based_mask: True
   mask_type: ADAPTIVE
-  mask_alpha: 15.0
-  mask_not_alpha: -4.0
+  mask_alpha: 2.0
+  mask_not_alpha: [-5.4, -5.6, -6.4, -4.4] # -3.5
   expr_type: FORGET
   model: SFLCL
   support_model: ["SMALL_CONV_MNIST", "ALEXNETV_MNIST", "ALEXNETV_CIFAR10"]
