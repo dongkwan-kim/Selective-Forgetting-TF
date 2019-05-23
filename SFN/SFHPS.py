@@ -53,8 +53,10 @@ class SFHPS(SFN):
         self.use_set_based_mask = config.use_set_based_mask
         if self.use_set_based_mask:
             self.mask_type = config.mask_type
-            self.mask_alpha = config.mask_alpha
-            self.mask_not_alpha = config.mask_not_alpha
+            self.mask_alpha = config.mask_alpha if isinstance(config.mask_alpha, list) \
+                else [config.mask_alpha for _ in range(len(self.dims))]
+            self.mask_not_alpha = config.mask_not_alpha if isinstance(config.mask_not_alpha, list) \
+                else [config.mask_not_alpha for _ in range(len(self.dims))]
             self.excl_partial_loss_list = []
 
         self.yhat_list = []
@@ -180,11 +182,12 @@ class SFHPS(SFN):
 
                 if self.use_set_based_mask:
                     bottom, residuals = Mask(
-                        i, self.mask_alpha, self.mask_not_alpha, mask_type=self.mask_type,
+                        i - 1, self.mask_alpha[i - 1], self.mask_not_alpha[i - 1], mask_type=self.mask_type,
                     ).get_masked_tensor(bottom, is_training, with_residuals=True)
                     mask = residuals["cond_mask"]
-                    excl_bottom = tf.nn.relu(tf.matmul(excl_bottom, w) + b)
-                    excl_bottom = Mask.get_exclusive_masked_tensor(excl_bottom, mask, is_training)
+                    with tf.control_dependencies([mask]):
+                        excl_bottom = tf.nn.relu(tf.matmul(excl_bottom, w) + b)
+                        excl_bottom = Mask.get_exclusive_masked_tensor(excl_bottom, mask, is_training)
 
             w = self.get_variable("layer%d" % self.n_layers, "weight_%d" % (t + 1), True)
             b = self.get_variable("layer%d" % self.n_layers, "biases_%d" % (t + 1), True)
@@ -203,7 +206,7 @@ class SFHPS(SFN):
         return X_list, Y_list, is_training
 
     @with_tf_device_gpu
-    def initial_train(self, print_iter=10):
+    def initial_train(self, print_iter=5):
 
         X_list, Y_list, is_training = self.build_model()
 
@@ -269,7 +272,8 @@ class SFHPS(SFN):
 
                 if epoch % print_iter == 0 or epoch == self.max_iter - 1:
                     self.evaluate_overall(epoch)
-                    cprint_stats_of_mask_pair(self, 3, 6, batch_size_per_task, X_list[0], is_training, mask_id=1)
+                    for i in range(self.n_layers - 1):
+                        cprint_stats_of_mask_pair(self, 1, 6, batch_size_per_task, X_list[0], is_training, mask_id=i)
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
     @with_tf_device_gpu

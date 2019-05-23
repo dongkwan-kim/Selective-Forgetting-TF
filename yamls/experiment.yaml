@@ -10,10 +10,11 @@ basic: &BASIC
   importance_criteria: first_Taylor_approximation
   need_coreset: True
   online_importance: False
-  gpu_num_list: [3]
+  gpu_num_list: [0]
   coreset_size: 1000
   use_cges: False
   use_set_based_mask: False
+  layerwise_pruning: True
 
 SFDEN_FORGET: &SFDEN_FORGET
   <<: *BASIC
@@ -25,19 +26,24 @@ SFDEN_FORGET: &SFDEN_FORGET
   spl_thr: 0.1
   retrain_task_iter: 80
   retrain_max_iter_per_task: 150
+  need_coreset: True
   expr_type: FORGET
   model: SFDEN
   support_model: ["SMALL_FC_MNIST"]
 
+SFDEN_MULTIPLE_FORGET:
+  <<: *SFDEN_FORGET
+  task_to_forget_list: [[], [1, 2], [1, 2, 3, 4], [1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6, 7, 8]]
+  mixing_coeff_list: [0.0, 0.5962671826302948, 0.49135327161226205, 0.35998779364580585, 0.0005]
+  tau_list: [0.0, 0.004351855346370753, 5e-06, 0.008176911647015424, 5e-06]
+  expr_type: MULTIPLE_FORGET
+
 SFDEN_RETRAIN:
   <<: *SFDEN_FORGET
   steps_to_forget: 15
-  need_coreset: True
   expr_type: RETRAIN
-  model: SFDEN
-  support_model: ["SMALL_FC_MNIST"]
 
-SFEWC_FORGET:
+SFEWC_FORGET: &SFEWC_FORGET
   <<: *BASIC
   max_iter: 20
   l1_lambda: 0.0
@@ -51,10 +57,17 @@ SFEWC_FORGET:
   model: SFEWC
   support_model: ["XLARGE_FC_MNIST"]
 
+SFEWC_MULTIPLE_FORGET:
+  <<: *SFEWC_FORGET
+  task_to_forget_list: [[], [1, 2], [1, 2, 3, 4], [1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6, 7, 8]]
+  mixing_coeff_list: [0.0, 0.9995, 0.9994999800345135, 0.9995, 0.2118713370557824]
+  tau_list: [0.0, 0.0019621552206627473, 0.0031022630644842873, 0.0021440668246421853, 0.0026038630416280167]
+  expr_type: MULTIPLE_FORGET
+
 SFHPS_FORGET:
   <<: *BASIC
   batch_size: 1000
-  max_iter: 40
+  max_iter: 100
   l1_lambda: 1e-04
   l2_lambda: 0.0
   need_coreset: False
@@ -65,38 +78,38 @@ SFHPS_FORGET:
 SFHPS_MASK:
   <<: *BASIC
   batch_size: 1000
-  max_iter: 40
+  max_iter: 100
   l1_lambda: 1e-04
   l2_lambda: 0.0
   need_coreset: False
   use_set_based_mask: True
   mask_type: ADAPTIVE
-  mask_alpha: 6.0
-  mask_not_alpha: -6.0
+  mask_alpha: 1.5
+  mask_not_alpha: -2.0
   expr_type: FORGET
   model: SFHPS
   support_model: ["NOT_XLARGE_FC_MNIST"]
 
 SFLCL10_FORGET:
   <<: *BASIC
-  max_iter: 200
-  l1_lambda: 1e-06
+  max_iter: 250
+  l1_lambda: 2e-06
   l2_lambda: 0.0
   need_coreset: False
   expr_type: FORGET
   model: SFLCL
   support_model: ["SMALL_CONV_MNIST", "ALEXNETV_MNIST", "ALEXNETV_CIFAR10"]
 
-SFLCL10_MASK:
+SFLCL10_MASK: &SFLCL_MASK
   <<: *BASIC
-  max_iter: 200
-  l1_lambda: 1e-06
+  max_iter: 1000
+  l1_lambda: 2e-06
   l2_lambda: 0.0
   need_coreset: False
   use_set_based_mask: True
   mask_type: ADAPTIVE
-  mask_alpha: 15.0
-  mask_not_alpha: -4.0
+  mask_alpha: 2.0
+  mask_not_alpha: [-5.4, -5.6, -6.4, -4.4] # -3.5
   expr_type: FORGET
   model: SFLCL
   support_model: ["SMALL_CONV_MNIST", "ALEXNETV_MNIST", "ALEXNETV_CIFAR10"]

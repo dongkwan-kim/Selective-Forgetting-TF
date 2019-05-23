@@ -3,6 +3,10 @@ import numpy as np
 from enums import MaskType
 
 
+def softsign_0_to_1(x):
+    return 0.5 * (tf.nn.softsign(x) + 1)
+
+
 class Mask:
 
     def __init__(self,
@@ -38,8 +42,12 @@ class Mask:
 
         residuals = {}
         if self.mask_type == MaskType.ADAPTIVE:
-            probs_of_activation_h = 0.5 * (tf.nn.softsign(self.alpha * tf.reduce_mean(prev_layer, axis=reduce_axis)
-                                                          + self.not_alpha) + 1)
+
+            reduced_layer = tf.reduce_mean(prev_layer, axis=reduce_axis)
+            mean_of_layer, std_of_layer = tf.nn.moments(reduced_layer, axes=[0])
+            z_layer = (reduced_layer - mean_of_layer) / std_of_layer
+            probs_of_activation_h = 0.55 * softsign_0_to_1(self.alpha * z_layer + self.not_alpha)
+
             sampled_mask = tf.cast(
                 tf.math.greater(
                     probs_of_activation_h,

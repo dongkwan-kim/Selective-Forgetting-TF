@@ -95,6 +95,44 @@ def experiment_forget(sfn, _flags, _policies):
         print("\t".join(str(x) for x in [policy_name, au_mean_fc, au_min_fc]))
 
 
+def experiment_multiple_forget(sfn, _flags):
+
+    utype_to_one_step_units = get_one_step_unit_dict(_flags)
+    policy_params = load_params_of_policy(_flags.mtype)
+
+    policies = []
+    for task_to_forget, mixing_coeff, tau in zip(_flags.task_to_forget_list,
+                                                 _flags.mixing_coeff_list,
+                                                 _flags.tau_list):
+        params_of_utype = policy_params.get("OURS")
+        params_of_utype["FILTER"]["tau"] = tau
+        params_of_utype["NEURON"]["tau"] = tau
+        params_of_utype["FILTER"]["mixing_coeff"] = mixing_coeff
+        params_of_utype["NEURON"]["mixing_coeff"] = mixing_coeff
+
+        policy_name = str(len(task_to_forget))
+        policies.append(policy_name)
+        sfn.sequentially_selective_forget_and_predict(
+            task_to_forget=task_to_forget,  # not _flags.task_to_forget
+            utype_to_one_step_units=utype_to_one_step_units,
+            steps_to_forget=_flags.steps_to_forget,
+            policy=policy_name,
+            params_of_utype=params_of_utype,
+        )
+        sfn.recover_old_params()
+
+    sfn.draw_chart_summary_mf(
+        _flags.task_to_forget_list,
+        file_prefix=os.path.join(get_project_dir(), "figs/{}_{}".format(_flags.model.__name__, _flags.expr_type)),
+        file_extension=".pdf",
+    )
+
+    print("Area Under Forgetting Curve")
+    for policy_name in policies:
+        au_mean_fc, au_min_fc = sfn.get_area_under_forgetting_curve(_flags.task_to_forget, policy_name)
+        print("\t".join(str(x) for x in [policy_name, au_mean_fc, au_min_fc]))
+
+
 def experiment_forget_and_retrain(sfn, _flags, _policies):
     policy_params = load_params_of_policy(_flags.mtype)
     for policy in _policies:
@@ -173,12 +211,12 @@ if __name__ == '__main__':
 
     params = load_experiment_and_model_params(
 
-        # SFDEN_FORGET, SFDEN_RETRAIN,
+        # SFDEN_FORGET, SFDEN_RETRAIN, SFDEN_MULTIPLE_FORGET,
         # SFHPS_FORGET, SFHPS_MASK,
-        # SFEWC_FORGET,
-        # SFLCL10_FORGET, SFLCL10_MASK
+        # SFEWC_FORGET, SFEWC_MULTIPLE_FORGET,
+        # SFLCL10_FORGET, SFLCL10_MASK, SFLCL10_MASK_MULTIPLE_FORGET
         # SFLCL20_FORGET, SFLCL100_FORGET,
-        experiment_name="SFLCL10_MASK",
+        experiment_name="SFLCL10_FORGET",
 
         # SMALL_FC_MNIST,
         # LARGE_FC_MNIST, NOT_XLARGE_FC_MNIST,
@@ -207,6 +245,11 @@ if __name__ == '__main__':
         policies_for_expr = ["RANDOM", "MEAN", "MAX", "OURS"]
         # noinspection PyTypeChecker
         experiment_forget(model, params, policies_for_expr)
+
+    elif params.expr_type == "MULTIPLE_FORGET":
+        # noinspection PyTypeChecker
+        experiment_multiple_forget(model, params)
+
     elif params.expr_type == "RETRAIN":
         policies_for_expr = ["OURS"]
         # noinspection PyTypeChecker

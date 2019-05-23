@@ -51,6 +51,7 @@ class SFN:
         self.importance_matrix_tuple = None
         self.importance_criteria = config.importance_criteria
         self.online_importance = config.online_importance
+        self.layerwise_pruning = config.layerwise_pruning
 
         self.gpu_names = get_available_gpu_names(config.gpu_num_list)
         self.gpu_num_list = config.gpu_num_list
@@ -265,6 +266,50 @@ class SFN:
                 mean_perf = np.mean(perf_except_t)
                 print("\t".join([str(pruning_rate)] + [str(x) for x in perf] + [str(mean_perf)]))
 
+    def draw_chart_summary_mf(self, list_of_task_ids: List[List[int]],
+                              file_prefix=None, file_extension=".png", ylim=None, highlight_ylabels=None,
+                              **kwargs):
+
+        mean_perf_except_t = None
+        min_perf_except_t = None
+
+        for (policy, history), task_id_list in zip(self.prediction_history.items(), list_of_task_ids):
+            history_txn = np.transpose(history)
+            history_txn_except_t = np.delete(history_txn, [tid - 1 for tid in task_id_list], axis=0)
+            history_n_mean_except_t = np.mean(history_txn_except_t, axis=0)
+            history_n_min_except_t = np.min(history_txn_except_t, axis=0)
+
+            if mean_perf_except_t is None:
+                mean_perf_except_t = history_n_mean_except_t
+                min_perf_except_t = history_n_min_except_t
+            else:
+                mean_perf_except_t = np.vstack((mean_perf_except_t, history_n_mean_except_t))
+                min_perf_except_t = np.vstack((min_perf_except_t, history_n_min_except_t))
+
+        policy_keys = [policy for policy in self.prediction_history.keys()]
+        pruning_rate_as_x_list = [self.pruning_rate_history[policy] for policy in policy_keys]
+
+        build_line_of_list(x_or_x_list=pruning_rate_as_x_list,
+                           y_list=mean_perf_except_t,
+                           label_y_list=policy_keys,
+                           xlabel="Pruning rate", ylabel="Mean of Average Per-task AUROC",
+                           ylim=ylim or [0.5, 1],
+                           title="Mean Perf. wrt. number of forgetting",
+                           file_name="{}_{}_MeanAcc{}".format(
+                               file_prefix, self.importance_criteria.split("_")[0], file_extension),
+                           highlight_ylabels=highlight_ylabels,
+                           **kwargs)
+        build_line_of_list(x_or_x_list=pruning_rate_as_x_list,
+                           y_list=min_perf_except_t,
+                           label_y_list=policy_keys,
+                           xlabel="Pruning rate", ylabel="Min of Average Per-task AUROC",
+                           ylim=ylim or [0.5, 1],
+                           title="Minimum Perf. wrt. number of forgetting",
+                           file_name="{}_{}_MinAcc{}".format(
+                               file_prefix, self.importance_criteria.split("_")[0], file_extension),
+                           highlight_ylabels=highlight_ylabels,
+                           **kwargs)
+
     def draw_chart_summary(self, task_id_or_ids,
                            file_prefix=None, file_extension=".png", ylim=None, highlight_ylabels=None,
                            **kwargs):
@@ -355,6 +400,17 @@ class SFN:
         self.recover_params(0)
 
     # Pruning strategies
+
+    def _get_selected_by_layerwise_pruning(self, asc_sorted_idx, number_to_select):
+
+        ratio = number_to_select / len(asc_sorted_idx)
+        selected_by_layerwise_pruning = self._get_selected_by_layers(asc_sorted_idx)
+
+        selected_by_layers_list = []
+        for selected_of_layer in selected_by_layerwise_pruning:
+            sz = len(selected_of_layer)
+            selected_by_layers_list.append(selected_of_layer[:int(sz*ratio)])
+        return tuple(selected_by_layers_list)
 
     def _get_selected_by_layers(self, selected_indices: np.ndarray) -> tuple:
         """
@@ -482,15 +538,21 @@ class SFN:
             deviated = mean_i
 
         deviated_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(deviated), utype)
-        selected = deviated_asc_sorted_idx[:number_to_select]
-        return self._get_selected_by_layers(selected)
+        if not self.layerwise_pruning:
+            selected = deviated_asc_sorted_idx[:number_to_select]
+            return self._get_selected_by_layers(selected)
+        else:
+            return self._get_selected_by_layerwise_pruning(deviated_asc_sorted_idx, number_to_select)
 
     def get_units_by_maximum_importance(self, task_id_or_ids, number_to_select, utype):
         """Pruning ConvNets Online for Efficient Specialist Models, CVPR W, 2018."""
         max_i = self.get_maximum_importance(task_id_or_ids)
         maximized_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(max_i), utype)
-        selected = maximized_asc_sorted_idx[:number_to_select]
-        return self._get_selected_by_layers(selected)
+        if not self.layerwise_pruning:
+            selected = maximized_asc_sorted_idx[:number_to_select]
+            return self._get_selected_by_layers(selected)
+        else:
+            return self._get_selected_by_layerwise_pruning(maximized_asc_sorted_idx, number_to_select)
 
     def get_units_by_mean_importance(self, task_id_or_ids, number_to_select, utype):
         """
@@ -499,8 +561,11 @@ class SFN:
         """
         mean_i = self.get_mean_importance(task_id_or_ids)
         asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(mean_i), utype)
-        selected = asc_sorted_idx[:number_to_select]
-        return self._get_selected_by_layers(selected)
+        if not self.layerwise_pruning:
+            selected = asc_sorted_idx[:number_to_select]
+            return self._get_selected_by_layers(selected)
+        else:
+            return self._get_selected_by_layerwise_pruning(asc_sorted_idx, number_to_select)
 
     def get_random_units(self, number_to_select, utype):
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
@@ -508,8 +573,11 @@ class SFN:
         np.random.seed(i_mat.shape[-1])
         np.random.shuffle(indexes)
         indexes = self._get_indices_of_certain_utype(indexes, utype)
-        selected = indexes[:number_to_select]
-        return self._get_selected_by_layers(selected)
+        if not self.layerwise_pruning:
+            selected = indexes[:number_to_select]
+            return self._get_selected_by_layers(selected)
+        else:
+            return self._get_selected_by_layerwise_pruning(indexes, number_to_select)
 
     # Selective forgetting
 
@@ -524,7 +592,7 @@ class SFN:
             policy, task_to_forget, self.n_tasks, number_of_units, utype), "green")
 
         policy = policy.split(":")[0]
-        if policy == "OURS":
+        if policy == "OURS" or policy.isnumeric():
             unit_indexes = self.get_units_with_task_related_deviation(task_to_forget, number_of_units, utype, **kwargs)
         elif policy == "MAX":
             unit_indexes = self.get_units_by_maximum_importance(task_to_forget, number_of_units, utype)
@@ -834,7 +902,7 @@ class SFN:
         for i_vec in np.concatenate(self.importance_matrix_tuple, axis=1):
             print("\t".join(str(importance) for importance in i_vec))
 
-    def get_area_under_forgetting_curve(self, task_id_or_ids, policy_name):
+    def get_area_under_forgetting_curve(self, task_id_or_ids, policy_name, y_limit=0):
         task_id_list = [task_id_or_ids] if isinstance(task_id_or_ids, int) else task_id_or_ids
 
         # Ys
@@ -845,10 +913,12 @@ class SFN:
         history_n_min_except_t = np.min(history_txn_except_t, axis=0)
 
         # Xs
-        pruning_rate_as_x = self.pruning_rate_history[policy_name]
+        pruning_rate_as_x = np.asarray(self.pruning_rate_history[policy_name])
 
-        au_mean_fc = np.trapz(history_n_mean_except_t, x=pruning_rate_as_x)
-        au_min_fc = np.trapz(history_n_min_except_t, x=pruning_rate_as_x)
+        au_mean_fc = np.trapz(history_n_mean_except_t[history_n_mean_except_t > y_limit],
+                              x=pruning_rate_as_x[history_n_mean_except_t > y_limit])
+        au_min_fc = np.trapz(history_n_min_except_t[history_n_min_except_t > y_limit],
+                             x=pruning_rate_as_x[history_n_min_except_t > y_limit])
 
         return au_mean_fc, au_min_fc
 

@@ -5,7 +5,7 @@ from bayes_opt import BayesianOptimization
 import numpy as np
 
 
-def tune_policy_param(sfn, n_to_search, _flags):
+def tune_policy_param(sfn, n_to_search, _flags) -> Dict[str, float]:
 
     utype_to_one_step_units = get_one_step_unit_dict(_flags)
     policy_params = load_params_of_policy(_flags.mtype)
@@ -31,7 +31,7 @@ def tune_policy_param(sfn, n_to_search, _flags):
                 fast_skip=True,
             )
             sfn.recover_old_params()
-            au_mean_fc, au_min_fc = sfn.get_area_under_forgetting_curve(_flags.task_to_forget, policy_name)
+            au_mean_fc, au_min_fc = sfn.get_area_under_forgetting_curve(_flags.task_to_forget, policy_name, y_limit=0.7)
             return 0.2 * au_mean_fc + 0.8 * au_min_fc
         except AssertionError as e:
             mean_rho = float(str(e).split(" = ")[-1])
@@ -40,7 +40,7 @@ def tune_policy_param(sfn, n_to_search, _flags):
             else:
                 return mean_rho - 0.1
 
-    eps = 5e-4
+    eps = 5e-5
     param_bounds = {
         "taux100": (eps, 1 - eps),
         "mixing_coeff": (eps, 1 - eps),
@@ -63,7 +63,12 @@ def tune_policy_param(sfn, n_to_search, _flags):
         pprint(res)
     max_res = optimizer.max
     max_res["params"]["tau"] = float(max_res["params"]["taux100"] / 100)
+
+    cprint("{} / {} / {}".format(_flags.mtype, _flags.expr_type, _flags.dtype), "green")
     cprint(max_res, "green")
+    _flags.pprint()
+
+    return max_res["params"]
 
 
 if __name__ == '__main__':

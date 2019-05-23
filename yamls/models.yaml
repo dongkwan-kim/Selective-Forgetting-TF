@@ -20,13 +20,13 @@ LARGE_FC_MNIST:
 
 NOT_XLARGE_FC_MNIST:
   dims0: 784
-  dims1: 250
-  dims2: 250
+  dims1: 200
+  dims2: 200
   dims3: 10
   n_classes: 10
   dtype: PERMUTED_MNIST
   mtype: NOT_XLARGE_FC_MNIST
-  one_step_neurons: 20
+  one_step_neurons: 16
 
 XLARGE_FC_MNIST:
   dims0: 784
@@ -58,20 +58,19 @@ SMALL_CONV_MNIST:
   one_step_filters: 2
 
 ALEXNET_VARIANT: &ALEXNET_VARIANT
-  conv1_filters: 128
+  conv1_filters: 256
   conv1_size: 5
   pool1_ksize: 3
-  conv2_filters: 128
+  conv2_filters: 256
   conv2_size: 5
   pool2_ksize: 3
   conv3_filters: 256
   conv3_size: 5
+  pool3_ksize: 3
   conv4_filters: 256
   conv4_size: 3
-  conv5_filters: 256
-  conv5_size: 3
-  pool5_ksize: 3
-  fc0: 4096
+  pool4_ksize: 3
+  fc0: 1024
   fc1: 1024
   fc2: 1024
   dropout_type: "dropout"
