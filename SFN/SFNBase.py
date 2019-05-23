@@ -51,6 +51,7 @@ class SFN:
         self.importance_matrix_tuple = None
         self.importance_criteria = config.importance_criteria
         self.online_importance = config.online_importance
+        self.layerwise_pruning = config.layerwise_pruning
 
         self.gpu_names = get_available_gpu_names(config.gpu_num_list)
         self.gpu_num_list = config.gpu_num_list
@@ -400,6 +401,17 @@ class SFN:
 
     # Pruning strategies
 
+    def _get_selected_by_layerwise_pruning(self, asc_sorted_idx, number_to_select):
+
+        ratio = number_to_select / len(asc_sorted_idx)
+        selected_by_layerwise_pruning = self._get_selected_by_layers(asc_sorted_idx)
+
+        selected_by_layers_list = []
+        for selected_of_layer in selected_by_layerwise_pruning:
+            sz = len(selected_of_layer)
+            selected_by_layers_list.append(selected_of_layer[:int(sz*ratio)])
+        return tuple(selected_by_layers_list)
+
     def _get_selected_by_layers(self, selected_indices: np.ndarray) -> tuple:
         """
         Convert selected_indices of whole ndarray to indices of layer.
@@ -526,15 +538,21 @@ class SFN:
             deviated = mean_i
 
         deviated_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(deviated), utype)
-        selected = deviated_asc_sorted_idx[:number_to_select]
-        return self._get_selected_by_layers(selected)
+        if not self.layerwise_pruning:
+            selected = deviated_asc_sorted_idx[:number_to_select]
+            return self._get_selected_by_layers(selected)
+        else:
+            return self._get_selected_by_layerwise_pruning(deviated_asc_sorted_idx, number_to_select)
 
     def get_units_by_maximum_importance(self, task_id_or_ids, number_to_select, utype):
         """Pruning ConvNets Online for Efficient Specialist Models, CVPR W, 2018."""
         max_i = self.get_maximum_importance(task_id_or_ids)
         maximized_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(max_i), utype)
-        selected = maximized_asc_sorted_idx[:number_to_select]
-        return self._get_selected_by_layers(selected)
+        if not self.layerwise_pruning:
+            selected = maximized_asc_sorted_idx[:number_to_select]
+            return self._get_selected_by_layers(selected)
+        else:
+            return self._get_selected_by_layerwise_pruning(maximized_asc_sorted_idx, number_to_select)
 
     def get_units_by_mean_importance(self, task_id_or_ids, number_to_select, utype):
         """
@@ -543,8 +561,11 @@ class SFN:
         """
         mean_i = self.get_mean_importance(task_id_or_ids)
         asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(mean_i), utype)
-        selected = asc_sorted_idx[:number_to_select]
-        return self._get_selected_by_layers(selected)
+        if not self.layerwise_pruning:
+            selected = asc_sorted_idx[:number_to_select]
+            return self._get_selected_by_layers(selected)
+        else:
+            return self._get_selected_by_layerwise_pruning(asc_sorted_idx, number_to_select)
 
     def get_random_units(self, number_to_select, utype):
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
@@ -552,8 +573,11 @@ class SFN:
         np.random.seed(i_mat.shape[-1])
         np.random.shuffle(indexes)
         indexes = self._get_indices_of_certain_utype(indexes, utype)
-        selected = indexes[:number_to_select]
-        return self._get_selected_by_layers(selected)
+        if not self.layerwise_pruning:
+            selected = indexes[:number_to_select]
+            return self._get_selected_by_layers(selected)
+        else:
+            return self._get_selected_by_layerwise_pruning(indexes, number_to_select)
 
     # Selective forgetting
 
