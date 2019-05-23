@@ -98,8 +98,10 @@ class SFLCL(SFN):
         self.use_set_based_mask = config.use_set_based_mask
         if self.use_set_based_mask:
             self.mask_type = config.mask_type
-            self.mask_alpha = config.mask_alpha
-            self.mask_not_alpha = config.mask_not_alpha
+            self.mask_alpha = config.mask_alpha if isinstance(config.mask_alpha, list) \
+                else [config.mask_alpha for _ in range(len(self.conv_dims))]
+            self.mask_not_alpha = config.mask_not_alpha if isinstance(config.mask_not_alpha, list) \
+                else [config.mask_not_alpha for _ in range(len(self.conv_dims))]
             self.excl_loss = None
 
         self.yhat = None
@@ -277,11 +279,12 @@ class SFLCL(SFN):
             # Mask
             if self.use_set_based_mask:
                 h_conv, residuals = Mask(
-                    conv_num, self.mask_alpha, self.mask_not_alpha, mask_type=self.mask_type,
+                    conv_num, self.mask_alpha[conv_num], self.mask_not_alpha[conv_num], mask_type=self.mask_type,
                 ).get_masked_tensor(h_conv, is_training, with_residuals=True)
                 mask = residuals["cond_mask"]
-                excl_h_conv = tf.nn.relu(excl_h_conv)
-                excl_h_conv = Mask.get_exclusive_masked_tensor(excl_h_conv, mask, is_training)
+                with tf.control_dependencies([mask]):
+                    excl_h_conv = tf.nn.relu(excl_h_conv)
+                    excl_h_conv = Mask.get_exclusive_masked_tensor(excl_h_conv, mask, is_training)
 
             # max pooling
             if conv_num + 1 in self.pool_pos_to_dims:
@@ -384,7 +387,8 @@ class SFLCL(SFN):
 
                 if epoch % print_iter == 0 or epoch == self.max_iter - 1:
                     self.evaluate_overall(epoch, val_x, val_labels, loss_sum)
-                    cprint_stats_of_mask_pair(self, 3, 6, batch_size_per_task, X, is_training, mask_id=1)
+                    for i in range(len(self.conv_dims) // 2 - 1):
+                        cprint_stats_of_mask_pair(self, 1, 6, batch_size_per_task, X, is_training, mask_id=i)
 
     def _get_data_stream_from_task_as_class_data(self, shuffle=True, base_seed=42) -> Tuple[np.ndarray, ...]:
         """a method that combines data divided by class"""
