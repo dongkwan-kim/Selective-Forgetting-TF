@@ -40,9 +40,9 @@ NOT_XLARGE_FC_MNIST:
       mixing_coeff: 0
       tau: 0
     NEURON:
-      mixing_coeff: 0.3746655787285152
+      mixing_coeff: 0.29018316259338495
       relatedness_type: "symmetric_unit_level"
-      tau: 0.009502635921035063
+      tau: 0.007361426895715981
 
 XLARGE_FC_MNIST:
   <<: *DEFAULT
@@ -51,9 +51,9 @@ XLARGE_FC_MNIST:
       mixing_coeff: 0
       tau: 0
     NEURON:
-      mixing_coeff: 0.9995
+      mixing_coeff: 5e-06
       relatedness_type: "symmetric_unit_level"
-      tau: 0.0012170414877861668
+      tau: 0.00999995
 
 ALEXNETV_CIFAR10:
   <<: *DEFAULT

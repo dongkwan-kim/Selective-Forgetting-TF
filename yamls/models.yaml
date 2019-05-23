@@ -20,13 +20,13 @@ LARGE_FC_MNIST:
 
 NOT_XLARGE_FC_MNIST:
   dims0: 784
-  dims1: 250
-  dims2: 250
+  dims1: 200
+  dims2: 200
   dims3: 10
   n_classes: 10
   dtype: PERMUTED_MNIST
   mtype: NOT_XLARGE_FC_MNIST
-  one_step_neurons: 20
+  one_step_neurons: 16
 
 XLARGE_FC_MNIST:
   dims0: 784
