@@ -93,18 +93,11 @@ def cprint_stats_of_mask_pair(model, task_id_a, task_id_b,
     int_b = gi_b_1 & gi_b_2 & gi_b_3
     uni_b = gi_b_1 | gi_b_2 | gi_b_3
 
-    print("Task {}:".format(task_id_a))
-    cprint(gi_a_1, "red")
-    cprint(gi_a_2, "red")
-    cprint(gi_a_3, "red")
-    print("Task {}:".format(task_id_b))
-    cprint(gi_b_1, "blue")
-    cprint(gi_b_2, "blue")
-    cprint(gi_b_3, "blue")
-    cprint("Mask3 size: {} / {} / {}".format(len(gi_a_1), len(gi_a_2), len(gi_a_3)), "red")
-    cprint("Mask6 size: {} / {} / {}".format(len(gi_b_1), len(gi_b_2), len(gi_b_3)), "blue")
-    cprint("Mask3: intersection {} / union {}".format(len(int_a), len(uni_a)), "red")
-    cprint("Mask6: intersection {} / union {}".format(len(int_b), len(uni_b)), "blue")
+    cprint("Mask{} for tasks {} and {}".format(mask_id, task_id_a, task_id_b), "yellow")
+    cprint("Task{} size: {} / {} / {}".format(task_id_a, len(gi_a_1), len(gi_a_2), len(gi_a_3)), "red")
+    cprint("Task{} size: {} / {} / {}".format(task_id_b, len(gi_b_1), len(gi_b_2), len(gi_b_3)), "blue")
+    cprint("Task{}: intersection {} / union {}".format(task_id_a, len(int_a), len(uni_a)), "red")
+    cprint("Task{}: intersection {} / union {}".format(task_id_b, len(int_b), len(uni_b)), "blue")
     cprint("Symmetric Diff {}<->{}: intersect {} over {} / union {} over {}".format(
         task_id_a, task_id_b,
         len(int_a ^ int_b), len(int_a | int_b), len(uni_a ^ uni_b), len(uni_a | uni_b)
