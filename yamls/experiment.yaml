@@ -10,7 +10,7 @@ basic: &BASIC
   importance_criteria: first_Taylor_approximation
   need_coreset: True
   online_importance: False
-  gpu_num_list: [0]
+  gpu_num_list: [1]
   coreset_size: 1000
   use_cges: False
   use_set_based_mask: False
@@ -18,7 +18,8 @@ basic: &BASIC
 
 SFDEN_FORGET: &SFDEN_FORGET
   <<: *BASIC
-  max_iter: 600
+  max_iter: 700
+  l2_lambda: 0.0005
   gl_lambda: 0.001
   regular_lambda: 0.5
   ex_k: 10
@@ -41,7 +42,7 @@ SFDEN_MULTIPLE_FORGET:
 
 SFDEN_RETRAIN:
   <<: *SFDEN_FORGET
-  steps_to_forget: 15
+  steps_to_forget: 12
   expr_type: RETRAIN
 
 SFEWC_FORGET: &SFEWC_FORGET

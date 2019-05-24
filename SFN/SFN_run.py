@@ -147,13 +147,15 @@ def experiment_forget_and_retrain(sfn, _flags, _policies):
             _flags, policy,
             epoches_to_print=[0, 1, -2, -1],
             is_verbose=False,
+            taskwise_training=True,
         )
         build_line_of_list(x_or_x_list=list(i * _flags.retrain_max_iter_per_task
                                             for i in range(len(lst_of_perfs_at_epoch))),
                            y_list=np.transpose(lst_of_perfs_at_epoch),
                            label_y_list=[t + 1 for t in range(_flags.n_tasks)],
-                           xlabel="Re-training Epoches", ylabel="AUROC", ylim=[0.9, 1],
-                           title="AUROC By Retraining After Forgetting Task-{} ({})".format(
+                           xlabel="Re-training Epoches",
+                           ylabel="Average Per-task AUROC", ylim=[0.9, 1],
+                           title="Perf. by Retraining After Forgetting Task-{} ({})".format(
                                _flags.task_to_forget,
                                policy,
                            ),
@@ -216,7 +218,7 @@ if __name__ == '__main__':
         # SFEWC_FORGET, SFEWC_MULTIPLE_FORGET,
         # SFLCL10_FORGET, SFLCL10_MASK, SFLCL10_MASK_MULTIPLE_FORGET
         # SFLCL20_FORGET, SFLCL100_FORGET,
-        experiment_name="SFLCL10_FORGET",
+        experiment_name="SFDEN_FORGET",
 
         # SMALL_FC_MNIST,
         # LARGE_FC_MNIST, NOT_XLARGE_FC_MNIST,
@@ -224,7 +226,7 @@ if __name__ == '__main__':
         # SMALL_CONV_MNIST, ALEXNETV_MNIST,
         # ALEXNETV_CIFAR10,
         # ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-        model_name="ALEXNETV_CIFAR10",
+        model_name="SMALL_FC_MNIST",
     )
 
     # noinspection PyTypeChecker

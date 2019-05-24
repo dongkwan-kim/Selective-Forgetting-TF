@@ -80,7 +80,7 @@ if __name__ == '__main__':
         # SFEWC_FORGET,
         # SFLCL10_FORGET, SFLCL10_MASK
         # SFLCL20_FORGET, SFLCL100_FORGET,
-        experiment_name="SFLCL10_MASK",
+        experiment_name="SFDEN_FORGET",
 
         # SMALL_FC_MNIST,
         # LARGE_FC_MNIST, NOT_XLARGE_FC_MNIST,
@@ -88,7 +88,7 @@ if __name__ == '__main__':
         # SMALL_CONV_MNIST, ALEXNETV_MNIST,
         # ALEXNETV_CIFAR10,
         # ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-        model_name="ALEXNETV_CIFAR10",
+        model_name="SMALL_FC_MNIST",
     )
 
     labels, train_xs, val_xs, test_xs, coreset = get_dataset(params.dtype, params)
