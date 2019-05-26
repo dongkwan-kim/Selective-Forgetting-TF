@@ -16,6 +16,8 @@ basic: &BASIC
   use_set_based_mask: False
   layerwise_pruning: True
   taskwise_training: False
+  retrain_task_iter: 80
+  policies_for_expr: ["RANDOM", "MEAN", "MAX", "MEAN+DEV", "MAX+DEV"]
 
 SFDEN_FORGET: &SFDEN_FORGET
   <<: *BASIC
@@ -25,11 +27,10 @@ SFDEN_FORGET: &SFDEN_FORGET
   ex_k: 10
   loss_thr: 0.1
   spl_thr: 0.1
-  retrain_task_iter: 80
-  retrain_max_iter_per_task: 150
   need_coreset: True
   layerwise_pruning: False
   taskwise_training: True
+  policies_for_expr: ["RANDOM", "MEAN", "MAX", "MEAN+DEV"]
   expr_type: FORGET
   model: SFDEN
   support_model: ["SMALL_FC_MNIST"]
@@ -57,6 +58,7 @@ SFEWC_FORGET: &SFEWC_FORGET
   need_coreset: True
   layerwise_pruning: False
   online_importance: False
+  policies_for_expr: ["RANDOM", "MEAN", "MAX", "MEAN+DEV"]
   expr_type: FORGET
   model: SFEWC
   support_model: ["XLARGE_FC_MNIST"]
@@ -67,6 +69,11 @@ SFEWC_MULTIPLE_FORGET:
   mixing_coeff_list: [0.0, 0.9995, 0.9994999800345135, 0.9995, 0.2118713370557824]
   tau_list: [0.0, 0.0019621552206627473, 0.0031022630644842873, 0.0021440668246421853, 0.0026038630416280167]
   expr_type: MULTIPLE_FORGET
+
+SFEWC_RETRAIN:
+  <<: *SFEWC_FORGET
+  steps_to_forget: 12
+  expr_type: RETRAIN
 
 SFHPS_FORGET: &SFHPS_FORGET
   <<: *BASIC
