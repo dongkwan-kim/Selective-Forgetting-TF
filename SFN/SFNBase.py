@@ -970,7 +970,7 @@ class SFN:
                             cprint("\n\n\tTASK %d RE-TRAINING at iteration %d\n" %
                                    (target_t + 1, retrain_iter), "green")
 
-                        self._retrain_at_task(
+                        self._retrain_at_task_or_all(
                             task_id=target_t + 1,
                             train_xs=xs_queues[target_t](),
                             train_labels=labels_queues[target_t](),
@@ -1004,7 +1004,7 @@ class SFN:
 
         return series_of_perfs
 
-    def _retrain_at_task(self, task_id, train_xs, train_labels, retrain_flags, is_verbose):
+    def _retrain_at_task_or_all(self, task_id, train_xs, train_labels, retrain_flags, is_verbose):
         raise NotImplementedError
 
     def get_retraining_vars_from_old_vars(self, scope: str,
