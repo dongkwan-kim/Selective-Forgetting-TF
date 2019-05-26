@@ -86,7 +86,7 @@ def experiment_forget(sfn, _flags, _policies):
             _flags.model.__name__, _flags.expr_type, _flags.task_to_forget
         )),
         file_extension=".pdf",
-        highlight_ylabels=["OURS"],
+        highlight_ylabels=[p for p in _policies if "DEV" in p],
     )
 
     print("Area Under Forgetting Curve")
@@ -104,7 +104,7 @@ def experiment_multiple_forget(sfn, _flags):
     for task_to_forget, mixing_coeff, tau in zip(_flags.task_to_forget_list,
                                                  _flags.mixing_coeff_list,
                                                  _flags.tau_list):
-        params_of_utype = policy_params.get("OURS")
+        params_of_utype = policy_params.get("MEAN+DEV")
         params_of_utype["FILTER"]["tau"] = tau
         params_of_utype["NEURON"]["tau"] = tau
         params_of_utype["FILTER"]["mixing_coeff"] = mixing_coeff
@@ -215,7 +215,7 @@ if __name__ == '__main__':
 
         # SFDEN_FORGET, SFDEN_RETRAIN, SFDEN_MULTIPLE_FORGET,
         # SFHPS_FORGET, SFHPS_MASK,
-        # SFEWC_FORGET, SFEWC_MULTIPLE_FORGET,
+        # SFEWC_FORGET, SFEWC_RETRAIN, SFEWC_MULTIPLE_FORGET,
         # SFLCL10_FORGET, SFLCL10_MASK, SFLCL10_MASK_MULTIPLE_FORGET
         # SFLCL20_FORGET, SFLCL100_FORGET,
         experiment_name="SFDEN_FORGET",
@@ -244,7 +244,7 @@ if __name__ == '__main__':
     model.normalize_importance_matrix_about_task()
 
     if params.expr_type == "FORGET" or params.expr_type == "CRITERIA":
-        policies_for_expr = ["RANDOM", "MEAN", "MAX", "OURS"]
+        policies_for_expr = params.policies_for_expr
         # noinspection PyTypeChecker
         experiment_forget(model, params, policies_for_expr)
 
@@ -253,6 +253,6 @@ if __name__ == '__main__':
         experiment_multiple_forget(model, params)
 
     elif params.expr_type == "RETRAIN":
-        policies_for_expr = ["OURS"]
+        policies_for_expr = ["MEAN+DEV"]
         # noinspection PyTypeChecker
         experiment_forget_and_retrain(model, params, policies_for_expr)
