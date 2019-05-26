@@ -358,7 +358,7 @@ class SFEWC(SFN):
 
             loss_list.append(tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=y, labels=Y)))
 
-        l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(scale_l1=0.0, scale_l2=0.00001)
+        l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(scale_l1=self.l1_lambda, scale_l2=self.l2_lambda)
         regularization_loss = tf.contrib.layers.apply_regularization(
             l1_l2_regularizer,
             [v for v in tf.trainable_variables() if "layer" in v.name]

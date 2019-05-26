@@ -96,7 +96,7 @@ class SFN:
         self.data_labels, self.trainXs, self.valXs, self.testXs = data_labels, train_xs, val_xs, test_xs
         self.coreset = coreset
 
-    def predict_only_after_training(self) -> list:
+    def predict_only_after_training(self, **kwargs) -> list:
         raise NotImplementedError
 
     def initial_train(self, *args):
@@ -932,7 +932,7 @@ class SFN:
 
     # Retrain after forgetting
 
-    def retrain_after_forgetting(self, flags, policy, taskwise_training: bool,
+    def retrain_after_forgetting(self, flags, policy,
                                  epoches_to_print: list = None,
                                  is_verbose: bool = True):
         cprint("\n RETRAIN AFTER FORGETTING - {}".format(policy), "green")
@@ -956,56 +956,30 @@ class SFN:
         xs_queues = [get_batch_iterator(data_list[t][0], self.batch_size) for t in range(self.n_tasks)]
         labels_queues = [get_batch_iterator(data_list[t][1], self.batch_size) for t in range(self.n_tasks)]
 
-        if not taskwise_training:
-            model_args = self.build_model_for_retraining(flags)
-        else:
-            model_args = tuple()
+        model_args = self.build_model_for_retraining(flags)
 
         num_batches = int(math.ceil(len(data_list[0][0]) / self.batch_size))
         for retrain_iter in range(flags.retrain_task_iter):
 
             cprint("\n\n\tRE-TRAINING at iteration %d\n" % retrain_iter, "green")
 
-            if taskwise_training:
+            loss_sum = 0
+            for _ in range(num_batches):
+                loss_val = self._retrain_at_task_or_all(
+                    task_id=None,
+                    train_xs=xs_queues,
+                    train_labels=labels_queues,
+                    retrain_flags=flags,
+                    is_verbose=is_verbose,
+                    model_args=model_args,
+                )
+                loss_sum += loss_val
+            print("   [*] loss {}".format(loss_sum))
 
-                for _ in range(num_batches):
-
-                    for target_t in range(self.n_tasks):
-
-                        if (target_t + 1) in flags.task_to_forget:
-                            if is_verbose:
-                                cprint("\n\n\tTASK %d NO NEED TO RE-TRAIN at iteration %d" %
-                                       (target_t + 1, retrain_iter), "green")
-                            continue
-
-                        if is_verbose:
-                            cprint("\n\n\tTASK %d RE-TRAINING at iteration %d\n" %
-                                   (target_t + 1, retrain_iter), "green")
-
-                        self._retrain_at_task_or_all(
-                            task_id=target_t + 1,
-                            train_xs=xs_queues[target_t](),
-                            train_labels=labels_queues[target_t](),
-                            retrain_flags=flags,
-                            is_verbose=is_verbose,
-                        )
-                        self._assign_retrained_value_to_tensor(target_t + 1)
-                        self.assign_new_session()
+            if flags.model.__name__ != "SFDEN":
+                perfs = self.predict_only_after_training()
             else:
-                loss_sum = 0
-                for _ in range(num_batches):
-                    loss_val = self._retrain_at_task_or_all(
-                        task_id=None,
-                        train_xs=xs_queues,
-                        train_labels=labels_queues,
-                        retrain_flags=flags,
-                        is_verbose=is_verbose,
-                        model_args=model_args,
-                    )
-                    loss_sum += loss_val
-                print("   [*] loss {}".format(loss_sum))
-
-            perfs = self.predict_only_after_training()
+                perfs = self.predict_only_after_training(refresh_session=False, model_args=model_args)
             series_of_perfs.append(perfs)
 
             max_mean_perf_list = [get_mean_and_std_wo_indices(perfs, indices_to_forget)[0]
@@ -1033,95 +1007,6 @@ class SFN:
 
     def build_model_for_retraining(self, flags):
         raise NotImplementedError
-
-    def get_retraining_vars_from_old_vars(self, scope: str,
-                                          weight_name: str, bias_name: str,
-                                          task_id: int, var_prefix: str,
-                                          weight_var=None, bias_var=None, **kwargs) -> tuple:
-
-        """
-        :param scope: scope of variables.
-        :param weight_name: if weight_variable is None, use get_variable else use it.
-        :param bias_name: if bias_variable is None, use get_variable else use it.
-        :param task_id: id of task / 1 ~
-        :param var_prefix: variable prefix
-        :param weight_var: weight_variable
-        :param bias_var: bias_variable
-        :param kwargs: kwargs for get_removed_neurons_of_scope
-        :return: tuple of w and b
-
-        e.g. when scope == "layer2",
-        layer-"layer2", weight whose shape is (r0, c0), bias whose shape is (b0,)
-        layer-next of "layer2", weight whose shape is (r1, c1), bias whose shape is (b1,)
-        removed_neurons of (l-1)th [...] whose length is n0
-        removed_neurons of (l)th [...] whose length is n1
-        return weight whose shape is (r1 - n0, c1 - n1)
-               bias whose shape is (b1 - n1)
-        """
-        scope_list = self._get_scope_list()
-        scope_idx = scope_list.index(scope)
-        prev_scope = scope_list[scope_idx - 1] if scope_idx > 0 else None
-
-        assert self.importance_matrix_tuple is not None
-        w: tf.Variable = self.get_variable(scope, weight_name, True) \
-            if weight_var is None else weight_var
-        b: tf.Variable = self.get_variable(scope, bias_name, True) \
-            if bias_var is None else bias_var
-
-        # TODO: CNN
-
-        # Remove columns (neurons in the current layer)
-        removed_neurons = self.get_removed_neurons_of_scope(scope, **kwargs)
-        w: np.ndarray = np.delete(w.eval(session=self.sess), removed_neurons, axis=1)
-        b: np.ndarray = np.delete(b.eval(session=self.sess), removed_neurons)
-
-        # Remove rows (neurons in the previous layer)
-        if prev_scope:  # Do not consider 1st layer, that does not have previous layer.
-            removed_neurons_prev = self.get_removed_neurons_of_scope(prev_scope, **kwargs)
-            w = np.delete(w, removed_neurons_prev, axis=0)
-
-        sfn_w = self.sfn_create_or_get_variable("%s_t%d_%s" % (var_prefix, task_id, scope), weight_name,
-                                                trainable=True, initializer=w)
-        sfn_b = self.sfn_create_or_get_variable("%s_t%d_%s" % (var_prefix, task_id, scope), bias_name,
-                                                trainable=True, initializer=b)
-        return sfn_w, sfn_b
-
-    def _assign_retrained_value_to_tensor(self, task_id, value_preprocess=None, **kwargs):
-
-        # Get retrained values.
-        retrained_values_dict = self.sfn_get_params(name_filter=lambda n: "_t{}_".format(task_id) in n
-                                                                          and "retrain" in n)
-        # get_zero_expanded_matrix.
-        # TODO: CNN
-        scope_list = self._get_scope_list()
-        for name, retrained_value in list(retrained_values_dict.items()):
-            prefix, task_id, scope, var_type = parse_var_name(name)
-            scope_idx = scope_list.index(scope)
-            prev_scope = scope_list[scope_idx - 1] if scope_idx > 0 else None
-            removed_neurons = self.get_removed_neurons_of_scope(scope, **kwargs)
-
-            # Expand columns
-            retrained_value = get_zero_expanded_matrix(retrained_value, removed_neurons, add_rows=False)
-
-            # Expand rows
-            if prev_scope and "weight" in var_type:
-                removed_neurons_prev = self.get_removed_neurons_of_scope(prev_scope, **kwargs)
-                retrained_value = get_zero_expanded_matrix(retrained_value, removed_neurons_prev, add_rows=True)
-
-            retrained_values_dict[name] = retrained_value
-
-        # Assign values to tensors.
-        for name, retrained_value in retrained_values_dict.items():
-            prefix, task_id, scope, var_type = parse_var_name(name)
-            tensor_sfn = self.params["{}/{}:0".format(scope, var_type)]
-            value_sfn = tensor_sfn.eval(session=self.sess)
-
-            if not value_preprocess:
-                value_sfn = retrained_value
-            else:
-                value_sfn = value_preprocess(name, value_sfn, retrained_value)
-
-            self.sess.run(tf.assign(tensor_sfn, value_sfn))
 
     def print_sparsity(self, iteration, variable_key="weight"):
         cprint("\n SPARSITY COMPUTATION at ITERATION {} on Devices {}".format(

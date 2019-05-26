@@ -7,6 +7,8 @@ import re
 from DEN.DEN import DEN
 
 from SFNBase import SFN
+from enums import MaskType
+from mask import Mask
 
 import tensorflow as tf
 import numpy as np
@@ -90,7 +92,7 @@ class SFDEN(DEN, SFN):
         w = w[:stamp[layer_id - 1], :stamp[layer_id]]
         b = b[:stamp[layer_id]]
 
-        if is_forgotten:
+        if is_forgotten:  # TODO: remove legacy
             return self.get_retraining_vars_from_old_vars(
                 scope=scope, weight_name=weight_name, bias_name=bias_name,
                 task_id=task_id, var_prefix=var_prefix,
@@ -103,6 +105,58 @@ class SFDEN(DEN, SFN):
             sfn_b = self.sfn_create_or_get_variable("%s_t%d_layer%d" % (var_prefix, task_id, layer_id), bias_name,
                                                     trainable=True, initializer=b)
             return sfn_w, sfn_b
+
+    def get_retraining_vars_from_old_vars(self, scope: str,
+                                          weight_name: str, bias_name: str,
+                                          task_id: int, var_prefix: str,
+                                          weight_var=None, bias_var=None, **kwargs) -> tuple:
+
+        """
+        :param scope: scope of variables.
+        :param weight_name: if weight_variable is None, use get_variable else use it.
+        :param bias_name: if bias_variable is None, use get_variable else use it.
+        :param task_id: id of task / 1 ~
+        :param var_prefix: variable prefix
+        :param weight_var: weight_variable
+        :param bias_var: bias_variable
+        :param kwargs: kwargs for get_removed_neurons_of_scope
+        :return: tuple of w and b
+
+        e.g. when scope == "layer2",
+        layer-"layer2", weight whose shape is (r0, c0), bias whose shape is (b0,)
+        layer-next of "layer2", weight whose shape is (r1, c1), bias whose shape is (b1,)
+        removed_neurons of (l-1)th [...] whose length is n0
+        removed_neurons of (l)th [...] whose length is n1
+        return weight whose shape is (r1 - n0, c1 - n1)
+               bias whose shape is (b1 - n1)
+        """
+        scope_list = self._get_scope_list()
+        scope_idx = scope_list.index(scope)
+        prev_scope = scope_list[scope_idx - 1] if scope_idx > 0 else None
+
+        assert self.importance_matrix_tuple is not None
+        w: tf.Variable = self.get_variable(scope, weight_name, True) \
+            if weight_var is None else weight_var
+        b: tf.Variable = self.get_variable(scope, bias_name, True) \
+            if bias_var is None else bias_var
+
+        # TODO: CNN
+
+        # Remove columns (neurons in the current layer)
+        removed_neurons = self.get_removed_neurons_of_scope(scope, **kwargs)
+        w: np.ndarray = np.delete(w.eval(session=self.sess), removed_neurons, axis=1)
+        b: np.ndarray = np.delete(b.eval(session=self.sess), removed_neurons)
+
+        # Remove rows (neurons in the previous layer)
+        if prev_scope:  # Do not consider 1st layer, that does not have previous layer.
+            removed_neurons_prev = self.get_removed_neurons_of_scope(prev_scope, **kwargs)
+            w = np.delete(w, removed_neurons_prev, axis=0)
+
+        sfn_w = self.sfn_create_or_get_variable("%s_t%d_%s" % (var_prefix, task_id, scope), weight_name,
+                                                trainable=True, initializer=w)
+        sfn_b = self.sfn_create_or_get_variable("%s_t%d_%s" % (var_prefix, task_id, scope), bias_name,
+                                                trainable=True, initializer=b)
+        return sfn_w, sfn_b
 
     def get_removed_neurons_of_scope(self, scope, stamp=None) -> list:
         layer_id = int(re.findall(r'\d+', scope)[0])
@@ -149,90 +203,86 @@ class SFDEN(DEN, SFN):
 
     # Retrain after forgetting
 
-    def _retrain_at_task_or_all(self, task_id, train_xs, train_labels, retrain_flags, is_verbose, **kwargs):
-        """
-        Note that this use sfn_get_weight_and_bias_at_task with is_forgotten=True
-        """
+    def build_model_for_retraining(self, flags):
+        X_list = [tf.placeholder(tf.float32, [None, self.dims[0]], name="X_{}".format(t))
+                  for t in range(self.n_tasks)]
+        Y_list = [tf.placeholder(tf.float32, [None, self.n_classes], name="Y_{}".format(t))
+                  for t in range(self.n_tasks)]
+        yhat_list = []
+        loss_list = []
 
-        self.sess = tf.Session()
-        self.sess.run(tf.global_variables_initializer())
+        for t, (X, Y) in enumerate(zip(X_list, Y_list)):
 
-        X = tf.placeholder(tf.float32, [None, self.dims[0]])
-        Y = tf.placeholder(tf.float32, [None, self.n_classes])
-        keep_prob = tf.placeholder(tf.float32)
+            task_id = t + 1
 
-        variables = []
-        bottom = X
-        stamp = self.time_stamp['task%d' % task_id]
-        for i in range(1, self.n_layers):
-            sfn_w, sfn_b = self.get_variables_for_sfden(
-                i, stamp, task_id, "retrain",
-                is_bottom=False, is_forgotten=True)
-            variables += [sfn_w, sfn_b]
-            bottom = tf.nn.relu(tf.matmul(bottom, sfn_w) + sfn_b)
-            bottom = tf.nn.dropout(bottom, keep_prob=keep_prob)
-            if is_verbose:
-                print(' [*] task %d, shape of layer %d : %s' % (task_id, i, sfn_w.get_shape().as_list()))
+            bottom = X
+            stamp = self.time_stamp['task%d' % task_id]
 
-        sfn_w, sfn_b = self.get_variables_for_sfden(
-            self.n_layers, stamp, task_id, "retrain",
-            is_bottom=True, is_forgotten=True)
-        variables += [sfn_w, sfn_b]
+            for i in range(1, self.n_layers):
+                w: tf.Variable = self.get_variable("layer{}".format(i), "weight", True)
+                b: tf.Variable = self.get_variable("layer{}".format(i), "biases", True)
+                w = w[:stamp[i - 1], :stamp[i]]
+                b = b[:stamp[i]]
 
-        y = tf.matmul(bottom, sfn_w) + sfn_b
-        yhat = tf.nn.sigmoid(y)
+                bottom = tf.nn.relu(tf.matmul(bottom, w) + b)
 
-        l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(scale_l1=0.0, scale_l2=0.00001)
-        regularization_loss = tf.contrib.layers.apply_regularization(l1_l2_regularizer, variables)
+                ndarray_hard_mask = np.ones(shape=bottom.get_shape().as_list()[-1:])
+                indices_to_zero = np.asarray(list(self.layer_to_removed_unit_set["layer{}".format(i)]))
+                indices_to_zero = indices_to_zero[indices_to_zero < len(ndarray_hard_mask)]
+                ndarray_hard_mask[indices_to_zero] = 0
+                tf_hard_mask = tf.constant(ndarray_hard_mask, dtype=tf.float32)
 
-        loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y)) + regularization_loss
+                bottom = Mask(
+                    i - 1, 0, 0, mask_type=MaskType.HARD, hard_mask=tf_hard_mask
+                ).get_masked_tensor(bottom)
 
-        train_step = tf.train.AdamOptimizer(self.init_lr).minimize(loss)
-        self.sess.run(tf.global_variables_initializer())
-        _, loss_val = self.sess.run([train_step, loss],
-                                    feed_dict={X: train_xs, Y: train_labels, keep_prob: 0.9})
-        print("  [*] loss(t{}): {}".format(task_id, loss_val))
+            w = self.get_variable("layer{}".format(self.n_layers), "weight_{}".format(task_id), True)
+            b = self.get_variable("layer{}".format(self.n_layers), "biases_{}".format(task_id), True)
+            w = w[:stamp[self.n_layers - 1], :]
+            y = tf.matmul(bottom, w) + b
 
-    def _assign_retrained_value_to_tensor(self, task_id, **kwargs):
+            yhat_list.append(tf.nn.softmax(y))
 
-        stamp = self.time_stamp['task%d' % task_id]
+            if task_id not in flags.task_to_forget:
+                loss_list.append(tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=y, labels=Y)))
 
-        def _value_preprocess_sfden(name, value_sfn, retrained_value) -> np.ndarray:
-            _, _, scope, var_type = parse_var_name(name)
-            layer_id = int(re.findall(r'\d+', scope)[0])
-            if "weight" in var_type:
-                value_sfn[:stamp[layer_id - 1], :stamp[layer_id]] = retrained_value
-            else:
-                value_sfn[:stamp[layer_id]] = retrained_value
-            return value_sfn
-
-        super()._assign_retrained_value_to_tensor(
-            task_id,
-            value_preprocess=_value_preprocess_sfden,
-            stamp=stamp,
+        l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(scale_l1=0.0, scale_l2=0.000005)
+        regularization_loss = tf.contrib.layers.apply_regularization(
+            l1_l2_regularizer,
+            [v for v in tf.trainable_variables() if "weight:0" in v.name or "biases:0" in v.name]
         )
 
-    def predict_only_after_training(self) -> list:
+        loss = sum(loss_list) + regularization_loss
+        opt = tf.train.AdamOptimizer(self.init_lr).minimize(loss)
+        self.sess.run(tf.global_variables_initializer())
+
+        return X_list, Y_list, yhat_list, opt, loss
+
+    def _retrain_at_task_or_all(self, task_id, train_xs, train_labels, retrain_flags, is_verbose, **kwargs):
+        X_list, Y_list, yhat_list, opt, loss = kwargs["model_args"]
+        x_feed_dict = {X: train_xs[t]() for t, X in enumerate(X_list) if t + 1 not in retrain_flags.task_to_forget}
+        y_feed_dict = {Y: train_labels[t]() for t, Y in enumerate(Y_list) if t + 1 not in retrain_flags.task_to_forget}
+        _, loss_val = self.sess.run([opt, loss], feed_dict={**x_feed_dict, **y_feed_dict})
+        return loss_val
+
+    def predict_only_after_training(self, refresh_session=True, **kwargs) -> list:
         cprint("\n PREDICT ONLY AFTER " + ("TRAINING" if not self.retrained else "RE-TRAINING"), "yellow")
         temp_perfs = []
         for t in range(self.n_tasks):
-            temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.get_test_labels(t + 1))
+            if refresh_session:
+                temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.get_test_labels(t + 1))
+            else:
+                temp_perf = self.predict_perform_with_current_graph(
+                    t + 1, self.testXs[t], self.data_labels.get_test_labels(t + 1), **kwargs)
             temp_perfs.append(temp_perf)
         return temp_perfs
 
-    def get_shape(self, obj_w_shape, task_id, layer_id):
-        """Override original get_shape"""
-        if not self.retrained:
-            return super().get_shape(obj_w_shape, task_id, layer_id)
-        else:
-            original_shape = super().get_shape(obj_w_shape, task_id, layer_id)
-            stamp = self.time_stamp['task%d' % task_id]
-            removed_neurons = self.get_removed_neurons_of_scope("layer%d" % layer_id, stamp)
-            original_shape[1] -= len(removed_neurons)
-            if layer_id > 1:
-                removed_neurons_prev = self.get_removed_neurons_of_scope("layer%d" % (layer_id - 1), stamp)
-                original_shape[0] -= len(removed_neurons_prev)
-            return original_shape
+    def predict_perform_with_current_graph(self, task_id, xs, ys, **kwargs):
+        X_list, Y_list, yhat_list, opt, loss = kwargs["model_args"]
+        test_preds = self.sess.run(yhat_list[task_id - 1], feed_dict={X_list[task_id - 1]: xs})
+        test_perf = self.get_performance(test_preds, ys)
+        print(" [*] Evaluation, Task:%s, test_acc: %.4f" % (str(task_id), test_perf))
+        return test_perf
 
     def recover_params(self, idx):
         self.assign_new_session(idx)

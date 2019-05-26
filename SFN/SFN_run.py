@@ -147,7 +147,6 @@ def experiment_forget_and_retrain(sfn, _flags, _policies):
             _flags, policy,
             epoches_to_print=[0, 1, -2, -1],
             is_verbose=False,
-            taskwise_training=_flags.taskwise_training,
         )
         build_line_of_list(x_or_x_list=list(i for i in range(len(lst_of_perfs_at_epoch))),
                            is_x_list=False,
@@ -220,7 +219,7 @@ if __name__ == '__main__':
         # SFEWC_FORGET, SFEWC_RETRAIN, SFEWC_MULTIPLE_FORGET,
         # SFLCL10_FORGET, SFLCL10_MASK, SFLCL10_MASK_MULTIPLE_FORGET
         # SFLCL20_FORGET, SFLCL100_FORGET,
-        experiment_name="SFEWC_RETRAIN",
+        experiment_name="SFDEN_RETRAIN",
 
         # SMALL_FC_MNIST,
         # LARGE_FC_MNIST, NOT_XLARGE_FC_MNIST,
@@ -228,7 +227,7 @@ if __name__ == '__main__':
         # SMALL_CONV_MNIST, ALEXNETV_MNIST,
         # ALEXNETV_CIFAR10,
         # ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-        model_name="XLARGE_FC_MNIST",
+        model_name="SMALL_FC_MNIST",
     )
 
     # noinspection PyTypeChecker
