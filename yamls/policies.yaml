@@ -12,19 +12,28 @@ DEFAULT: &DEFAULT
 
 SMALL_FC_MNIST:
   <<: *DEFAULT
-  OURS:
+  MEAN+DEV:
     FILTER:
       mixing_coeff: 0
       tau: 0
     NEURON:
-      mixing_coeff: 0.6499202703720822
+      mixing_coeff: 0.6244444147406663
       relatedness_type: "symmetric_unit_level"
-      tau: 0.007775754827717371
+      tau: 0.005828112247036367
+
+  MAX+DEV:
+    FILTER:
+      mixing_coeff: 0
+      tau: 0
+    NEURON:
+      mixing_coeff: 0.9999499999999999
+      relatedness_type: "symmetric_unit_level"
+      tau: 0.0099995
 
 LARGE_FC_MNIST:
   <<: *DEFAULT
 
-  OURS:
+  MEAN+DEV:
     FILTER:
       mixing_coeff: 0
       tau: 0
@@ -33,9 +42,18 @@ LARGE_FC_MNIST:
       relatedness_type: "symmetric_unit_level"
       tau: 0.00029462054615651964
 
+  MAX+DEV:
+    FILTER:
+      mixing_coeff: 0
+      tau: 0
+    NEURON:
+      mixing_coeff: 0
+      relatedness_type: "symmetric_unit_level"
+      tau: 0
+
 NOT_XLARGE_FC_MNIST:
   <<: *DEFAULT
-  OURS:
+  MEAN+DEV:
     FILTER:
       mixing_coeff: 0
       tau: 0
@@ -44,20 +62,38 @@ NOT_XLARGE_FC_MNIST:
       relatedness_type: "symmetric_unit_level"
       tau: 0.007361426895715981
 
-XLARGE_FC_MNIST:
-  <<: *DEFAULT
-  OURS:
+  MAX+DEV:
     FILTER:
       mixing_coeff: 0
       tau: 0
     NEURON:
-      mixing_coeff: 5e-06
+      mixing_coeff: 0
       relatedness_type: "symmetric_unit_level"
-      tau: 0.00999995
+      tau: 0
+
+XLARGE_FC_MNIST:
+  <<: *DEFAULT
+  MEAN+DEV:
+    FILTER:
+      mixing_coeff: 0
+      tau: 0
+    NEURON:
+      mixing_coeff: 0.9995
+      relatedness_type: "symmetric_unit_level"
+      tau: 0.001601406084782387
+
+  MAX+DEV:
+    FILTER:
+      mixing_coeff: 0
+      tau: 0
+    NEURON:
+      mixing_coeff: 0.46996724088713493
+      relatedness_type: "symmetric_unit_level"
+      tau: 0.000145213839743631
 
 ALEXNETV_CIFAR10:
   <<: *DEFAULT
-  OURS:
+  MEAN+DEV:
     FILTER:
       mixing_coeff: 0.7953154557199767
       relatedness_type: "symmetric_unit_level"
@@ -65,4 +101,13 @@ ALEXNETV_CIFAR10:
     NEURON:
       mixing_coeff: 0
       relatedness_type: ""
+      tau: 0
+
+  MAX+DEV:
+    FILTER:
+      mixing_coeff: 0
+      tau: 0
+    NEURON:
+      mixing_coeff: 0
+      relatedness_type: "symmetric_unit_level"
       tau: 0

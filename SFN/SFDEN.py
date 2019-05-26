@@ -59,7 +59,6 @@ class SFDEN(DEN, SFN):
         self.sess = tf.Session()
         self.load_params(params)
 
-    @with_tf_device_cpu
     def get_variables_for_sfden(self, layer_id: int, stamp: list, task_id: int, var_prefix: str,
                                 is_bottom=False, is_forgotten=False):
         """
@@ -107,12 +106,11 @@ class SFDEN(DEN, SFN):
 
     def get_removed_neurons_of_scope(self, scope, stamp=None) -> list:
         layer_id = int(re.findall(r'\d+', scope)[0])
-        return [neuron for neuron in self.layer_to_removed_neuron_set[scope]
+        return [neuron for neuron in self.layer_to_removed_unit_set[scope]
                 if stamp is None or neuron < stamp[layer_id]]
 
     # Train DEN: code from github.com/dongkwan-kim/DEN/blob/master/DEN/DEN_run.py
 
-    @with_tf_device_gpu
     def initial_train(self):
         params = dict()
         avg_perf = []
@@ -151,59 +149,49 @@ class SFDEN(DEN, SFN):
 
     # Retrain after forgetting
 
-    def _retrain_at_task(self, task_id, data, retrain_flags, is_verbose):
+    def _retrain_at_task_or_all(self, task_id, train_xs, train_labels, retrain_flags, is_verbose):
         """
         Note that this use sfn_get_weight_and_bias_at_task with is_forgotten=True
         """
-
-        train_xs_t, train_labels_t, val_xs_t, val_labels_t, test_xs_t, test_labels_t = data
 
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
 
         X = tf.placeholder(tf.float32, [None, self.dims[0]])
         Y = tf.placeholder(tf.float32, [None, self.n_classes])
+        keep_prob = tf.placeholder(tf.float32)
 
+        variables = []
         bottom = X
         stamp = self.time_stamp['task%d' % task_id]
         for i in range(1, self.n_layers):
             sfn_w, sfn_b = self.get_variables_for_sfden(
                 i, stamp, task_id, "retrain",
                 is_bottom=False, is_forgotten=True)
+            variables += [sfn_w, sfn_b]
             bottom = tf.nn.relu(tf.matmul(bottom, sfn_w) + sfn_b)
+            bottom = tf.nn.dropout(bottom, keep_prob=keep_prob)
             if is_verbose:
                 print(' [*] task %d, shape of layer %d : %s' % (task_id, i, sfn_w.get_shape().as_list()))
 
         sfn_w, sfn_b = self.get_variables_for_sfden(
             self.n_layers, stamp, task_id, "retrain",
             is_bottom=True, is_forgotten=True)
+        variables += [sfn_w, sfn_b]
+
         y = tf.matmul(bottom, sfn_w) + sfn_b
         yhat = tf.nn.sigmoid(y)
-        loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y))
+
+        l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(scale_l1=0.0, scale_l2=0.00001)
+        regularization_loss = tf.contrib.layers.apply_regularization(l1_l2_regularizer, variables)
+
+        loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=Y)) + regularization_loss
 
         train_step = tf.train.AdamOptimizer(self.init_lr).minimize(loss)
-
-        loss_window = collections.deque(maxlen=10)
-        old_loss = 999
         self.sess.run(tf.global_variables_initializer())
-        for epoch in range(retrain_flags.retrain_max_iter_per_task):
-            self.initialize_batch()
-            num_batches = int(math.ceil(len(train_xs_t) / self.batch_size))
-            for _ in range(num_batches):
-                batch_x, batch_y = self.get_next_batch(train_xs_t, train_labels_t)
-                _, loss_val = self.sess.run([train_step, loss], feed_dict={X: batch_x, Y: batch_y})
-
-            val_preds, val_loss_val = self.sess.run([yhat, loss], feed_dict={X: val_xs_t, Y: val_labels_t})
-            loss_window.append(val_loss_val)
-            mean_loss = np.mean(loss_window)
-            val_perf = self.get_performance(val_preds, val_labels_t)
-
-            if epoch == 0 or epoch == retrain_flags.max_iter - 1:
-                if is_verbose:
-                    print(" [*] iter: %d, val loss: %.4f, val perf: %.4f" % (epoch, val_loss_val, val_perf))
-                if abs(old_loss - mean_loss) < 1e-6:
-                    break
-                old_loss = mean_loss
+        _, loss_val = self.sess.run([train_step, loss],
+                                    feed_dict={X: train_xs, Y: train_labels, keep_prob: 0.9})
+        print("  [*] loss(t{}): {}".format(task_id, loss_val))
 
     def _assign_retrained_value_to_tensor(self, task_id, **kwargs):
 
@@ -253,7 +241,6 @@ class SFDEN(DEN, SFN):
     # Importance vectors
 
     # shape = (|h|,) or tuple of (|h1|,), (|h2|,)
-    @with_tf_device_gpu
     def get_importance_vector(self, task_id, importance_criteria: str,
                               layer_separate=False, use_coreset=False) -> tuple or np.ndarray:
         print("\n GET IMPORTANCE VECTOR OF TASK %d" % task_id)

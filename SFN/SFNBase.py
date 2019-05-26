@@ -13,7 +13,8 @@ from tqdm import trange
 
 from data import Coreset, DataLabel
 from enums import UnitType
-from utils import build_line_of_list, print_all_vars, get_zero_expanded_matrix, parse_var_name, get_available_gpu_names
+from utils import build_line_of_list, print_all_vars, get_zero_expanded_matrix, parse_var_name, get_available_gpu_names, \
+    get_batch_iterator, get_mean_and_std_wo_indices
 from utils_importance import *
 
 
@@ -59,7 +60,7 @@ class SFN:
 
         self.prediction_history: Dict[str, List] = defaultdict(list)
         self.pruning_rate_history: Dict[str, List] = defaultdict(list)
-        self.layer_to_removed_neuron_set: Dict[str, set] = defaultdict(set)
+        self.layer_to_removed_unit_set: Dict[str, set] = defaultdict(set)
         self.layer_types: List[str] = []
 
         self.batch_idx = 0
@@ -73,7 +74,7 @@ class SFN:
             "importance_matrix_tuple",
             "importance_criteria",
             "old_params_list",
-            "layer_to_removed_neuron_set",
+            "layer_to_removed_unit_set",
             "n_tasks",
             "layer_types",
         ]
@@ -130,7 +131,7 @@ class SFN:
         raise NotImplementedError
 
     def get_removed_neurons_of_scope(self, scope, **kwargs) -> list:
-        return [neuron for neuron in self.layer_to_removed_neuron_set[scope]]
+        return [neuron for neuron in self.layer_to_removed_unit_set[scope]]
 
     def clear(self):
         tf.reset_default_graph()
@@ -388,7 +389,7 @@ class SFN:
     # Utils for sequential experiments
 
     def clear_experiments(self):
-        self.layer_to_removed_neuron_set = defaultdict(set)
+        self.layer_to_removed_unit_set = defaultdict(set)
         self.recover_old_params()
 
     def recover_recent_params(self):
@@ -409,7 +410,7 @@ class SFN:
         selected_by_layers_list = []
         for selected_of_layer in selected_by_layerwise_pruning:
             sz = len(selected_of_layer)
-            selected_by_layers_list.append(selected_of_layer[:int(sz*ratio)])
+            selected_by_layers_list.append(selected_of_layer[:int(sz * ratio)])
         return tuple(selected_by_layers_list)
 
     def _get_selected_by_layers(self, selected_indices: np.ndarray) -> tuple:
@@ -528,14 +529,17 @@ class SFN:
         return related_deviation
 
     def get_units_with_task_related_deviation(self, task_id_or_ids, number_to_select, utype,
-                                              mixing_coeff, relatedness_type, tau):
-        mean_i = self.get_mean_importance(task_id_or_ids)
+                                              mixing_coeff, relatedness_type, tau, main_objective="mean"):
+        if main_objective == "mean":
+            obj_i = self.get_mean_importance(task_id_or_ids)
+        else:
+            obj_i = self.get_maximum_importance(task_id_or_ids)
 
         if mixing_coeff > 0:
             related_deviation = self.get_importance_task_related_deviation(task_id_or_ids, relatedness_type, tau)
-            deviated = mixing_coeff * related_deviation + (1 - mixing_coeff) * mean_i
+            deviated = mixing_coeff * related_deviation + (1 - mixing_coeff) * obj_i
         else:
-            deviated = mean_i
+            deviated = obj_i
 
         deviated_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(deviated), utype)
         if not self.layerwise_pruning:
@@ -592,8 +596,12 @@ class SFN:
             policy, task_to_forget, self.n_tasks, number_of_units, utype), "green")
 
         policy = policy.split(":")[0]
-        if policy == "OURS" or policy.isnumeric():
-            unit_indexes = self.get_units_with_task_related_deviation(task_to_forget, number_of_units, utype, **kwargs)
+        if policy == "MEAN+DEV" or policy.isnumeric():
+            unit_indexes = self.get_units_with_task_related_deviation(task_to_forget, number_of_units, utype,
+                                                                      main_objective="mean", **kwargs)
+        elif policy == "MAX+DEV":
+            unit_indexes = self.get_units_with_task_related_deviation(task_to_forget, number_of_units, utype,
+                                                                      main_objective="max", **kwargs)
         elif policy == "MAX":
             unit_indexes = self.get_units_by_maximum_importance(task_to_forget, number_of_units, utype)
         elif policy == "MEAN":
@@ -631,7 +639,7 @@ class SFN:
             return
 
         print(" REMOVE NEURONS {} ({})".format(scope, len(indexes)))
-        self.layer_to_removed_neuron_set[scope].update(set(indexes))
+        self.layer_to_removed_unit_set[scope].update(set(indexes))
 
         w: tf.Variable = self.get_variable(scope, "weight", False)
         b: tf.Variable = self.get_variable(scope, "biases", False)
@@ -924,43 +932,102 @@ class SFN:
 
     # Retrain after forgetting
 
-    def retrain_after_forgetting(self, flags, policy, epoches_to_print: list = None, is_verbose: bool = True):
+    def retrain_after_forgetting(self, flags, policy, taskwise_training: bool,
+                                 epoches_to_print: list = None,
+                                 is_verbose: bool = True):
         cprint("\n RETRAIN AFTER FORGETTING - {}".format(policy), "green")
         self.retrained = True
+
         series_of_perfs = []
 
         # First, append perfs wo/ retraining
         perfs = self.predict_only_after_training()
         series_of_perfs.append(perfs)
 
+        indices_to_forget = [t - 1 for t in flags.task_to_forget]
+
+        data_list = [
+            self.coreset[t] if self.coreset is not None else \
+                (self.trainXs[t], self.data_labels.get_train_labels(t + 1),
+                 self.valXs[t], self.data_labels.get_validation_labels(t + 1),
+                 self.testXs[t], self.data_labels.get_test_labels(t + 1))
+            for t in range(self.n_tasks)
+        ]
+        xs_queues = [get_batch_iterator(data_list[t][0], self.batch_size) for t in range(self.n_tasks)]
+        labels_queues = [get_batch_iterator(data_list[t][1], self.batch_size) for t in range(self.n_tasks)]
+
+        if taskwise_training:
+            model_args = self.build_model_for_retraining()
+        else:
+            model_args = tuple()
+
+        num_batches = int(math.ceil(len(data_list[0][0]) / self.batch_size))
         for retrain_iter in range(flags.retrain_task_iter):
 
             cprint("\n\n\tRE-TRAINING at iteration %d\n" % retrain_iter, "green")
 
-            for t in range(flags.n_tasks):
-                if (t + 1) != flags.task_to_forget:
-                    coreset_t = self.coreset[t] if self.coreset is not None \
-                        else (self.trainXs[t], self.data_labels.get_train_labels(t + 1),
-                              self.valXs[t], self.data_labels.get_validation_labels(t + 1),
-                              self.testXs[t], self.data_labels.get_test_labels(t + 1))
-                    if is_verbose:
-                        cprint("\n\n\tTASK %d RE-TRAINING at iteration %d\n" % (t + 1, retrain_iter), "green")
-                    self._retrain_at_task(t + 1, coreset_t, flags, is_verbose)
-                    self._assign_retrained_value_to_tensor(t + 1)
-                    self.assign_new_session()
-                else:
-                    if is_verbose:
-                        cprint("\n\n\tTASK %d NO NEED TO RE-TRAIN at iteration %d" % (t + 1, retrain_iter), "green")
+            if taskwise_training:
+
+                for _ in range(num_batches):
+
+                    for target_t in range(self.n_tasks):
+
+                        if (target_t + 1) in flags.task_to_forget:
+                            if is_verbose:
+                                cprint("\n\n\tTASK %d NO NEED TO RE-TRAIN at iteration %d" %
+                                       (target_t + 1, retrain_iter), "green")
+                            continue
+
+                        if is_verbose:
+                            cprint("\n\n\tTASK %d RE-TRAINING at iteration %d\n" %
+                                   (target_t + 1, retrain_iter), "green")
+
+                        self._retrain_at_task_or_all(
+                            task_id=target_t + 1,
+                            train_xs=xs_queues[target_t](),
+                            train_labels=labels_queues[target_t](),
+                            retrain_flags=flags,
+                            is_verbose=is_verbose,
+                        )
+                        self._assign_retrained_value_to_tensor(target_t + 1)
+                        self.assign_new_session()
+            else:
+                self._retrain_at_task_or_all(
+                    task_id=None,
+                    train_xs=xs_queues,
+                    train_labels=labels_queues,
+                    retrain_flags=flags,
+                    is_verbose=is_verbose,
+                    *model_args,
+                )
 
             perfs = self.predict_only_after_training()
             series_of_perfs.append(perfs)
 
+            max_mean_perf_list = [get_mean_and_std_wo_indices(perfs, indices_to_forget)[0]
+                                  for perfs in series_of_perfs]
+            argmax_mean_perf = int(np.argmax(max_mean_perf_list))
+
+            m, s = get_mean_and_std_wo_indices(perfs, indices_to_forget)
+            print("   [*] avg_perf: %.4f +- %.4f" % (m, s))
+            msg = "   [*] max_perf: %.4f at iter %d" % (max_mean_perf_list[argmax_mean_perf], argmax_mean_perf)
+            if max_mean_perf_list[argmax_mean_perf] >= m:
+                cprint(msg, "green")
+            else:
+                print(msg)
+
         if epoches_to_print:
             print("\t".join(str(t + 1) for t in range(self.n_tasks)))
             for epo in epoches_to_print:
-                print("\t".join(str(round(perf, 4)) for perf in series_of_perfs[epo]))
+                print("\t".join(str(round(float(np.mean(perf)), 4)) for perf in series_of_perfs[epo]))
 
         return series_of_perfs
+
+    def _retrain_at_task_or_all(self, task_id, train_xs, train_labels, retrain_flags, is_verbose, *args):
+        raise NotImplementedError
+
+    def build_model_for_retraining(self):
+        raise NotImplementedError
 
     def get_retraining_vars_from_old_vars(self, scope: str,
                                           weight_name: str, bias_name: str,
@@ -1013,9 +1080,6 @@ class SFN:
         sfn_b = self.sfn_create_or_get_variable("%s_t%d_%s" % (var_prefix, task_id, scope), bias_name,
                                                 trainable=True, initializer=b)
         return sfn_w, sfn_b
-
-    def _retrain_at_task(self, task_id, data, retrain_flags, is_verbose):
-        raise NotImplementedError
 
     def _assign_retrained_value_to_tensor(self, task_id, value_preprocess=None, **kwargs):
 
