@@ -32,7 +32,7 @@ class Mask:
 
     def get_masked_tensor(self,
                           prev_layer,
-                          is_training: tf.placeholder,
+                          is_training: tf.placeholder = None,
                           with_residuals: bool = False):
 
         returns = []
@@ -84,7 +84,10 @@ class Mask:
                 **residuals,
             })
 
-        return tuple(returns)
+        if len(returns) == 1:
+            return returns[0]
+        else:
+            return tuple(returns)
 
     @staticmethod
     def get_exclusive_masked_tensor(prev_layer, mask, is_training: tf.placeholder):
