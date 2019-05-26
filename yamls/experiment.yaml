@@ -53,8 +53,6 @@ SFEWC_FORGET: &SFEWC_FORGET
   l1_lambda: 0.0
   l2_lambda: 0.0005
   ewc_lambda: 0.4
-  retrain_task_iter: 80
-  retrain_max_iter_per_task: 150
   need_coreset: True
   layerwise_pruning: False
   online_importance: False
@@ -72,7 +70,9 @@ SFEWC_MULTIPLE_FORGET:
 
 SFEWC_RETRAIN:
   <<: *SFEWC_FORGET
-  steps_to_forget: 12
+  retrain_task_iter: 100
+  coreset_size: 250
+  steps_to_forget: 19
   expr_type: RETRAIN
 
 SFHPS_FORGET: &SFHPS_FORGET

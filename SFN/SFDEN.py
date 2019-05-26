@@ -149,7 +149,7 @@ class SFDEN(DEN, SFN):
 
     # Retrain after forgetting
 
-    def _retrain_at_task_or_all(self, task_id, train_xs, train_labels, retrain_flags, is_verbose):
+    def _retrain_at_task_or_all(self, task_id, train_xs, train_labels, retrain_flags, is_verbose, **kwargs):
         """
         Note that this use sfn_get_weight_and_bias_at_task with is_forgotten=True
         """
