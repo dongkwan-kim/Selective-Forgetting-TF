@@ -31,7 +31,8 @@ def tune_policy_param(sfn, n_to_search, _flags, policy="MEAN+DEV") -> Tuple[Dict
                 fast_skip=True,
             )
             sfn.recover_old_params()
-            au_mean_fc, au_min_fc = sfn.get_area_under_forgetting_curve(_flags.task_to_forget, policy_name, y_limit=0.7)
+            au_mean_fc, au_min_fc = sfn.get_area_under_forgetting_curve(
+                _flags.task_to_forget, policy_name, y_limit=0.6)
             return 0.2 * au_mean_fc + 0.8 * au_min_fc
         except AssertionError as e:
             mean_rho = float(str(e).split(" = ")[-1])
