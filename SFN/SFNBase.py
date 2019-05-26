@@ -529,14 +529,17 @@ class SFN:
         return related_deviation
 
     def get_units_with_task_related_deviation(self, task_id_or_ids, number_to_select, utype,
-                                              mixing_coeff, relatedness_type, tau):
-        mean_i = self.get_mean_importance(task_id_or_ids)
+                                              mixing_coeff, relatedness_type, tau, main_objective="mean"):
+        if main_objective == "mean":
+            obj_i = self.get_mean_importance(task_id_or_ids)
+        else:
+            obj_i = self.get_maximum_importance(task_id_or_ids)
 
         if mixing_coeff > 0:
             related_deviation = self.get_importance_task_related_deviation(task_id_or_ids, relatedness_type, tau)
-            deviated = mixing_coeff * related_deviation + (1 - mixing_coeff) * mean_i
+            deviated = mixing_coeff * related_deviation + (1 - mixing_coeff) * obj_i
         else:
-            deviated = mean_i
+            deviated = obj_i
 
         deviated_asc_sorted_idx = self._get_indices_of_certain_utype(np.argsort(deviated), utype)
         if not self.layerwise_pruning:
@@ -593,8 +596,12 @@ class SFN:
             policy, task_to_forget, self.n_tasks, number_of_units, utype), "green")
 
         policy = policy.split(":")[0]
-        if policy == "OURS" or policy.isnumeric():
-            unit_indexes = self.get_units_with_task_related_deviation(task_to_forget, number_of_units, utype, **kwargs)
+        if policy == "MEAN+DEV" or policy.isnumeric():
+            unit_indexes = self.get_units_with_task_related_deviation(task_to_forget, number_of_units, utype,
+                                                                      main_objective="mean", **kwargs)
+        elif policy == "MAX+DEV":
+            unit_indexes = self.get_units_with_task_related_deviation(task_to_forget, number_of_units, utype,
+                                                                      main_objective="max", **kwargs)
         elif policy == "MAX":
             unit_indexes = self.get_units_by_maximum_importance(task_to_forget, number_of_units, utype)
         elif policy == "MEAN":
@@ -949,6 +956,11 @@ class SFN:
         xs_queues = [get_batch_iterator(data_list[t][0], self.batch_size) for t in range(self.n_tasks)]
         labels_queues = [get_batch_iterator(data_list[t][1], self.batch_size) for t in range(self.n_tasks)]
 
+        if taskwise_training:
+            model_args = self.build_model_for_retraining()
+        else:
+            model_args = tuple()
+
         num_batches = int(math.ceil(len(data_list[0][0]) / self.batch_size))
         for retrain_iter in range(flags.retrain_task_iter):
 
@@ -980,7 +992,14 @@ class SFN:
                         self._assign_retrained_value_to_tensor(target_t + 1)
                         self.assign_new_session()
             else:
-                pass
+                self._retrain_at_task_or_all(
+                    task_id=None,
+                    train_xs=xs_queues,
+                    train_labels=labels_queues,
+                    retrain_flags=flags,
+                    is_verbose=is_verbose,
+                    *model_args,
+                )
 
             perfs = self.predict_only_after_training()
             series_of_perfs.append(perfs)
@@ -1004,7 +1023,10 @@ class SFN:
 
         return series_of_perfs
 
-    def _retrain_at_task_or_all(self, task_id, train_xs, train_labels, retrain_flags, is_verbose):
+    def _retrain_at_task_or_all(self, task_id, train_xs, train_labels, retrain_flags, is_verbose, *args):
+        raise NotImplementedError
+
+    def build_model_for_retraining(self):
         raise NotImplementedError
 
     def get_retraining_vars_from_old_vars(self, scope: str,
