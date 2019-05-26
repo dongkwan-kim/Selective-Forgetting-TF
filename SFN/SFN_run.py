@@ -147,7 +147,7 @@ def experiment_forget_and_retrain(sfn, _flags, _policies):
             _flags, policy,
             epoches_to_print=[0, 1, -2, -1],
             is_verbose=False,
-            taskwise_training=True,
+            taskwise_training=_flags.taskwise_training,
         )
         build_line_of_list(x_or_x_list=list(i * _flags.retrain_max_iter_per_task
                                             for i in range(len(lst_of_perfs_at_epoch))),

@@ -15,11 +15,11 @@ basic: &BASIC
   use_cges: False
   use_set_based_mask: False
   layerwise_pruning: True
+  taskwise_training: False
 
 SFDEN_FORGET: &SFDEN_FORGET
   <<: *BASIC
-  max_iter: 700
-  l2_lambda: 0.0005
+  max_iter: 1200
   gl_lambda: 0.001
   regular_lambda: 0.5
   ex_k: 10
@@ -29,6 +29,7 @@ SFDEN_FORGET: &SFDEN_FORGET
   retrain_max_iter_per_task: 150
   need_coreset: True
   layerwise_pruning: False
+  taskwise_training: True
   expr_type: FORGET
   model: SFDEN
   support_model: ["SMALL_FC_MNIST"]
