@@ -87,9 +87,9 @@ SFHPS_MASK:
 
 SFLCL10_FORGET: &SFLCL10_FORGET
   <<: *BASIC
-  max_iter: 250
-  l1_lambda: 2e-06
-  l2_lambda: 0.0
+  max_iter: 1350
+  l1_lambda: 0.0
+  l2_lambda: 2e-06
   need_coreset: False
   expr_type: FORGET
   model: SFLCL
@@ -97,7 +97,7 @@ SFLCL10_FORGET: &SFLCL10_FORGET
 
 SFLCL10_MASK: &SFLCL_MASK
   <<: *SFLCL10_FORGET
-  max_iter: 1000
+  max_iter: 2850
   l1_lambda: 2e-06
   l2_lambda: 0.0
   use_set_based_mask: True

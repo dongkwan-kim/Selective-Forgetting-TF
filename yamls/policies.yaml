@@ -59,9 +59,9 @@ ALEXNETV_CIFAR10:
   <<: *DEFAULT
   OURS:
     FILTER:
-      mixing_coeff: 5e-05
+      mixing_coeff: 0.7953154557199767
       relatedness_type: "symmetric_unit_level"
-      tau: 5e-07
+      tau: 0.0032902991019546283
     NEURON:
       mixing_coeff: 0
       relatedness_type: ""
