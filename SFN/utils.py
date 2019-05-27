@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 from copy import deepcopy
 from termcolor import cprint
@@ -13,6 +13,12 @@ from tensorflow.python.client import device_lib
 import re
 
 from mask import Mask
+
+
+def get_mean_and_std_wo_indices(ndarr: list or np.ndarray, indices=None) -> Tuple[float, float]:
+    if indices is not None:
+        ndarr = np.delete(ndarr, indices)
+    return float(np.mean(ndarr)), float(np.std(ndarr))
 
 
 def sum_set(s: set, *args):

@@ -340,5 +340,5 @@ class SFHPS(SFN):
         self.yhat_list = []
         self.build_model()
 
-    def _retrain_at_task(self, task_id, data, retrain_flags, is_verbose):
+    def _retrain_at_task_or_all(self, task_id, train_xs, train_labels, retrain_flags, is_verbose):
         pass

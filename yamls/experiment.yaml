@@ -10,24 +10,27 @@ basic: &BASIC
   importance_criteria: first_Taylor_approximation
   need_coreset: True
   online_importance: False
-  gpu_num_list: [0]
+  gpu_num_list: [1]
   coreset_size: 1000
   use_cges: False
   use_set_based_mask: False
   layerwise_pruning: True
+  taskwise_training: False
+  retrain_task_iter: 80
+  policies_for_expr: ["RANDOM", "MEAN", "MAX", "MEAN+DEV", "MAX+DEV"]
 
 SFDEN_FORGET: &SFDEN_FORGET
   <<: *BASIC
-  max_iter: 600
+  max_iter: 1200
   gl_lambda: 0.001
   regular_lambda: 0.5
   ex_k: 10
   loss_thr: 0.1
   spl_thr: 0.1
-  retrain_task_iter: 80
-  retrain_max_iter_per_task: 150
   need_coreset: True
   layerwise_pruning: False
+  taskwise_training: True
+  policies_for_expr: ["RANDOM", "MEAN", "MAX", "MEAN+DEV"]
   expr_type: FORGET
   model: SFDEN
   support_model: ["SMALL_FC_MNIST"]
@@ -41,7 +44,7 @@ SFDEN_MULTIPLE_FORGET:
 
 SFDEN_RETRAIN:
   <<: *SFDEN_FORGET
-  steps_to_forget: 15
+  steps_to_forget: 12
   expr_type: RETRAIN
 
 SFEWC_FORGET: &SFEWC_FORGET
@@ -55,6 +58,7 @@ SFEWC_FORGET: &SFEWC_FORGET
   need_coreset: True
   layerwise_pruning: False
   online_importance: False
+  policies_for_expr: ["RANDOM", "MEAN", "MAX", "MEAN+DEV"]
   expr_type: FORGET
   model: SFEWC
   support_model: ["XLARGE_FC_MNIST"]
@@ -65,6 +69,11 @@ SFEWC_MULTIPLE_FORGET:
   mixing_coeff_list: [0.0, 0.9995, 0.9994999800345135, 0.9995, 0.2118713370557824]
   tau_list: [0.0, 0.0019621552206627473, 0.0031022630644842873, 0.0021440668246421853, 0.0026038630416280167]
   expr_type: MULTIPLE_FORGET
+
+SFEWC_RETRAIN:
+  <<: *SFEWC_FORGET
+  steps_to_forget: 12
+  expr_type: RETRAIN
 
 SFHPS_FORGET: &SFHPS_FORGET
   <<: *BASIC
@@ -84,23 +93,26 @@ SFHPS_MASK:
   mask_type: ADAPTIVE
   mask_alpha: 1.5
   mask_not_alpha: -2.0
+  expr_type: MASK
 
 SFLCL10_FORGET: &SFLCL10_FORGET
   <<: *BASIC
-  max_iter: 250
-  l1_lambda: 2e-06
-  l2_lambda: 0.0
+  max_iter: 1350
+  l1_lambda: 0.0
+  l2_lambda: 2e-06
   need_coreset: False
   expr_type: FORGET
   model: SFLCL
   support_model: ["SMALL_CONV_MNIST", "ALEXNETV_MNIST", "ALEXNETV_CIFAR10"]
+  policies_for_expr: ["RANDOM", "MEAN", "MAX", "MAX+DEV"]
 
 SFLCL10_MASK: &SFLCL_MASK
   <<: *SFLCL10_FORGET
-  max_iter: 1000
+  max_iter: 2200
   l1_lambda: 2e-06
   l2_lambda: 0.0
   use_set_based_mask: True
   mask_type: ADAPTIVE
   mask_alpha: 2.0
   mask_not_alpha: [-5.4, -5.6, -6.4, -4.4] # -3.5
+  expr_type: MASK
