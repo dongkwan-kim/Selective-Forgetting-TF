@@ -683,7 +683,7 @@ class SFN:
             for utype, one_step_units in utype_to_one_step_units.items():
                 kwargs = {} if params_of_utype is None else params_of_utype[str(utype)]
                 unit_indices_by_layer = self.selective_forget(
-                    task_to_forget, i * one_step_units, policy, utype, **kwargs)
+                    task_to_forget, int(i * one_step_units), policy, utype, **kwargs)
                 list_of_unit_indices_by_layer.append(unit_indices_by_layer)
 
             pruning_rate = self.get_parameter_level_pruning_rate(

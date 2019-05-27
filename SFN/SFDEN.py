@@ -246,7 +246,7 @@ class SFDEN(DEN, SFN):
             if task_id not in flags.task_to_forget:
                 loss_list.append(tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=y, labels=Y)))
 
-        l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(scale_l1=0.0, scale_l2=0.000005)
+        l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(scale_l1=0.0, scale_l2=0.000001)
         regularization_loss = tf.contrib.layers.apply_regularization(
             l1_l2_regularizer,
             [v for v in tf.trainable_variables() if "weight:0" in v.name or "biases:0" in v.name]
@@ -275,6 +275,7 @@ class SFDEN(DEN, SFN):
                 temp_perf = self.predict_perform_with_current_graph(
                     t + 1, self.testXs[t], self.data_labels.get_test_labels(t + 1), **kwargs)
             temp_perfs.append(temp_perf)
+        print("   [*] avg_perf: %.4f +- %.4f" % (float(np.mean(temp_perfs)), float(np.std(temp_perfs))))
         return temp_perfs
 
     def predict_perform_with_current_graph(self, task_id, xs, ys, **kwargs):
