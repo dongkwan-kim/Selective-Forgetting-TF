@@ -42,9 +42,8 @@ SFDEN_MULTIPLE_FORGET:
 
 SFDEN_RETRAIN:
   <<: *SFDEN_FORGET
-  coreset_size: 2500
-  retrain_task_iter: 100
-  steps_to_forget: 10
+  retrain_task_iter: 13
+  steps_to_forget: 12.6
   expr_type: RETRAIN
 
 SFEWC_FORGET: &SFEWC_FORGET
@@ -71,8 +70,7 @@ SFEWC_MULTIPLE_FORGET:
 SFEWC_RETRAIN:
   <<: *SFEWC_FORGET
   retrain_task_iter: 70
-  coreset_size: 250
-  steps_to_forget: 20
+  steps_to_forget: 22
   expr_type: RETRAIN
 
 SFHPS_FORGET: &SFHPS_FORGET
