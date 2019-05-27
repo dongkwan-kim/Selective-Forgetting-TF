@@ -218,7 +218,7 @@ if __name__ == '__main__':
         # SFEWC_FORGET, SFEWC_RETRAIN, SFEWC_MULTIPLE_FORGET,
         # SFLCL10_FORGET, SFLCL10_MASK, SFLCL10_MASK_MULTIPLE_FORGET
         # SFLCL20_FORGET, SFLCL100_FORGET,
-        experiment_name="SFDEN_FORGET",
+        experiment_name="SFLCL10_FORGET",
 
         # SMALL_FC_MNIST,
         # LARGE_FC_MNIST, NOT_XLARGE_FC_MNIST,
@@ -226,7 +226,7 @@ if __name__ == '__main__':
         # SMALL_CONV_MNIST, ALEXNETV_MNIST,
         # ALEXNETV_CIFAR10,
         # ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-        model_name="SMALL_FC_MNIST",
+        model_name="ALEXNETV_CIFAR10",
     )
 
     # noinspection PyTypeChecker
@@ -243,7 +243,7 @@ if __name__ == '__main__':
 
     model.normalize_importance_matrix_about_task()
 
-    if params.expr_type == "FORGET" or params.expr_type == "CRITERIA":
+    if params.expr_type == "FORGET" or params.expr_type == "MASK":
         policies_for_expr = params.policies_for_expr
         # noinspection PyTypeChecker
         experiment_forget(model, params, policies_for_expr)
