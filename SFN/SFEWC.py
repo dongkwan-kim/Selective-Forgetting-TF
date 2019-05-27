@@ -10,6 +10,8 @@ from DEN.ops import ROC_AUC
 from termcolor import cprint
 
 from SFNBase import SFN
+from enums import MaskType
+from mask import Mask
 from utils import get_dims_from_config, print_all_vars, with_tf_device_gpu, with_tf_device_cpu
 
 
@@ -104,6 +106,7 @@ class SFEWC(SFN):
         for t in range(self.n_tasks):
             temp_perf = self.predict_perform(t + 1, self.testXs[t], self.data_labels.get_test_labels(t + 1))
             temp_perfs.append(temp_perf)
+        print("   [*] avg_perf: %.4f +- %.4f" % (float(np.mean(temp_perfs)), float(np.std(temp_perfs))))
         return temp_perfs
 
     def set_layer_types(self, *args, **kwargs):
@@ -318,5 +321,58 @@ class SFEWC(SFN):
         self.yhat = None
         self.build_model()
 
-    def _retrain_at_task_or_all(self, task_id, train_xs, train_labels, retrain_flags, is_verbose):
-        pass
+    def build_model_for_retraining(self, flags):
+
+        X_list = [tf.placeholder(tf.float32, [None, self.dims[0]], name="X_{}".format(t))
+                  for t in range(self.n_tasks)]
+        Y_list = [tf.placeholder(tf.float32, [None, self.n_classes], name="Y_{}".format(t))
+                  for t in range(self.n_tasks)]
+        loss_list = []
+
+        for t, (X, Y) in enumerate(zip(X_list, Y_list)):
+
+            if t + 1 in flags.task_to_forget:
+                continue
+
+            y = None
+            bottom = X
+
+            for i in range(1, self.n_layers + 1):
+                w = self.get_variable('layer%d' % i, 'weight', True)
+                b = self.get_variable('layer%d' % i, 'biases', True)
+
+                if i < self.n_layers:
+                    bottom = tf.nn.relu(tf.matmul(bottom, w) + b)
+
+                    ndarray_hard_mask = np.ones(shape=bottom.get_shape().as_list()[-1:])
+                    indices_to_zero = np.asarray(list(self.layer_to_removed_unit_set["layer{}".format(i)]))
+                    ndarray_hard_mask[indices_to_zero] = 0
+                    tf_hard_mask = tf.constant(ndarray_hard_mask, dtype=tf.float32)
+
+                    bottom = Mask(
+                        i - 1, 0, 0, mask_type=MaskType.HARD, hard_mask=tf_hard_mask
+                    ).get_masked_tensor(bottom)
+
+                else:
+                    y = tf.matmul(bottom, w) + b
+
+            loss_list.append(tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=y, labels=Y)))
+
+        l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(scale_l1=self.l1_lambda, scale_l2=self.l2_lambda)
+        regularization_loss = tf.contrib.layers.apply_regularization(
+            l1_l2_regularizer,
+            [v for v in tf.trainable_variables() if "layer" in v.name]
+        )
+
+        loss = sum(loss_list) + regularization_loss
+        opt = tf.train.AdamOptimizer(self.init_lr).minimize(loss)
+        self.sess.run(tf.global_variables_initializer())
+
+        return X_list, Y_list, opt, loss
+
+    def _retrain_at_task_or_all(self, task_id, train_xs, train_labels, retrain_flags, is_verbose, **kwargs):
+        X_list, Y_list, opt, loss = kwargs["model_args"]
+        x_feed_dict = {X: train_xs[t]() for t, X in enumerate(X_list) if t + 1 not in retrain_flags.task_to_forget}
+        y_feed_dict = {Y: train_labels[t]() for t, Y in enumerate(Y_list) if t + 1 not in retrain_flags.task_to_forget}
+        _, loss_val = self.sess.run([opt, loss], feed_dict={**x_feed_dict, **y_feed_dict})
+        return loss_val

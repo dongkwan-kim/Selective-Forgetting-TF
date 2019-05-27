@@ -1,12 +1,12 @@
 SMALL_FC_MNIST:
   dims0: 784
-  dims1: 64
-  dims2: 32
+  dims1: 256
+  dims2: 256
   dims3: 10
   n_classes: 10
   dtype: PERMUTED_MNIST
   mtype: SMALL_FC_MNIST
-  one_step_neurons: 11
+  one_step_neurons: 27
 
 LARGE_FC_MNIST:
   dims0: 784

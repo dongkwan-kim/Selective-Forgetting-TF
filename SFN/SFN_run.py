@@ -128,8 +128,8 @@ def experiment_multiple_forget(sfn, _flags):
     )
 
     print("Area Under Forgetting Curve")
-    for policy_name in policies:
-        au_mean_fc, au_min_fc = sfn.get_area_under_forgetting_curve(_flags.task_to_forget, policy_name)
+    for task_to_forget, policy_name in zip(_flags.task_to_forget_list, policies):
+        au_mean_fc, au_min_fc = sfn.get_area_under_forgetting_curve(task_to_forget, policy_name)
         print("\t".join(str(x) for x in [policy_name, au_mean_fc, au_min_fc]))
 
 
@@ -147,21 +147,24 @@ def experiment_forget_and_retrain(sfn, _flags, _policies):
             _flags, policy,
             epoches_to_print=[0, 1, -2, -1],
             is_verbose=False,
-            taskwise_training=_flags.taskwise_training,
         )
-        build_line_of_list(x_or_x_list=list(i * _flags.retrain_max_iter_per_task
-                                            for i in range(len(lst_of_perfs_at_epoch))),
+        build_line_of_list(x_or_x_list=list(i for i in range(len(lst_of_perfs_at_epoch))),
+                           is_x_list=False,
                            y_list=np.transpose(lst_of_perfs_at_epoch),
                            label_y_list=[t + 1 for t in range(_flags.n_tasks)],
                            xlabel="Re-training Epoches",
-                           ylabel="Average Per-task AUROC", ylim=[0.9, 1],
+                           ylabel="Average Per-task AUROC",
+                           ylim=[0.5, 1],
                            title="Perf. by Retraining After Forgetting Task-{} ({})".format(
                                _flags.task_to_forget,
                                policy,
                            ),
+                           title_fontsize=14,
+                           linewidth=1.5,
+                           markersize=2.0,
                            file_name=os.path.join(
                                get_project_dir(),
-                               "figs/{}_{}_task{}_RetrainAcc.png".format(
+                               "figs/{}_{}_task{}_RetrainAcc.pdf".format(
                                    sfn.__class__.__name__,
                                    sfn.importance_criteria.split("_")[0],
                                    _flags.task_to_forget,
@@ -216,9 +219,9 @@ if __name__ == '__main__':
         # SFDEN_FORGET, SFDEN_RETRAIN, SFDEN_MULTIPLE_FORGET,
         # SFHPS_FORGET, SFHPS_MASK,
         # SFEWC_FORGET, SFEWC_RETRAIN, SFEWC_MULTIPLE_FORGET,
-        # SFLCL10_FORGET, SFLCL10_MASK, SFLCL10_MASK_MULTIPLE_FORGET
+        # SFLCL10_FORGET, SFLCL10_RETRAIN, SFLCL10_MASK, SFLCL10_MASK_MULTIPLE_FORGET
         # SFLCL20_FORGET, SFLCL100_FORGET,
-        experiment_name="SFLCL10_FORGET",
+        experiment_name="SFLCL10_RETRAIN",
 
         # SMALL_FC_MNIST,
         # LARGE_FC_MNIST, NOT_XLARGE_FC_MNIST,

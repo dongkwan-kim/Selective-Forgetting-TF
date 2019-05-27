@@ -485,5 +485,82 @@ class SFLCL(SFN):
         self.yhat = None
         self.build_model()
 
-    def _retrain_at_task_or_all(self, task_id, train_xs, train_labels, retrain_flags, is_verbose):
-        pass
+    def build_model_for_retraining(self, flags):
+
+        xn_filters, xsize = self.conv_dims[0], self.conv_dims[1]
+        X = tf.placeholder(tf.float32, [None, xsize, xsize, xn_filters], name="X")
+        Y = tf.placeholder(tf.float32, [None, self.n_classes], name="Y")
+        keep_prob = tf.placeholder(tf.float32, name="keep_prob")
+
+        h_conv = X
+        for conv_num, i in enumerate(range(2, len(self.conv_dims), 2)):
+            w_conv = self.get_variable("conv%d" % (i // 2), "weight", True)
+            b_conv = self.get_variable("conv%d" % (i // 2), "biases", True)
+            h_conv = tf.nn.conv2d(h_conv, w_conv, strides=[1, 1, 1, 1], padding="SAME") + b_conv
+            h_conv = tf.nn.relu(h_conv)
+
+            ndarray_hard_mask = np.ones(shape=h_conv.get_shape().as_list()[-1:])
+            indices_to_zero = np.asarray(list(self.layer_to_removed_unit_set["conv{}".format(i // 2)]))
+            ndarray_hard_mask[indices_to_zero] = 0
+            tf_hard_mask = tf.constant(ndarray_hard_mask, dtype=tf.float32)
+
+            h_conv = Mask(
+                conv_num, 0, 0, mask_type=MaskType.HARD, hard_mask=tf_hard_mask,
+            ).get_masked_tensor(h_conv)
+
+            # max pooling
+            if conv_num + 1 in self.pool_pos_to_dims:
+                pool_dim = self.pool_pos_to_dims[conv_num + 1]
+                pool_ksize = [1, pool_dim, pool_dim, 1]
+                h_conv = tf.nn.max_pool(h_conv, ksize=pool_ksize, strides=[1, 2, 2, 1], padding="SAME")
+
+        h_fc = tf.reshape(h_conv, (-1, self.dims[0]))
+        for i in range(1, len(self.dims)):
+            w_fc = self.get_variable("fc%d" % i, "weight", True)
+            b_fc = self.get_variable("fc%d" % i, "biases", True)
+            h_fc = tf.matmul(h_fc, w_fc) + b_fc
+
+            if i < len(self.dims) - 1:  # Do not activate the last layer.
+                h_fc = tf.nn.relu(h_fc)
+                if self.dropout_type == "dropout":
+                    h_fc = tf.nn.dropout(h_fc, keep_prob)
+                else:
+                    raise ValueError
+
+        loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=h_fc, labels=Y))
+        l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(scale_l1=0.0, scale_l2=self.l2_lambda)
+        regularization_loss = tf.contrib.layers.apply_regularization(
+            l1_l2_regularizer,
+            [v for v in tf.trainable_variables() if "conv" in v.name or "fc" in v.name],
+        )
+        loss = loss + regularization_loss
+        opt = tf.train.AdamOptimizer(self.init_lr).minimize(loss)
+        self.sess.run(tf.global_variables_initializer())
+
+        return X, Y, opt, loss
+
+    def _retrain_at_task_or_all(self, task_id, train_xs, train_labels, retrain_flags, is_verbose, **kwargs):
+        X, Y, opt, loss = kwargs["model_args"]
+
+        mixed_xs = np.concatenate([
+            train_xs[t]() for t in range(len(train_xs)) if t + 1 not in retrain_flags.task_to_forget
+        ])
+        mixed_labels = np.concatenate([
+            train_labels[t]() for t in range(len(train_labels)) if t + 1 not in retrain_flags.task_to_forget
+        ])
+        num_samples = len(mixed_xs)
+        permut = np.random.permutation(num_samples)
+        mixed_xs, mixed_labels = mixed_xs[permut], mixed_labels[permut]
+
+        num_batches = num_samples // self.batch_size
+        loss_sum = 0
+        start_idx = 0
+        for _ in range(num_batches):
+            next_idx = start_idx + self.batch_size
+            xs = mixed_xs[start_idx:next_idx]
+            ys = mixed_labels[start_idx:next_idx]
+            _, loss_val = self.sess.run([opt, loss], feed_dict={X: xs, Y: ys})
+            loss_sum += loss_val
+            start_idx = next_idx
+
+        return loss_sum

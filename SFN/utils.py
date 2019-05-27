@@ -274,6 +274,7 @@ def draw_importance_bar_chart(iv, prev_first_layer, curr_first_layer, prev_secon
 def build_line_of_list(x_or_x_list, y_list, label_y_list, xlabel, ylabel, title, file_name,
                        highlight_ylabels=None, is_x_list=True, marker="o",
                        title_fontsize=20, label_fontsize=17, tick_fontsize="large", legend_fontsize="x-large",
+                       linewidth=2.5, markersize=4,
                        **kwargs):
     if not is_x_list:
         x_or_x_list = [deepcopy(x_or_x_list) for _ in range(len(y_list))]
@@ -287,8 +288,8 @@ def build_line_of_list(x_or_x_list, y_list, label_y_list, xlabel, ylabel, title,
         else:
             alpha, linestyle = 0.75, ":"
 
-        plt.plot(x, y, label=yl, alpha=alpha, linewidth=2.5, linestyle=linestyle,
-                 marker=marker, markersize=4)
+        plt.plot(x, y, label=yl, alpha=alpha, linewidth=linewidth, linestyle=linestyle,
+                 marker=marker, markersize=markersize)
 
     plt.xticks(fontsize=tick_fontsize)
     plt.yticks(fontsize=tick_fontsize)
