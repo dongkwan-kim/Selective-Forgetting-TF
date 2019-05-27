@@ -32,7 +32,7 @@ def tune_policy_param(sfn, n_to_search, _flags, policy="MEAN+DEV") -> Tuple[Dict
             )
             sfn.recover_old_params()
             au_mean_fc, au_min_fc = sfn.get_area_under_forgetting_curve(
-                _flags.task_to_forget, policy_name, y_limit=0.6)
+                _flags.task_to_forget, policy_name, y_limit=0.65)
             return 0.2 * au_mean_fc + 0.8 * au_min_fc
         except AssertionError as e:
             mean_rho = float(str(e).split(" = ")[-1])
@@ -80,7 +80,7 @@ if __name__ == '__main__':
         # SFEWC_FORGET, SFEWC_RETRAIN
         # SFLCL10_FORGET, SFLCL10_MASK
         # SFLCL20_FORGET, SFLCL100_FORGET,
-        experiment_name="SFEWC_FORGET",
+        experiment_name="SFLCL10_MASK",
 
         # SMALL_FC_MNIST,
         # LARGE_FC_MNIST, NOT_XLARGE_FC_MNIST,
@@ -88,7 +88,7 @@ if __name__ == '__main__':
         # SMALL_CONV_MNIST, ALEXNETV_MNIST,
         # ALEXNETV_CIFAR10,
         # ALEXNETV_COARSE_CIFAR100, ALEXNETV_CIFAR100
-        model_name="XLARGE_FC_MNIST",
+        model_name="ALEXNETV_CIFAR10",
     )
 
     labels, train_xs, val_xs, test_xs, coreset = get_dataset(params.dtype, params)
@@ -106,8 +106,8 @@ if __name__ == '__main__':
 
     max_res_dict = {}
     for p in [
-        "MEAN+DEV",
-        # "MAX+DEV"
+        # "MEAN+DEV",
+        "MAX+DEV"
     ]:
         # noinspection PyTypeChecker
         max_res_of_p, _ = tune_policy_param(model, 15, params, p)

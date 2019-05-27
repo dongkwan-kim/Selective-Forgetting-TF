@@ -246,7 +246,7 @@ if __name__ == '__main__':
 
     model.normalize_importance_matrix_about_task()
 
-    if params.expr_type == "FORGET" or params.expr_type == "CRITERIA":
+    if params.expr_type == "FORGET" or params.expr_type == "MASK":
         policies_for_expr = params.policies_for_expr
         # noinspection PyTypeChecker
         experiment_forget(model, params, policies_for_expr)

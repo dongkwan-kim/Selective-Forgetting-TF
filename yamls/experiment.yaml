@@ -91,23 +91,26 @@ SFHPS_MASK:
   mask_type: ADAPTIVE
   mask_alpha: 1.5
   mask_not_alpha: -2.0
+  expr_type: MASK
 
 SFLCL10_FORGET: &SFLCL10_FORGET
   <<: *BASIC
-  max_iter: 250
-  l1_lambda: 2e-06
-  l2_lambda: 0.0
+  max_iter: 1350
+  l1_lambda: 0.0
+  l2_lambda: 2e-06
   need_coreset: False
   expr_type: FORGET
   model: SFLCL
   support_model: ["SMALL_CONV_MNIST", "ALEXNETV_MNIST", "ALEXNETV_CIFAR10"]
+  policies_for_expr: ["RANDOM", "MEAN", "MAX", "MAX+DEV"]
 
 SFLCL10_MASK: &SFLCL_MASK
   <<: *SFLCL10_FORGET
-  max_iter: 1000
+  max_iter: 2200
   l1_lambda: 2e-06
   l2_lambda: 0.0
   use_set_based_mask: True
   mask_type: ADAPTIVE
   mask_alpha: 2.0
   mask_not_alpha: [-5.4, -5.6, -6.4, -4.4] # -3.5
+  expr_type: MASK
