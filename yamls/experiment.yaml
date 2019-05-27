@@ -24,8 +24,8 @@ SFDEN_FORGET: &SFDEN_FORGET
   gl_lambda: 0.001
   regular_lambda: 0.5
   ex_k: 10
-  loss_thr: 0.1
-  spl_thr: 0.1
+  loss_thr: 0.01
+  spl_thr: 0.05
   need_coreset: True
   layerwise_pruning: False
   policies_for_expr: ["RANDOM", "MEAN", "MAX", "MEAN+DEV"]
@@ -36,8 +36,8 @@ SFDEN_FORGET: &SFDEN_FORGET
 SFDEN_MULTIPLE_FORGET:
   <<: *SFDEN_FORGET
   task_to_forget_list: [[], [1, 2], [1, 2, 3, 4], [1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6, 7, 8]]
-  mixing_coeff_list: [0.0, 0.5962671826302948, 0.49135327161226205, 0.35998779364580585, 0.0005]
-  tau_list: [0.0, 0.004351855346370753, 5e-06, 0.008176911647015424, 5e-06]
+  mixing_coeff_list: [0.0, 0.9995, 0.999499999740638, 0.9995, 0.9995]
+  tau_list: [0.0, 0.009994998511779693, 0.009994995715065756, 0.009088542765656765, 0.004224613571725346]
   expr_type: MULTIPLE_FORGET
 
 SFDEN_RETRAIN:

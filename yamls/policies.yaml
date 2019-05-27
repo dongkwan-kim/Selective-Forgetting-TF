@@ -17,9 +17,9 @@ SMALL_FC_MNIST:
       mixing_coeff: 0
       tau: 0
     NEURON:
-      mixing_coeff: 0.6244444147406663
+      mixing_coeff: 0.9994382784274684
       relatedness_type: "symmetric_unit_level"
-      tau: 0.005828112247036367
+      tau: 0.007975961728175081
 
   MAX+DEV:
     FILTER:
