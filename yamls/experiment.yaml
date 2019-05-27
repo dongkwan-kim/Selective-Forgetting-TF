@@ -70,9 +70,9 @@ SFEWC_MULTIPLE_FORGET:
 
 SFEWC_RETRAIN:
   <<: *SFEWC_FORGET
-  retrain_task_iter: 100
+  retrain_task_iter: 70
   coreset_size: 250
-  steps_to_forget: 19
+  steps_to_forget: 20
   expr_type: RETRAIN
 
 SFHPS_FORGET: &SFHPS_FORGET
