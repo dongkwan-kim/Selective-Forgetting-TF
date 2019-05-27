@@ -574,7 +574,7 @@ class SFN:
     def get_random_units(self, number_to_select, utype):
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
         indexes = np.asarray(range(i_mat.shape[-1]))
-        np.random.seed(i_mat.shape[-1])
+        np.random.seed(i_mat.shape[-1] + 3)
         np.random.shuffle(indexes)
         indexes = self._get_indices_of_certain_utype(indexes, utype)
         if not self.layerwise_pruning:
