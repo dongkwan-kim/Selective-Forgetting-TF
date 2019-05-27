@@ -128,8 +128,8 @@ def experiment_multiple_forget(sfn, _flags):
     )
 
     print("Area Under Forgetting Curve")
-    for policy_name in policies:
-        au_mean_fc, au_min_fc = sfn.get_area_under_forgetting_curve(_flags.task_to_forget, policy_name)
+    for task_to_forget, policy_name in zip(_flags.task_to_forget_list, policies):
+        au_mean_fc, au_min_fc = sfn.get_area_under_forgetting_curve(task_to_forget, policy_name)
         print("\t".join(str(x) for x in [policy_name, au_mean_fc, au_min_fc]))
 
 
@@ -221,7 +221,7 @@ if __name__ == '__main__':
         # SFEWC_FORGET, SFEWC_RETRAIN, SFEWC_MULTIPLE_FORGET,
         # SFLCL10_FORGET, SFLCL10_RETRAIN, SFLCL10_MASK, SFLCL10_MASK_MULTIPLE_FORGET
         # SFLCL20_FORGET, SFLCL100_FORGET,
-        experiment_name="SFDEN_RETRAIN",
+        experiment_name="SFDEN_MULTIPLE_FORGET",
 
         # SMALL_FC_MNIST,
         # LARGE_FC_MNIST, NOT_XLARGE_FC_MNIST,
