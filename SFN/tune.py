@@ -50,7 +50,6 @@ def tune_policy_param(sfn, n_to_search, _flags, policy="MEAN+DEV") -> Tuple[Dict
     optimizer = BayesianOptimization(
         f=black_box_function,
         pbounds=param_bounds,
-        random_state=42,
     )
 
     optimizer.maximize(
@@ -108,10 +107,10 @@ if __name__ == '__main__':
     max_res_dict = {}
     for p in [
         "MEAN+DEV",
-        "MAX+DEV"
+        # "MAX+DEV"
     ]:
         # noinspection PyTypeChecker
-        max_res_of_p, _ = tune_policy_param(model, 15, params, "MEAN+DEV")
+        max_res_of_p, _ = tune_policy_param(model, 15, params, p)
         max_res_dict[p] = max_res_of_p
 
     for k, v in max_res_dict.items():
