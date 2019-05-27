@@ -160,9 +160,11 @@ def experiment_forget_and_retrain(sfn, _flags, _policies):
                                policy,
                            ),
                            title_fontsize=14,
+                           linewidth=1.5,
+                           markersize=2.0,
                            file_name=os.path.join(
                                get_project_dir(),
-                               "figs/{}_{}_task{}_RetrainAcc.png".format(
+                               "figs/{}_{}_task{}_RetrainAcc.pdf".format(
                                    sfn.__class__.__name__,
                                    sfn.importance_criteria.split("_")[0],
                                    _flags.task_to_forget,
@@ -217,7 +219,7 @@ if __name__ == '__main__':
         # SFDEN_FORGET, SFDEN_RETRAIN, SFDEN_MULTIPLE_FORGET,
         # SFHPS_FORGET, SFHPS_MASK,
         # SFEWC_FORGET, SFEWC_RETRAIN, SFEWC_MULTIPLE_FORGET,
-        # SFLCL10_FORGET, SFLCL10_MASK, SFLCL10_MASK_MULTIPLE_FORGET
+        # SFLCL10_FORGET, SFLCL10_RETRAIN, SFLCL10_MASK, SFLCL10_MASK_MULTIPLE_FORGET
         # SFLCL20_FORGET, SFLCL100_FORGET,
         experiment_name="SFDEN_RETRAIN",
 
