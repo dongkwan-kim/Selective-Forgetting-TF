@@ -95,9 +95,27 @@ ALEXNETV_CIFAR10:
   <<: *DEFAULT
   MEAN+DEV:
     FILTER:
-      mixing_coeff: 0.7953154557199767
+      mixing_coeff: {
+        FORGET-gpu-0: 0,
+        FORGET-gpu-1: 0,
+        FORGET-gpu-2: 0,
+        FORGET-gpu-3: 0,
+        MASK-gpu-0: 0.7588110313537098,
+        MASK-gpu-1: 0,
+        MASK-gpu-2: 0.5531619874015478,
+        MASK-gpu-3: 0,
+      }
+      tau: {
+        FORGET-gpu-0: 0,
+        FORGET-gpu-1: 0,
+        FORGET-gpu-2: 0,
+        FORGET-gpu-3: 0,
+        MASK-gpu-0: 0.0028676474300188947,
+        MASK-gpu-1: 0,
+        MASK-gpu-2: 5.000553058973102e-06,
+        MASK-gpu-3: 0,
+      }
       relatedness_type: "symmetric_unit_level"
-      tau: 0.0032902991019546283
     NEURON:
       mixing_coeff: 0
       relatedness_type: ""
@@ -105,9 +123,27 @@ ALEXNETV_CIFAR10:
 
   MAX+DEV:
     FILTER:
-      mixing_coeff: 0
-      tau: 0
+      mixing_coeff: {
+        FORGET-gpu-0: 0.2914596192439228,
+        FORGET-gpu-1: 0,
+        FORGET-gpu-2: 0,
+        FORGET-gpu-3: 0,
+        MASK-gpu-0: 0.8008485355408321,
+        MASK-gpu-1: 0,
+        MASK-gpu-2: 0.8266667045887633,
+        MASK-gpu-3: 0,
+      }
+      tau: {
+        FORGET-gpu-0: 0.0021807508947415395,
+        FORGET-gpu-1: 0,
+        FORGET-gpu-2: 0,
+        FORGET-gpu-3: 0,
+        MASK-gpu-0: 0.0030030584377842566,
+        MASK-gpu-1: 0,
+        MASK-gpu-2: 0.003469983229278269,
+        MASK-gpu-3: 0,
+      }
+      relatedness_type: "symmetric_unit_level"
     NEURON:
       mixing_coeff: 0
-      relatedness_type: "symmetric_unit_level"
       tau: 0

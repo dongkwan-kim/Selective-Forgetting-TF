@@ -40,6 +40,7 @@ class SFN:
     def __init__(self, config):
 
         self.sess = None
+        self.expr_type = config.expr_type
 
         self.batch_size = config.batch_size
         self.checkpoint_dir = config.checkpoint_dir
@@ -534,6 +535,13 @@ class SFN:
             obj_i = self.get_mean_importance(task_id_or_ids)
         else:
             obj_i = self.get_maximum_importance(task_id_or_ids)
+
+        kwargs_key = "{}-{}".format(self.expr_type, self.get_real_device_info()[0])
+        if isinstance(mixing_coeff, dict):
+            mixing_coeff = mixing_coeff[kwargs_key]
+
+        if isinstance(tau, dict):
+            tau = tau[kwargs_key]
 
         if mixing_coeff > 0:
             related_deviation = self.get_importance_task_related_deviation(task_id_or_ids, relatedness_type, tau)
