@@ -536,7 +536,10 @@ class SFN:
         else:
             obj_i = self.get_maximum_importance(task_id_or_ids)
 
-        kwargs_key = "{}-{}".format(self.expr_type, self.get_real_device_info()[0])
+        kwargs_key = "{}-{}".format(
+            self.expr_type if self.expr_type != "RETRAIN" else "MASK",
+            self.get_real_device_info()[0],
+        )
         if isinstance(mixing_coeff, dict):
             mixing_coeff = mixing_coeff[kwargs_key]
 
@@ -996,8 +999,8 @@ class SFN:
 
             m, s = get_mean_and_std_wo_indices(perfs, indices_to_forget)
             print("   [*] avg_perf: %.4f +- %.4f" % (m, s))
-            msg = "   [*] max_perf: %.4f at iter %d" % (max_mean_perf_list[argmax_mean_perf], argmax_mean_perf)
-            if max_mean_perf_list[argmax_mean_perf] >= m:
+            msg = "   [*] max_perf: %.4f at iter %d" % (max_mean_perf_list[argmax_mean_perf], argmax_mean_perf - 1)
+            if max_mean_perf_list[argmax_mean_perf] <= m:
                 cprint(msg, "green")
             else:
                 print(msg)

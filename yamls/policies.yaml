@@ -97,7 +97,7 @@ ALEXNETV_CIFAR10:
     FILTER:
       mixing_coeff: {
         FORGET-gpu-0: 0,
-        FORGET-gpu-1: 0,
+        FORGET-gpu-1: 0.47369868833797885,
         FORGET-gpu-2: 0,
         FORGET-gpu-3: 0,
         MASK-gpu-0: 0.7588110313537098,
@@ -107,7 +107,7 @@ ALEXNETV_CIFAR10:
       }
       tau: {
         FORGET-gpu-0: 0,
-        FORGET-gpu-1: 0,
+        FORGET-gpu-1: 0.002238582616266194,
         FORGET-gpu-2: 0,
         FORGET-gpu-3: 0,
         MASK-gpu-0: 0.0028676474300188947,
@@ -125,7 +125,7 @@ ALEXNETV_CIFAR10:
     FILTER:
       mixing_coeff: {
         FORGET-gpu-0: 0.2914596192439228,
-        FORGET-gpu-1: 0,
+        FORGET-gpu-1: 0.35760348723587715,
         FORGET-gpu-2: 0,
         FORGET-gpu-3: 0,
         MASK-gpu-0: 0.8008485355408321,
@@ -135,7 +135,7 @@ ALEXNETV_CIFAR10:
       }
       tau: {
         FORGET-gpu-0: 0.0021807508947415395,
-        FORGET-gpu-1: 0,
+        FORGET-gpu-1: 5e-06,
         FORGET-gpu-2: 0,
         FORGET-gpu-3: 0,
         MASK-gpu-0: 0.0030030584377842566,
