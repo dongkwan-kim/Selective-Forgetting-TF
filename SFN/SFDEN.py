@@ -246,10 +246,10 @@ class SFDEN(DEN, SFN):
             if task_id not in flags.task_to_forget:
                 loss_list.append(tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=y, labels=Y)))
 
-        l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(scale_l1=0.0, scale_l2=0.000001)
+        l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(scale_l1=0.0, scale_l2=1e-8)
         regularization_loss = tf.contrib.layers.apply_regularization(
             l1_l2_regularizer,
-            [v for v in tf.trainable_variables() if "weight:0" in v.name or "biases:0" in v.name]
+            [v for v in tf.trainable_variables() if "weight" in v.name or "biases" in v.name]
         )
 
         loss = sum(loss_list) + regularization_loss
