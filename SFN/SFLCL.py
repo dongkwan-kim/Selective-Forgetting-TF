@@ -98,6 +98,7 @@ class SFLCL(SFN):
             self.group_layerwise = [eval(str(gl)) for gl in config.group_layerwise]
             self.exclusive_layerwise = [eval(str(el)) for el in config.exclusive_layerwise]
 
+        self.use_filter_dropout = True
         self.use_set_based_mask = config.use_set_based_mask
         if self.use_set_based_mask:
             self.mask_type = config.mask_type
@@ -219,6 +220,7 @@ class SFLCL(SFN):
             iteration, self.get_real_device_info()), "green")
         validation_perf, residuals = self.predict_perform(val_x, val_labels, with_residuals=True)
         self.validation_results.append((np.mean(validation_perf), residuals["accuracy"]))
+
         print("   [*] max avg_perf: %.4f" % max(apf for apf, acc in self.validation_results))
         print("   [*] max accuracy: {} %".format(max(acc for apf, acc in self.validation_results)))
         print("   [*] training loss: {}".format(loss_sum))
@@ -288,6 +290,9 @@ class SFLCL(SFN):
                 with tf.control_dependencies([mask]):
                     excl_h_conv = tf.nn.relu(excl_h_conv)
                     excl_h_conv = Mask.get_exclusive_masked_tensor(excl_h_conv, mask, is_training)
+
+            elif self.use_filter_dropout:
+                h_conv = Mask(conv_num, mask_type=MaskType.INDEPENDENT).get_masked_tensor(h_conv, is_training)
 
             # max pooling
             if conv_num + 1 in self.pool_pos_to_dims:
@@ -392,6 +397,12 @@ class SFLCL(SFN):
                     self.evaluate_overall(epoch, val_x, val_labels, loss_sum)
                     for i in range(len(self.conv_dims) // 2 - 1):
                         cprint_stats_of_mask_pair(self, 1, 6, batch_size_per_task, X, is_training, mask_id=i)
+
+                if epoch > 0.8 * self.max_iter:
+                    max_perf = max(apf for apf, acc in self.validation_results)
+                    if self.validation_results[-1] == max_perf:
+                        cprint("EARLY STOPPED", "green")
+                        break
 
     def _get_data_stream_from_task_as_class_data(self, shuffle=True, base_seed=42) -> Tuple[np.ndarray, ...]:
         """a method that combines data divided by class"""
