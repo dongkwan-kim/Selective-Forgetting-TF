@@ -53,16 +53,21 @@ def profile_masks(sflcl: SFLCL, file_format=".png"):
                 t + 1, m + 1, np.mean(counted) + np.std(counted), np.mean(counted), np.std(counted)), "red")
             """
             top_indices_of_task_of_mask[m].append(top_indices)
+            print(top_indices)
 
     for m in mask_ids:
         top_indices_flatten = []
         for ti in top_indices_of_task_of_mask[m]:
             top_indices_flatten += ti
         counter = Counter(top_indices_flatten)
+        print(counter)
 
         n_task_to_filters = defaultdict(list)
         for i, c in counter.items():
             n_task_to_filters[c].append(i)
+
+        if len(n_task_to_filters) == 0:
+            continue
 
         xs = list(range(1, 10 + 1))
         ys = [len(n_task_to_filters[i]) for i in xs]
@@ -74,6 +79,10 @@ def profile_masks(sflcl: SFLCL, file_format=".png"):
                   file_name="../figs/number_of_tasks_layer{}{}".format(m + 1, file_format),
                   xlabel="Number of tasks",
                   ylabel=None)
+
+        cprint("Dist. of # tasks at which FAF activates", "green")
+        for x, y in zip(xs, ys):
+            print("{}: {} (total: {})".format(x, dist_ys, sum(ys)))
 
     for m, top_indices_of_task in top_indices_of_task_of_mask.items():
         cprint("- Mask {}".format(m), "green")
