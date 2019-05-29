@@ -249,13 +249,25 @@ def get_zero_expanded_matrix(base_matrix: np.ndarray, indexes_to_zero, add_rows=
 
 # Matplotlib utils
 
-def build_bar(x, y, ylabel, title, draw_xticks=False, **kwargs):
-    y_pos = np.arange(len(x))
+def build_bar(x, y,  xlabel, ylabel, title, min_y_pos=0, file_name=None,
+              title_fontsize=20, label_fontsize=18, tick_fontsize="x-large",
+              draw_xticks=False, **kwargs):
+
+    y_pos = np.arange(len(x)) + min_y_pos
     plt.bar(y_pos, y, **kwargs)
+
     if draw_xticks:
-        plt.xticks(y_pos, x)
-    plt.ylabel(ylabel)
-    plt.title(title)
+        plt.xticks(y_pos, x, fontsize=tick_fontsize)
+
+    plt.yticks(fontsize=tick_fontsize)
+    plt.title(title, fontdict={"size": title_fontsize})
+    plt.xlabel(xlabel, fontdict={"size": label_fontsize})
+    plt.ylabel(ylabel, fontdict={"size": label_fontsize})
+    plt.tight_layout()
+
+    if file_name:
+        plt.savefig(file_name)
+
     plt.show()
 
     return plt
@@ -298,6 +310,28 @@ def build_line_of_list(x_or_x_list, y_list, label_y_list, xlabel, ylabel, title,
     if "ylim" in kwargs:
         plt.ylim(kwargs["ylim"])
 
+    plt.title(title, fontdict={"size": title_fontsize})
+    plt.xlabel(xlabel, fontdict={"size": label_fontsize})
+    plt.ylabel(ylabel, fontdict={"size": label_fontsize})
+    plt.tight_layout()
+
+    if file_name:
+        plt.savefig(file_name)
+
+    plt.show()
+
+    return plt
+
+
+def build_hist(populations, xlabel, ylabel, title, file_name, bins=None,
+               title_fontsize=20, label_fontsize=18, tick_fontsize="x-large", **kwargs):
+
+    bins = bins or "auto"
+
+    plt.hist(populations, bins=bins, **kwargs)
+
+    plt.xticks(fontsize=tick_fontsize)
+    plt.yticks(fontsize=tick_fontsize)
     plt.title(title, fontdict={"size": title_fontsize})
     plt.xlabel(xlabel, fontdict={"size": label_fontsize})
     plt.ylabel(ylabel, fontdict={"size": label_fontsize})
