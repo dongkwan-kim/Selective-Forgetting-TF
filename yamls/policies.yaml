@@ -126,7 +126,7 @@ ALEXNETV_CIFAR10:
       mixing_coeff: {
         FORGET-gpu-0: 0.2914596192439228,
         FORGET-gpu-1: 0.35760348723587715,
-        FORGET-gpu-2: 0,
+        FORGET-gpu-2: 0.1573841421573933,
         FORGET-gpu-3: 0,
         MASK-gpu-0: 0.8008485355408321,
         MASK-gpu-1: 0,
@@ -136,7 +136,7 @@ ALEXNETV_CIFAR10:
       tau: {
         FORGET-gpu-0: 0.0021807508947415395,
         FORGET-gpu-1: 5e-06,
-        FORGET-gpu-2: 0,
+        FORGET-gpu-2: 0.0013448734547477365,
         FORGET-gpu-3: 0,
         MASK-gpu-0: 0.0030030584377842566,
         MASK-gpu-1: 0,

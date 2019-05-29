@@ -104,21 +104,27 @@ SFLCL10_FORGET: &SFLCL10_FORGET
   support_model: ["SMALL_CONV_MNIST", "ALEXNETV_MNIST", "ALEXNETV_CIFAR10"]
   policies_for_expr: ["RANDOM", "MEAN", "MAX", "MEAN+DEV", "MAX+DEV"]
 
-SFLCL10_MASK: &SFLCL_MASK
+SFLCL10_MASK: &SFLCL10_MASK
   <<: *SFLCL10_FORGET
   max_iter: 2200
   l1_lambda: 2e-06
   l2_lambda: 0.0
   use_set_based_mask: True
   mask_type: ADAPTIVE
-  mask_alpha: 2.0
-  mask_not_alpha: [-5.4, -5.6, -6.4, -4.4] # -3.5
+  mask_alpha: 1.0 # 2.0
+  mask_not_alpha: [-3.5, -3.5, -3.5, -4.0]  # -3.0 # [-5.4, -5.6, -6.4, -4.4]
   expr_type: MASK
   policies_for_expr: ["RANDOM", "MEAN", "MAX", "MAX+DEV"]
 
+SFLCL10_MASK_MULTIPLE_FORGET:
+  <<: *SFLCL10_MASK
+  task_to_forget_list: [[], [1, 10], [1, 10, 8, 4], [1, 10, 8, 4, 9, 6], [1, 10, 8, 4, 9, 6, 3, 5]]
+  mixing_coeff_list: [0.0, 0.7476918006959228, 0.6756124634514568, 0.0005000001364000979, 0.7929420314273887]
+  tau_list: [0.0, 0.0015833442457511082, 0.00037192213230625824, 5e-06, 0.002296835660119554]
+  expr_type: MULTIPLE_FORGET
 
 SFLCL10_RETRAIN:
-  <<: *SFLCL_MASK
-  retrain_task_iter: 2000
+  <<: *SFLCL10_MASK
+  retrain_task_iter: 3000
   steps_to_forget: 16
   expr_type: RETRAIN
