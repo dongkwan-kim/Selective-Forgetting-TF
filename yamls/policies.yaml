@@ -131,7 +131,7 @@ ALEXNETV_CIFAR10:
         MASK-gpu-0: 0.8008485355408321,
         MASK-gpu-1: 0,
         MASK-gpu-2: 0.8266667045887633,
-        MASK-gpu-3: 0,
+        MASK-gpu-3: 0.26801675917566237,
       }
       tau: {
         FORGET-gpu-0: 0.0021807508947415395,
@@ -141,7 +141,7 @@ ALEXNETV_CIFAR10:
         MASK-gpu-0: 0.0030030584377842566,
         MASK-gpu-1: 0,
         MASK-gpu-2: 0.003469983229278269,
-        MASK-gpu-3: 0,
+        MASK-gpu-3: 0.0016533125640555235,
       }
       relatedness_type: "symmetric_unit_level"
     NEURON:
