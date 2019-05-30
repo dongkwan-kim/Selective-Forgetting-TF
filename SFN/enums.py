@@ -18,6 +18,7 @@ class UnitType(enum.Enum):
 class MaskType(enum.Enum):
     ADAPTIVE = 0
     HARD = 1
+    INDEPENDENT = 2
 
     def __str__(self):
         return self.name

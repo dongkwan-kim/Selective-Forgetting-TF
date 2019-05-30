@@ -42,9 +42,12 @@ def _get_batch_normalized_conv(beta: tf.Variable,
     return h_conv
 
 
-def _get_xs_and_labels_wo_target(target_t, train_xs, train_labels):
-    xs_except_target = np.concatenate([xs() for i, xs in enumerate(train_xs) if i != target_t])
-    labels_except_target = np.concatenate([label() for i, label in enumerate(train_labels) if i != target_t])
+def _get_xs_and_labels_wo_target(target_t_or_t_list, train_xs, train_labels):
+    if isinstance(target_t_or_t_list, int):
+        target_t_or_t_list = [target_t_or_t_list]
+    xs_except_target = np.concatenate([xs() for i, xs in enumerate(train_xs) if i not in target_t_or_t_list])
+    labels_except_target = np.concatenate([label() for i, label in enumerate(train_labels)
+                                           if i not in target_t_or_t_list])
     permut = np.random.permutation(len(xs_except_target))
     xs_except_target, labels_except_target = xs_except_target[permut], labels_except_target[permut]
     return xs_except_target, labels_except_target
@@ -95,6 +98,7 @@ class SFLCL(SFN):
             self.group_layerwise = [eval(str(gl)) for gl in config.group_layerwise]
             self.exclusive_layerwise = [eval(str(el)) for el in config.exclusive_layerwise]
 
+        self.use_filter_dropout = True
         self.use_set_based_mask = config.use_set_based_mask
         if self.use_set_based_mask:
             self.mask_type = config.mask_type
@@ -216,6 +220,7 @@ class SFLCL(SFN):
             iteration, self.get_real_device_info()), "green")
         validation_perf, residuals = self.predict_perform(val_x, val_labels, with_residuals=True)
         self.validation_results.append((np.mean(validation_perf), residuals["accuracy"]))
+
         print("   [*] max avg_perf: %.4f" % max(apf for apf, acc in self.validation_results))
         print("   [*] max accuracy: {} %".format(max(acc for apf, acc in self.validation_results)))
         print("   [*] training loss: {}".format(loss_sum))
@@ -285,6 +290,9 @@ class SFLCL(SFN):
                 with tf.control_dependencies([mask]):
                     excl_h_conv = tf.nn.relu(excl_h_conv)
                     excl_h_conv = Mask.get_exclusive_masked_tensor(excl_h_conv, mask, is_training)
+
+            elif self.use_filter_dropout:
+                h_conv = Mask(conv_num, mask_type=MaskType.INDEPENDENT).get_masked_tensor(h_conv, is_training)
 
             # max pooling
             if conv_num + 1 in self.pool_pos_to_dims:
@@ -390,6 +398,12 @@ class SFLCL(SFN):
                     for i in range(len(self.conv_dims) // 2 - 1):
                         cprint_stats_of_mask_pair(self, 1, 6, batch_size_per_task, X, is_training, mask_id=i)
 
+                if epoch > 0.75 * self.max_iter:
+                    max_perf = max(apf for apf, acc in self.validation_results)
+                    if self.validation_results[-1] == max_perf:
+                        cprint("EARLY STOPPED", "green")
+                        break
+
     def _get_data_stream_from_task_as_class_data(self, shuffle=True, base_seed=42) -> Tuple[np.ndarray, ...]:
         """a method that combines data divided by class"""
         train_labels = np.concatenate([self.data_labels.get_train_labels(t + 1) for t in range(self.n_tasks)])
@@ -491,76 +505,109 @@ class SFLCL(SFN):
         X = tf.placeholder(tf.float32, [None, xsize, xsize, xn_filters], name="X")
         Y = tf.placeholder(tf.float32, [None, self.n_classes], name="Y")
         keep_prob = tf.placeholder(tf.float32, name="keep_prob")
+        is_training = tf.placeholder(tf.bool, name="is_training")
+
+        excl_X = tf.placeholder(tf.float32, [None, xsize, xsize, xn_filters], name="excl_X")
+        excl_Y = tf.placeholder(tf.float32, [None, self.n_classes], name="excl_Y")
 
         h_conv = X
+        excl_h_conv = excl_X if self.use_set_based_mask else None
         for conv_num, i in enumerate(range(2, len(self.conv_dims), 2)):
             w_conv = self.get_variable("conv%d" % (i // 2), "weight", True)
             b_conv = self.get_variable("conv%d" % (i // 2), "biases", True)
             h_conv = tf.nn.conv2d(h_conv, w_conv, strides=[1, 1, 1, 1], padding="SAME") + b_conv
+            if self.use_set_based_mask:
+                excl_h_conv = tf.nn.conv2d(excl_h_conv, w_conv, strides=[1, 1, 1, 1], padding="SAME") + b_conv
+
+            # activation
             h_conv = tf.nn.relu(h_conv)
 
-            ndarray_hard_mask = np.ones(shape=h_conv.get_shape().as_list()[-1:])
-            indices_to_zero = np.asarray(list(self.layer_to_removed_unit_set["conv{}".format(i // 2)]))
-            ndarray_hard_mask[indices_to_zero] = 0
-            tf_hard_mask = tf.constant(ndarray_hard_mask, dtype=tf.float32)
+            if self.use_set_based_mask:
+                ndarray_hard_mask = np.ones(shape=h_conv.get_shape().as_list()[-1:])
+                indices_to_zero = np.asarray(list(self.layer_to_removed_unit_set["conv{}".format(i // 2)]))
+                ndarray_hard_mask[indices_to_zero] = 0
+                tf_hard_mask = tf.constant(ndarray_hard_mask, dtype=tf.float32)
 
-            h_conv = Mask(
-                conv_num, 0, 0, mask_type=MaskType.HARD, hard_mask=tf_hard_mask,
-            ).get_masked_tensor(h_conv)
+                h_conv = Mask(
+                    100 + conv_num, 0, 0, mask_type=MaskType.HARD, hard_mask=tf_hard_mask,
+                ).get_masked_tensor(h_conv)
+
+                h_conv, residuals = Mask(
+                    200 + conv_num, self.mask_alpha[conv_num], self.mask_not_alpha[conv_num], mask_type=self.mask_type,
+                ).get_masked_tensor(h_conv, is_training, with_residuals=True)
+                mask = residuals["cond_mask"]
+                with tf.control_dependencies([mask]):
+                    excl_h_conv = tf.nn.relu(excl_h_conv)
+                    excl_h_conv = Mask.get_exclusive_masked_tensor(excl_h_conv, mask, is_training)
 
             # max pooling
             if conv_num + 1 in self.pool_pos_to_dims:
                 pool_dim = self.pool_pos_to_dims[conv_num + 1]
                 pool_ksize = [1, pool_dim, pool_dim, 1]
                 h_conv = tf.nn.max_pool(h_conv, ksize=pool_ksize, strides=[1, 2, 2, 1], padding="SAME")
+                if self.use_set_based_mask:
+                    excl_h_conv = tf.nn.max_pool(excl_h_conv, ksize=pool_ksize, strides=[1, 2, 2, 1], padding="SAME")
 
         h_fc = tf.reshape(h_conv, (-1, self.dims[0]))
+        excl_h_fc = tf.reshape(excl_h_conv, (-1, self.dims[0])) if self.use_set_based_mask else None
         for i in range(1, len(self.dims)):
             w_fc = self.get_variable("fc%d" % i, "weight", True)
             b_fc = self.get_variable("fc%d" % i, "biases", True)
             h_fc = tf.matmul(h_fc, w_fc) + b_fc
+            if self.use_set_based_mask:
+                excl_h_fc = tf.matmul(excl_h_fc, w_fc) + b_fc
 
             if i < len(self.dims) - 1:  # Do not activate the last layer.
                 h_fc = tf.nn.relu(h_fc)
+                if self.use_set_based_mask:
+                    excl_h_fc = tf.nn.relu(excl_h_fc)
+
                 if self.dropout_type == "dropout":
                     h_fc = tf.nn.dropout(h_fc, keep_prob)
+                    if self.use_set_based_mask:
+                        excl_h_fc = tf.nn.dropout(excl_h_fc, keep_prob)
                 else:
                     raise ValueError
 
         loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=h_fc, labels=Y))
-        l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(scale_l1=0.0, scale_l2=self.l2_lambda)
+        excl_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=excl_h_fc, labels=excl_Y))
+
+        l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(scale_l1=self.l1_lambda, scale_l2=self.l2_lambda)
         regularization_loss = tf.contrib.layers.apply_regularization(
             l1_l2_regularizer,
             [v for v in tf.trainable_variables() if "conv" in v.name or "fc" in v.name],
         )
-        loss = loss + regularization_loss
-        opt = tf.train.AdamOptimizer(self.init_lr).minimize(loss)
+        loss_with_excl = loss + excl_loss + regularization_loss
+        opt_with_excl = tf.train.AdamOptimizer(self.init_lr).minimize(loss_with_excl)
         self.sess.run(tf.global_variables_initializer())
 
-        return X, Y, opt, loss
+        return X, Y, excl_X, excl_Y, opt_with_excl, loss_with_excl, keep_prob, is_training
 
     def _retrain_at_task_or_all(self, task_id, train_xs, train_labels, retrain_flags, is_verbose, **kwargs):
-        X, Y, opt, loss = kwargs["model_args"]
+        X, Y, excl_X, excl_Y, opt_with_excl, loss_with_excl, keep_prob, is_training = kwargs["model_args"]
 
-        mixed_xs = np.concatenate([
-            train_xs[t]() for t in range(len(train_xs)) if t + 1 not in retrain_flags.task_to_forget
-        ])
-        mixed_labels = np.concatenate([
-            train_labels[t]() for t in range(len(train_labels)) if t + 1 not in retrain_flags.task_to_forget
-        ])
-        num_samples = len(mixed_xs)
-        permut = np.random.permutation(num_samples)
-        mixed_xs, mixed_labels = mixed_xs[permut], mixed_labels[permut]
+        num_batches = self.n_tasks - len(retrain_flags.task_to_forget)
+        batch_size_per_task = self.batch_size // num_batches
 
-        num_batches = num_samples // self.batch_size
+        xs_queues = [get_batch_iterator(train_xs[t](), batch_size_per_task) for t in range(self.n_tasks)]
+        labels_queues = [get_batch_iterator(train_labels[t](), batch_size_per_task) for t in range(self.n_tasks)]
+
         loss_sum = 0
-        start_idx = 0
-        for _ in range(num_batches):
-            next_idx = start_idx + self.batch_size
-            xs = mixed_xs[start_idx:next_idx]
-            ys = mixed_labels[start_idx:next_idx]
-            _, loss_val = self.sess.run([opt, loss], feed_dict={X: xs, Y: ys})
+        for target_task_id in list(set(range(1, self.n_tasks + 1)) - set(retrain_flags.task_to_forget)):
+            target_t = target_task_id - 1
+
+            xs_wo_target, labels_wo_target = _get_xs_and_labels_wo_target(
+                [target_t] + [t - 1 for t in retrain_flags.task_to_forget],
+                xs_queues, labels_queues,
+            )
+
+            feed_dict = {
+                X: xs_queues[target_t](),
+                Y: labels_queues[target_t](),
+                excl_X: xs_wo_target, excl_Y: labels_wo_target,
+                keep_prob: self.keep_prob, is_training: True,
+            }
+            _, loss_val = self.sess.run([opt_with_excl, loss_with_excl], feed_dict=feed_dict)
             loss_sum += loss_val
-            start_idx = next_idx
 
         return loss_sum

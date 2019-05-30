@@ -19,11 +19,13 @@ class Mask:
         self.alpha = alpha or {
             MaskType.ADAPTIVE: 5.,
             MaskType.HARD: 0.,
+            MaskType.INDEPENDENT: 0.,
         }[mask_type]
 
         self.not_alpha = not_alpha or {
             MaskType.ADAPTIVE: - 5.0,
             MaskType.HARD: 0.,
+            MaskType.INDEPENDENT: 0.,
         }[mask_type]
 
         self.mask_id = mask_id
@@ -46,7 +48,11 @@ class Mask:
             reduced_layer = tf.reduce_mean(prev_layer, axis=reduce_axis)
             mean_of_layer, std_of_layer = tf.nn.moments(reduced_layer, axes=[0])
             z_layer = (reduced_layer - mean_of_layer) / std_of_layer
+
+            probs_of_activation_h = 0.7 * softsign_0_to_1(self.alpha * tf.exp(z_layer) + self.not_alpha)
+            """
             probs_of_activation_h = 0.55 * softsign_0_to_1(self.alpha * z_layer + self.not_alpha)
+            """
 
             sampled_mask = tf.cast(
                 tf.math.greater(
@@ -58,6 +64,20 @@ class Mask:
                 "probs_of_activation_h": probs_of_activation_h,
             }
 
+            cond_mask = tf.cond(
+                is_training,
+                lambda: sampled_mask,
+                lambda: tf.constant(1., shape=[n_units]),
+                name="mask_{}".format(self.mask_id),
+            )
+
+        elif self.mask_type == MaskType.INDEPENDENT:
+            sampled_mask = tf.cast(
+                tf.math.greater(
+                    0.5,
+                    tf.random_uniform([n_units], minval=0, maxval=1),
+                ), dtype=tf.float32,
+            )
             cond_mask = tf.cond(
                 is_training,
                 lambda: sampled_mask,
