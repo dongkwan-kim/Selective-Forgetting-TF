@@ -398,7 +398,7 @@ class SFLCL(SFN):
                     for i in range(len(self.conv_dims) // 2 - 1):
                         cprint_stats_of_mask_pair(self, 1, 6, batch_size_per_task, X, is_training, mask_id=i)
 
-                if epoch > 0.8 * self.max_iter:
+                if epoch > 0.75 * self.max_iter:
                     max_perf = max(apf for apf, acc in self.validation_results)
                     if self.validation_results[-1] == max_perf:
                         cprint("EARLY STOPPED", "green")
