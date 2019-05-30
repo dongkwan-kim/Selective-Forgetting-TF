@@ -10,7 +10,7 @@ basic: &BASIC
   importance_criteria: first_Taylor_approximation
   need_coreset: True
   online_importance: False
-  gpu_num_list: [3]
+  gpu_num_list: [2]
   coreset_size: 1000
   use_cges: False
   use_set_based_mask: False
@@ -106,25 +106,32 @@ SFLCL10_FORGET: &SFLCL10_FORGET
 
 SFLCL10_MASK: &SFLCL10_MASK
   <<: *SFLCL10_FORGET
-  max_iter: 2200
+  max_iter: 3500
   l1_lambda: 2e-06
   l2_lambda: 0.0
   use_set_based_mask: True
   mask_type: ADAPTIVE
-  mask_alpha: 1.0 # 2.0
-  mask_not_alpha: [-3.5, -3.5, -3.5, -4.0]  # -3.0 # [-5.4, -5.6, -6.4, -4.4]
+  mask_alpha: 1.0
+  mask_not_alpha: [-3.6, -3.6, -3.6, -4.2]  # [-5.4, -5.6, -6.4, -4.4]
   expr_type: MASK
   policies_for_expr: ["RANDOM", "MEAN", "MAX", "MAX+DEV"]
 
 SFLCL10_MASK_MULTIPLE_FORGET:
   <<: *SFLCL10_MASK
-  task_to_forget_list: [[], [1, 10], [1, 10, 8, 4], [1, 10, 8, 4, 9, 6], [1, 10, 8, 4, 9, 6, 3, 5]]
-  mixing_coeff_list: [0.0, 0.7476918006959228, 0.6756124634514568, 0.0005000001364000979, 0.7929420314273887]
-  tau_list: [0.0, 0.0015833442457511082, 0.00037192213230625824, 5e-06, 0.002296835660119554]
+  task_to_forget_list: [[], [4, 8], [4, 8, 10, 7], [4, 8, 10, 7, 6, 2], [4, 8, 10, 7, 6, 2, 1, 3]]
+  mixing_coeff_list: [0.0, 0.0005, 0.7472940343223929, 0.9995, 0.9995]
+  tau_list: [0.0, 5.000075764705174e-06, 0.001659656838129292, 0.004664757789530214, 0.002906352815157769]
+  expr_type: MULTIPLE_FORGET
+
+SFLCL10_FORGET_MULTIPLE_FORGET:
+  <<: *SFLCL10_FORGET
+  task_to_forget_list: [[], [4, 8], [4, 8, 10, 7], [4, 8, 10, 7, 6, 2], [4, 8, 10, 7, 6, 2, 1, 3]]
+  mixing_coeff_list: [0.0, 0.0005, 0.8387787064489711, 0.0005000070904050341, 0.47018133380827015]
+  tau_list: [0.0, 5.000054211623081e-06, 5e-06, 5.000070904050341e-06, 0.0017644220568948424]
   expr_type: MULTIPLE_FORGET
 
 SFLCL10_RETRAIN:
   <<: *SFLCL10_MASK
-  retrain_task_iter: 3000
+  retrain_task_iter: 2000
   steps_to_forget: 16
   expr_type: RETRAIN
