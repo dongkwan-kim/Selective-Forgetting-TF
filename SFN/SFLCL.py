@@ -400,7 +400,7 @@ class SFLCL(SFN):
 
                 if epoch > 0.75 * self.max_iter:
                     max_perf = max(apf for apf, acc in self.validation_results)
-                    if self.validation_results[-1] == max_perf:
+                    if self.validation_results[-1][0] == max_perf:
                         cprint("EARLY STOPPED", "green")
                         break
 

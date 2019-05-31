@@ -111,8 +111,8 @@ SFLCL10_MASK: &SFLCL10_MASK
   l2_lambda: 0.0
   use_set_based_mask: True
   mask_type: ADAPTIVE
-  mask_alpha: 1.0
-  mask_not_alpha: [-3.6, -3.6, -3.6, -4.2]  # [-5.4, -5.6, -6.4, -4.4]
+  mask_alpha: 2.0
+  mask_not_alpha: [-5.4, -5.6, -6.4, -4.4]
   expr_type: MASK
   policies_for_expr: ["RANDOM", "MEAN", "MAX", "MAX+DEV"]
 

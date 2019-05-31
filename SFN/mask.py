@@ -49,10 +49,7 @@ class Mask:
             mean_of_layer, std_of_layer = tf.nn.moments(reduced_layer, axes=[0])
             z_layer = (reduced_layer - mean_of_layer) / std_of_layer
 
-            probs_of_activation_h = 0.7 * softsign_0_to_1(self.alpha * tf.exp(z_layer) + self.not_alpha)
-            """
             probs_of_activation_h = 0.55 * softsign_0_to_1(self.alpha * z_layer + self.not_alpha)
-            """
 
             sampled_mask = tf.cast(
                 tf.math.greater(
