@@ -256,17 +256,18 @@ class SFN:
     def print_summary(self, task_id_or_ids):
         task_id_list = [task_id_or_ids] if isinstance(task_id_or_ids, int) else task_id_or_ids
         for policy, history in self.prediction_history.items():
-            print("== {} ==".format(policy))
+            print("{} --".format(policy))
             print("\t".join(
                 ["Pruning rate"]
                 + [str(x) for x in range(1, len(history[0]) + 1)]
-                + ["AUROC-{}".format(policy)]
+                + ["MEAN", "MIN"]
             ))
             pruning_rate_as_x = self.pruning_rate_history[policy]
             for i, (pruning_rate, perf) in enumerate(zip(pruning_rate_as_x, history)):
                 perf_except_t = np.delete(perf, [tid - 1 for tid in task_id_list])
                 mean_perf = np.mean(perf_except_t)
-                print("\t".join([str(pruning_rate)] + [str(x) for x in perf] + [str(mean_perf)]))
+                min_perf = np.min(perf_except_t)
+                print("\t".join([str(pruning_rate)] + [str(x) for x in perf] + [str(mean_perf), str(min_perf)]))
 
     def draw_chart_summary_mf(self, list_of_task_ids: List[List[int]],
                               file_prefix=None, file_extension=".png", ylim=None, highlight_ylabels=None,
@@ -291,22 +292,28 @@ class SFN:
         policy_keys = [policy for policy in self.prediction_history.keys()]
         pruning_rate_as_x_list = [self.pruning_rate_history[policy] for policy in policy_keys]
 
+        for xs, mean_ys, min_ys, l in zip(pruning_rate_as_x_list, mean_perf_except_t, min_perf_except_t, policy_keys):
+            print("MEAN perf except_t after forgetting {}".format(l))
+            print("\t".join(["Pruning rate", "MEAN", "MIN"]))
+            for x, mean_y, min_y in zip(xs, mean_ys, min_ys):
+                print("\t".join([str(x), str(mean_y), str(min_y)]))
+
         build_line_of_list(x_or_x_list=pruning_rate_as_x_list,
                            y_list=mean_perf_except_t,
-                           label_y_list=policy_keys,
-                           xlabel="Pruning rate", ylabel="Mean of Average Per-task AUROC",
+                           label_y_list=["Forget {} tasks".format(p) for p in policy_keys],
+                           xlabel="Pruning rate", ylabel="Mean of Average Per-class AUROC",
                            ylim=ylim or [0.5, 1],
-                           title="Mean Perf. wrt. number of forgetting",
+                           title="Mean Perf. wrt. # of forgetting",
                            file_name="{}_{}_MeanAcc{}".format(
                                file_prefix, self.importance_criteria.split("_")[0], file_extension),
                            highlight_ylabels=highlight_ylabels,
                            **kwargs)
         build_line_of_list(x_or_x_list=pruning_rate_as_x_list,
                            y_list=min_perf_except_t,
-                           label_y_list=policy_keys,
-                           xlabel="Pruning rate", ylabel="Min of Average Per-task AUROC",
+                           label_y_list=["Forget {} tasks".format(p) for p in policy_keys],
+                           xlabel="Pruning rate", ylabel="Min of Average Per-class AUROC",
                            ylim=ylim or [0.5, 1],
-                           title="Minimum Perf. wrt. number of forgetting",
+                           title="Min Perf. wrt. # of forgetting",
                            file_name="{}_{}_MinAcc{}".format(
                                file_prefix, self.importance_criteria.split("_")[0], file_extension),
                            highlight_ylabels=highlight_ylabels,
@@ -359,7 +366,7 @@ class SFN:
         build_line_of_list(x_or_x_list=pruning_rate_as_x_list,
                            y_list=mean_perf_except_t,
                            label_y_list=policy_keys,
-                           xlabel="Pruning rate", ylabel="Mean of Average Per-task AUROC",
+                           xlabel="Pruning rate", ylabel="Mean of Average Per-class AUROC",
                            ylim=ylim or [0.5, 1],
                            title="Mean Perf. Without Task-{}".format(task_id_list),
                            file_name="{}_{}_MeanAcc{}".format(
@@ -369,7 +376,7 @@ class SFN:
         build_line_of_list(x_or_x_list=pruning_rate_as_x_list,
                            y_list=max_decline_except_t,
                            label_y_list=policy_keys,
-                           xlabel="Pruning rate", ylabel="Max of decline Per-task AUROC",
+                           xlabel="Pruning rate", ylabel="Max of decline Per-class AUROC",
                            ylim=ylim or [-0.05, 0.5],
                            title="Max Decline of Perf. Without Task-{}".format(task_id_list),
                            file_name="{}_{}_MaxDecline{}".format(
@@ -379,7 +386,7 @@ class SFN:
         build_line_of_list(x_or_x_list=pruning_rate_as_x_list,
                            y_list=min_perf_except_t,
                            label_y_list=policy_keys,
-                           xlabel="Pruning rate", ylabel="Min of Average Per-task AUROC",
+                           xlabel="Pruning rate", ylabel="Min of Average Per-class AUROC",
                            ylim=ylim or [0.5, 1],
                            title="Minimum Perf. Without Task-{}".format(task_id_list),
                            file_name="{}_{}_MinAcc{}".format(
@@ -585,7 +592,7 @@ class SFN:
     def get_random_units(self, number_to_select, utype):
         i_mat = np.concatenate(self.importance_matrix_tuple, axis=1)
         indexes = np.asarray(range(i_mat.shape[-1]))
-        np.random.seed(i_mat.shape[-1] + 3)
+        np.random.seed(i_mat.shape[-1] + 0)
         np.random.shuffle(indexes)
         indexes = self._get_indices_of_certain_utype(indexes, utype)
         if not self.layerwise_pruning:

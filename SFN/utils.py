@@ -285,7 +285,7 @@ def draw_importance_bar_chart(iv, prev_first_layer, curr_first_layer, prev_secon
 
 def build_line_of_list(x_or_x_list, y_list, label_y_list, xlabel, ylabel, title, file_name,
                        highlight_ylabels=None, is_x_list=True, marker="o",
-                       title_fontsize=20, label_fontsize=17, tick_fontsize="large", legend_fontsize="x-large",
+                       title_fontsize=23, label_fontsize=18, tick_fontsize="x-large", legend_fontsize="xx-large",
                        linewidth=2.5, markersize=4,
                        **kwargs):
     if not is_x_list:
@@ -324,7 +324,7 @@ def build_line_of_list(x_or_x_list, y_list, label_y_list, xlabel, ylabel, title,
 
 
 def build_hist(populations, xlabel, ylabel, title, file_name, bins=None,
-               title_fontsize=20, label_fontsize=18, tick_fontsize="x-large", **kwargs):
+               title_fontsize=23, label_fontsize=21, tick_fontsize="xx-large", **kwargs):
 
     bins = bins or "auto"
 
