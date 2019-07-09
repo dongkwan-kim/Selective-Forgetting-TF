@@ -502,10 +502,11 @@ class SFLCL(SFN):
     def build_model_for_retraining(self, flags):
 
         xn_filters, xsize = self.conv_dims[0], self.conv_dims[1]
-        X = tf.placeholder(tf.float32, [None, xsize, xsize, xn_filters], name="X")
-        Y = tf.placeholder(tf.float32, [None, self.n_classes], name="Y")
-        keep_prob = tf.placeholder(tf.float32, name="keep_prob")
-        is_training = tf.placeholder(tf.bool, name="is_training")
+
+        X = tf.get_default_graph().get_tensor_by_name("X:0")
+        Y = tf.get_default_graph().get_tensor_by_name("Y:0")
+        keep_prob = tf.get_default_graph().get_tensor_by_name("keep_prob:0")
+        is_training = tf.get_default_graph().get_tensor_by_name("is_training:0")
 
         excl_X = tf.placeholder(tf.float32, [None, xsize, xsize, xn_filters], name="excl_X")
         excl_Y = tf.placeholder(tf.float32, [None, self.n_classes], name="excl_Y")
