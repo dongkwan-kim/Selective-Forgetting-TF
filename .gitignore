@@ -2,6 +2,8 @@ MNIST_data
 checkpoints*/
 *.pkl
 log.txt
+for_thesis/
+SFN/test.py
 
 # Created by https://www.gitignore.io/api/git,vim,macos,python,windows,virtualenv,pycharm+all
 
