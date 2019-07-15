@@ -301,6 +301,7 @@ def build_bar(x, y,  xlabel, ylabel, title, min_y_pos=0, file_name=None,
     plt.tight_layout()
 
     if file_name:
+        os.makedirs(os.path.dirname(file_name), exist_ok=True)
         plt.savefig(file_name)
 
     plt.show()
@@ -351,6 +352,7 @@ def build_line_of_list(x_or_x_list, y_list, label_y_list, xlabel, ylabel, title,
     plt.tight_layout()
 
     if file_name:
+        os.makedirs(os.path.dirname(file_name), exist_ok=True)
         plt.savefig(file_name)
 
     plt.show()
@@ -373,6 +375,7 @@ def build_hist(populations, xlabel, ylabel, title, file_name, bins=None,
     plt.tight_layout()
 
     if file_name:
+        os.makedirs(os.path.dirname(file_name), exist_ok=True)
         plt.savefig(file_name)
 
     plt.show()

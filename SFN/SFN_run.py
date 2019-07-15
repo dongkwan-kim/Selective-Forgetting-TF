@@ -31,6 +31,9 @@ def load_experiment_and_model_params(experiment_name, model_name) -> MyParams:
             "checkpoint_dir": lambda p: os.path.join(
                 get_project_dir(), p.checkpoint_dir, p.model, p.mtype,
             ),
+            "fig_dir": lambda p: os.path.join(
+                get_project_dir(), p.fig_dir, "{}_{}".format(p.model, p.expr_type), p.mtype,
+            ),
             "mask_type": lambda p: {
                 "ADAPTIVE": MaskType.ADAPTIVE,
                 "HARD": MaskType.HARD,
@@ -68,7 +71,6 @@ def get_one_step_unit_dict(_flags, is_one_shot=False) -> Dict[UnitType, int]:
 
 
 def experiment_forget(sfn, _flags, _policies):
-
     utype_to_one_step_units = get_one_step_unit_dict(_flags)
     policy_params = load_params_of_policy(_flags.mtype)
 
@@ -85,9 +87,10 @@ def experiment_forget(sfn, _flags, _policies):
     sfn.print_summary(_flags.task_to_forget)
     sfn.draw_chart_summary(
         _flags.task_to_forget,
-        file_prefix=os.path.join(get_project_dir(), "figs/{}_{}_task{}".format(
-            _flags.model.__name__, _flags.expr_type, _flags.task_to_forget
-        )),
+        file_prefix=os.path.join(
+            _flags.fig_dir, _flags.get_hash(),
+            "{}_{}_task{}".format(_flags.model.__name__, _flags.expr_type, _flags.task_to_forget)
+        ),
         file_extension=".pdf",
         highlight_ylabels=[p for p in _policies if "DEV" in p],
     )
@@ -99,7 +102,6 @@ def experiment_forget(sfn, _flags, _policies):
 
 
 def experiment_multiple_forget(sfn, _flags):
-
     utype_to_one_step_units = get_one_step_unit_dict(_flags)
     policy_params = load_params_of_policy(_flags.mtype)
 
@@ -126,7 +128,10 @@ def experiment_multiple_forget(sfn, _flags):
 
     sfn.draw_chart_summary_mf(
         _flags.task_to_forget_list,
-        file_prefix=os.path.join(get_project_dir(), "figs/{}_{}".format(_flags.model.__name__, _flags.expr_type)),
+        file_prefix=os.path.join(
+            _flags.fig_dir, _flags.get_hash(),
+            "{}_{}".format(_flags.model.__name__, _flags.expr_type),
+        ),
         file_extension=".pdf",
     )
 
@@ -165,14 +170,13 @@ def experiment_forget_and_retrain(sfn, _flags, _policies):
                            title_fontsize=14,
                            linewidth=1.5,
                            markersize=2.0,
-                           file_name=os.path.join(
-                               get_project_dir(),
-                               "figs/{}_{}_task{}_RetrainAcc.pdf".format(
-                                   sfn.__class__.__name__,
-                                   sfn.importance_criteria.split("_")[0],
-                                   _flags.task_to_forget,
-                               ),
-                           ))
+                           file_name=os.path.join(_flags.fig_dir, _flags.get_hash(),
+                                                  "{}_{}_task{}_RetrainAcc.pdf".format(
+                                                      sfn.__class__.__name__,
+                                                      sfn.importance_criteria.split("_")[0],
+                                                      _flags.task_to_forget,
+                                                  )),
+                           )
         sfn.clear_experiments()
 
 
