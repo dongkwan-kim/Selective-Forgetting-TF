@@ -560,13 +560,17 @@ class SFN:
             obj_i = self.get_maximum_importance(task_id_or_ids)
 
         kwargs_key = "{}-{}".format(
-            self.expr_type if self.expr_type != "RETRAIN" else "MASK",
-            self.get_real_device_info()[0],
+            self.expr_type if self.expr_type != "RETRAIN" else "MASK",  # For SFLCL/RETRAIN
+            self.config_hash,
         )
         if isinstance(mixing_coeff, dict):
+            if kwargs_key not in mixing_coeff:
+                raise KeyError("There's no mixing_coeff for {}".format(kwargs_key))
             mixing_coeff = mixing_coeff[kwargs_key]
 
         if isinstance(tau, dict):
+            if kwargs_key not in tau:
+                raise KeyError("There's no tau for {}".format(kwargs_key))
             tau = tau[kwargs_key]
 
         if mixing_coeff > 0:
