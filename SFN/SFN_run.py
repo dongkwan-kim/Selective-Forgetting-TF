@@ -9,7 +9,7 @@ from SFHPS import SFHPS
 from SFLCL import SFLCL
 from params import MyParams, check_params, to_yaml_path
 from data import *
-from utils import build_line_of_list, get_project_dir
+from utils import build_line_of_list, get_project_dir, blind_other_gpus
 from enums import UnitType, MaskType
 
 np.random.seed(1004)
@@ -36,7 +36,10 @@ def load_experiment_and_model_params(experiment_name, model_name) -> MyParams:
                 "HARD": MaskType.HARD,
             }[p.mask_type],
         })
-    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(n) for n in loaded_params.gpu_num_list)
+
+    gpu_num_list = blind_other_gpus(loaded_params.num_gpus_total, loaded_params.num_gpus_to_use)
+    loaded_params.add_hparam("gpu_num_list", gpu_num_list)
+
     check_params(loaded_params)
     loaded_params.pprint()
     return loaded_params

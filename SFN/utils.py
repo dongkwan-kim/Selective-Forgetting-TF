@@ -1,3 +1,4 @@
+import random
 from typing import List, Dict, Tuple
 
 from copy import deepcopy
@@ -28,23 +29,34 @@ def sum_set(s: set, *args):
     return s
 
 
-def get_gpu_utility(gpu_id):
+def get_gpu_utility(gpu_id_or_ids: int or list) -> List[int]:
+
+    if isinstance(gpu_id_or_ids, int):
+        gpu_ids = [gpu_id_or_ids]
+    else:
+        gpu_ids = gpu_id_or_ids
+
     import subprocess
     sp = subprocess.Popen(['nvidia-smi', '-q'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out_str = sp.communicate()
     out_list = out_str[0].decode("utf-8").split("\n")
 
     seen_id = -1
+    gpu_utilities = []
     for item in out_list:
         items = [x.strip() for x in item.split(':')]
         if len(items) == 2:
             key, val = items
             if key == "Minor Number":
                 seen_id = int(val)
-            if seen_id == gpu_id and key == "Gpu":
-                return int(val.split(" ")[0])
+            if seen_id in gpu_ids and key == "Gpu":
+                gpu_utilities.append(int(val.split(" ")[0]))
+
+    if len(gpu_utilities) != len(gpu_ids):
+        raise EnvironmentError(
+            "Cannot find all GPUs whose ids are {}, only found {} GPUs".format(gpu_ids, len(gpu_utilities)))
     else:
-        raise EnvironmentError("There's no GPU of no {}".format(gpu_id))
+        return gpu_utilities
 
 
 def get_batch_iterator(xs_or_ys: np.ndarray, bsz: int):
@@ -147,6 +159,29 @@ def get_available_gpu_names(gpu_num_list: List[int] = None) -> List[str]:
     #    gpu_names = [x for x in gpu_names if int(x.split(":")[-1]) in gpu_num_list]
 
     return gpu_names
+
+
+def get_free_gpu_names(num_gpus_total: int, threshold=50) -> List[str]:
+    """
+    :param num_gpus_total: total number of gpus
+    :param threshold: Return GPUs the utilities of which is smaller than threshold.
+    :return e.g. ['/device:GPU:0', '/device:GPU:1', '/device:GPU:2', '/device:GPU:3']
+    """
+    gpu_ids = list(range(num_gpus_total))
+    gpu_utilities = get_gpu_utility(gpu_ids)
+    return ["/device:GPU:{}".format(gid) for gid, utility in zip(gpu_ids, gpu_utilities) if utility <= threshold]
+
+
+def get_free_gpu_ids(num_gpus_total: int, threshold=50) -> List[int]:
+    free_gpu_names = get_free_gpu_names(num_gpus_total=num_gpus_total, threshold=threshold)
+    return [int(g.split(":")[-1]) for g in free_gpu_names]
+
+
+def blind_other_gpus(num_gpus_total, num_gpus_to_use, **kwargs):
+    free_gpu_ids = get_free_gpu_ids(num_gpus_total, **kwargs)
+    gpu_ids_to_use = random.sample(free_gpu_ids, num_gpus_to_use)
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(n) for n in gpu_ids_to_use)
+    return gpu_ids_to_use
 
 
 def with_tf_device_gpu(func):
@@ -346,4 +381,4 @@ def build_hist(populations, xlabel, ylabel, title, file_name, bins=None,
 
 
 if __name__ == '__main__':
-    build_line_of_list([1, 2, 3], [[1, 2, 3], [2, 2, 2]], ["a", "b"], "x", "y", "title", "file.png")
+    print(get_free_gpu_names(4))

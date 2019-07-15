@@ -10,7 +10,8 @@ basic: &BASIC
   importance_criteria: first_Taylor_approximation
   need_coreset: True
   online_importance: False
-  gpu_num_list: [2]
+  num_gpus_total: 4
+  num_gpus_to_use: 1
   coreset_size: 1000
   use_cges: False
   use_set_based_mask: False
