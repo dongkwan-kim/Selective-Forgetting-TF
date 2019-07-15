@@ -38,7 +38,14 @@ def load_experiment_and_model_params(experiment_name, model_name) -> MyParams:
                 "ADAPTIVE": MaskType.ADAPTIVE,
                 "HARD": MaskType.HARD,
             }[p.mask_type],
-        })
+        },
+        attribute_list_for_hash=[
+            "lr", "batch_size", "l1_lambda", "l2_lambda", "n_tasks", "importance_criteria", "need_coreset",
+            "online_importance", "use_cges", "use_set_based_mask", "max_iter", "gl_lambda", "regular_lambda",
+            "ex_k", "loss_thr", "spl_thr", "ewc_lambda", "mask_type", "mask_alpha", "mask_not_alpha",
+            "dtype", "mtype", "use_batch_normalization",
+        ]
+    )
 
     gpu_num_list = blind_other_gpus(loaded_params.num_gpus_total, loaded_params.num_gpus_to_use)
     loaded_params.add_hparam("gpu_num_list", gpu_num_list)

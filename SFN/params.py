@@ -19,7 +19,8 @@ class MyParams(HParams):
     def __init__(self,
                  yaml_file_to_config_name: dict,
                  value_magician: Dict[str, Callable] = None,
-                 update_type="UNIQUE_OR_ERROR"):
+                 update_type="UNIQUE_OR_ERROR",
+                 attribute_list_for_hash=None):
         super().__init__()
 
         self.update_type = update_type
@@ -34,7 +35,7 @@ class MyParams(HParams):
         if value_magician is not None:
             self.run_magic(value_magician)
 
-        self.param_hash = self.create_hash()
+        self.param_hash = self.create_hash(attribute_list_for_hash)
 
     def add_hparam_by_type(self, k, v):
 
@@ -72,8 +73,11 @@ class MyParams(HParams):
     def has(self, k: str):
         return k in self
 
-    def create_hash(self):
-        strings = "/ ".join(["{}: {}".format(k, self.get(k)) for k in self.values()])
+    def create_hash(self, attributes_for_hash=None):
+        if attributes_for_hash is not None:
+            attributes_for_hash = sorted(attributes_for_hash)
+        strings = "/ ".join(["{}: {}".format(k, self.get(k)) for k in self.values()
+                             if not attributes_for_hash or k in attributes_for_hash])
         return hashlib.md5(strings.encode()).hexdigest()
 
     def get_hash(self):
