@@ -14,7 +14,7 @@ from SFNBase import SFN
 from enums import MaskType
 from mask import Mask
 from utils import get_dims_from_config, print_all_vars, \
-    with_tf_device_gpu, with_tf_device_cpu, get_middle_path_name, cprint_stats_of_mask_pair, get_batch_iterator
+    with_tf_device_gpu, with_tf_device_cpu, cprint_stats_of_mask_pair, get_batch_iterator
 
 
 def parse_pool_key(pool_name):
@@ -117,23 +117,6 @@ class SFLCL(SFN):
         self.attr_to_save += ["max_iter", "l1_lambda", "l2_lambda", "keep_prob", "gpu_names", "use_batch_normalization"]
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
         cprint("Device info: {}".format(self.get_real_device_info()), "green")
-
-    def save(self, model_name=None, model_middle_path=None):
-        model_middle_path = get_middle_path_name({
-            "sbm": self.use_set_based_mask,
-            "cges": self.use_cges,
-            **{d: True for d in self.get_real_device_info()}
-        })
-        super().save(model_name=model_name, model_middle_path=model_middle_path)
-
-    def restore(self, model_name=None, model_middle_path=None, build_model=True):
-        model_middle_path = get_middle_path_name({
-            "sbm": self.use_set_based_mask,
-            "cges": self.use_cges,
-            **{d: True for d in self.get_real_device_info()}
-        })
-        restored = super().restore(model_name, model_middle_path, build_model)
-        return restored
 
     @with_tf_device_cpu
     def create_variable(self, scope, name, shape, trainable=True, **kwargs) -> tf.Variable:

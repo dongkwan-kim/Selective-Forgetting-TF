@@ -67,21 +67,6 @@ class SFHPS(SFN):
         print_all_vars("{} initialized:".format(self.__class__.__name__), "green")
         cprint("Device info: {}".format(self.get_real_device_info()), "green")
 
-    def save(self, model_name=None, model_middle_path=None):
-        model_middle_path = get_middle_path_name({
-            "sbm": self.use_set_based_mask,
-            "cges": self.use_cges
-        })
-        super().save(model_name=model_name, model_middle_path=model_middle_path)
-
-    def restore(self, model_name=None, model_middle_path=None, build_model=True):
-        model_middle_path = get_middle_path_name({
-            "sbm": self.use_set_based_mask,
-            "cges": self.use_cges
-        })
-        restored = super().restore(model_name, model_middle_path, build_model)
-        return restored
-
     @with_tf_device_cpu
     def create_variable(self, scope, name, shape, trainable=True) -> tf.Variable:
         with tf.variable_scope(scope):

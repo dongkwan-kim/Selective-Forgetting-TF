@@ -71,6 +71,7 @@ class SFN:
         self.sfn_params = {}
         self.old_params_list = []
 
+        self.config_hash = config.get_hash()
         self.attr_to_save = [
             "importance_matrix_tuple",
             "importance_criteria",
@@ -78,6 +79,7 @@ class SFN:
             "layer_to_removed_unit_set",
             "n_tasks",
             "layer_types",
+            "config_hash",
         ]
 
     def __repr__(self):
@@ -171,7 +173,8 @@ class SFN:
 
     def save(self, model_name=None, model_middle_path=None):
         model_name = model_name or str(self)
-        checkpoint_dir = os.path.join(self.checkpoint_dir, model_middle_path or "")
+        model_middle_path = os.path.join(model_middle_path or "", self.config_hash)
+        checkpoint_dir = os.path.join(self.checkpoint_dir, model_middle_path)
         model_path = os.path.join(checkpoint_dir, "{}.ckpt".format(model_name))
 
         # Model Save
@@ -195,10 +198,12 @@ class SFN:
 
     def restore(self, model_name=None, model_middle_path=None, build_model=False) -> bool:
         model_name = model_name or str(self)
-        checkpoint_dir = os.path.join(self.checkpoint_dir, model_middle_path or "")
+        model_middle_path = os.path.join(model_middle_path or "", self.config_hash)
+        checkpoint_dir = os.path.join(self.checkpoint_dir, model_middle_path)
         model_path = os.path.join(checkpoint_dir, "{}.ckpt".format(model_name))
 
         if not os.path.isfile("{}.meta".format(model_path)):
+            cprint("Model not found: {}".format(model_path), "red")
             return False
 
         try:

@@ -8,6 +8,7 @@ from tensorflow.contrib.training import HParams
 from termcolor import cprint
 
 from utils import get_project_dir
+import hashlib
 
 
 class MyParams(HParams):
@@ -32,6 +33,8 @@ class MyParams(HParams):
 
         if value_magician is not None:
             self.run_magic(value_magician)
+
+        self.param_hash = self.create_hash()
 
     def add_hparam_by_type(self, k, v):
 
@@ -64,9 +67,17 @@ class MyParams(HParams):
         for k, v in self.yaml_file_to_config_name.items():
             cprint("{} from {}".format(v, k), "green")
         pprint(self.values())
+        cprint("hash: {}".format(self.get_hash()), "green")
 
     def has(self, k: str):
         return k in self
+
+    def create_hash(self):
+        strings = "/ ".join(["{}: {}".format(k, self.get(k)) for k in self.values()])
+        return hashlib.md5(strings.encode()).hexdigest()
+
+    def get_hash(self):
+        return self.param_hash
 
 
 def check_params(params):
