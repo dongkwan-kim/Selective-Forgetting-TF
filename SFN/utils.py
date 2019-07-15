@@ -83,14 +83,6 @@ def get_dims_from_config(config, search="dims", with_key=False) -> list:
         return dims_config
 
 
-def get_middle_path_name(name_to_bool_variable: Dict[str, bool], adapter_str: str = "-") -> str:
-    path_elements = []
-    for k, v in sorted(name_to_bool_variable.items()):
-        if v:
-            path_elements.append(k)
-    return adapter_str.join(str(x) for x in path_elements)
-
-
 def cprint_stats_of_mask_pair(model, task_id_a, task_id_b,
                               batch_size_per_task, X, is_training, mask_id=1):
     def get_indices(tid, si):
@@ -307,16 +299,6 @@ def build_bar(x, y,  xlabel, ylabel, title, min_y_pos=0, file_name=None,
     plt.show()
 
     return plt
-
-
-def draw_importance_bar_chart(iv, prev_first_layer, curr_first_layer, prev_second_layer, task_id):
-    colors = ["grey" for _ in range(len(iv))]
-    for i in range(prev_first_layer, curr_first_layer):
-        colors[i] = "red"
-    for i in range(curr_first_layer + prev_second_layer, len(iv)):
-        colors[i] = "red"
-    build_bar(list(range(len(iv))), iv,
-              ylabel="Importance", title="Importance of Neurons in task {}".format(task_id), color=colors)
 
 
 def build_line_of_list(x_or_x_list, y_list, label_y_list, xlabel, ylabel, title, file_name,

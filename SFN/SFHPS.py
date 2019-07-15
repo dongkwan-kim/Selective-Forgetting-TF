@@ -13,7 +13,7 @@ from tqdm import trange
 from SFNBase import SFN
 from enums import MaskType
 from mask import Mask
-from utils import get_dims_from_config, print_all_vars, with_tf_device_cpu, with_tf_device_gpu, get_middle_path_name, \
+from utils import get_dims_from_config, print_all_vars, with_tf_device_cpu, with_tf_device_gpu, \
     cprint_stats_of_mask_pair
 
 
