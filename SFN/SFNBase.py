@@ -39,6 +39,8 @@ class SFN:
 
     def __init__(self, config):
 
+        self.config = config
+
         self.sess = None
         self.expr_type = config.expr_type
 
@@ -184,6 +186,7 @@ class SFN:
 
         # Attribute Save
         self.save_attr(model_name, model_middle_path=model_middle_path)
+        self._save_config_log(model_name, model_middle_path=model_middle_path)
 
     def save_attr(self, model_name=None, attr=None, model_middle_path=None):
         model_name = model_name or str(self)
@@ -195,6 +198,14 @@ class SFN:
         cprint("Saved: attribute of {}".format(model_name), "blue")
         for a in attr:
             print("\t - {}".format(a))
+
+    def _save_config_log(self, model_name=None, model_middle_path=None):
+        model_name = model_name or str(self)
+        checkpoint_dir = os.path.join(self.checkpoint_dir, model_middle_path or "")
+        config_path = os.path.join(checkpoint_dir, "{}_config.txt".format(model_name))
+        with open(config_path, "w") as f:
+            for k in self.config.values():
+                f.write("{}: {}\n".format(k, self.config.get(k)))
 
     def restore(self, model_name=None, model_middle_path=None, build_model=False) -> bool:
         model_name = model_name or str(self)
