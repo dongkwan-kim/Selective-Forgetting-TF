@@ -77,11 +77,11 @@ def get_one_step_unit_dict(_flags, is_one_shot=False) -> Dict[UnitType, int]:
     return utype_to_step_dict
 
 
-def experiment_forget(sfn, _flags, _policies):
+def experiment_forget(sfn, _flags):
     utype_to_one_step_units = get_one_step_unit_dict(_flags)
     policy_params = load_params_of_policy(_flags.mtype)
 
-    for policy in _policies:
+    for policy in _flags.policies_for_expr:
         sfn.sequentially_selective_forget_and_predict(
             task_to_forget=_flags.task_to_forget,
             utype_to_one_step_units=utype_to_one_step_units,
@@ -99,11 +99,11 @@ def experiment_forget(sfn, _flags, _policies):
             "{}_{}_task{}".format(_flags.model.__name__, _flags.expr_type, _flags.task_to_forget)
         ),
         file_extension=".pdf",
-        highlight_ylabels=[p for p in _policies if "DEV" in p],
+        highlight_ylabels=[p for p in _flags.policies_for_expr if "DEV" in p],
     )
 
     print("Area Under Forgetting Curve")
-    for policy_name in _policies:
+    for policy_name in _flags.policies_for_expr:
         au_mean_fc, au_min_fc = sfn.get_area_under_forgetting_curve(_flags.task_to_forget, policy_name)
         print("\t".join(str(x) for x in [policy_name, au_mean_fc, au_min_fc]))
 
@@ -111,12 +111,12 @@ def experiment_forget(sfn, _flags, _policies):
 def experiment_multiple_forget(sfn, _flags):
     utype_to_one_step_units = get_one_step_unit_dict(_flags)
     policy_params = load_params_of_policy(_flags.mtype)
+    params_of_utype = policy_params.get(_flags.policies_for_expr[0])  # For dummy mc and tau.
 
     policies = []
     for task_to_forget, mixing_coeff, tau in zip(_flags.task_to_forget_list,
                                                  _flags.mixing_coeff_list,
                                                  _flags.tau_list):
-        params_of_utype = policy_params.get("MEAN+DEV")
         params_of_utype["FILTER"]["tau"] = tau
         params_of_utype["NEURON"]["tau"] = tau
         params_of_utype["FILTER"]["mixing_coeff"] = mixing_coeff
@@ -148,9 +148,9 @@ def experiment_multiple_forget(sfn, _flags):
         print("\t".join(str(x) for x in [policy_name, au_mean_fc, au_min_fc]))
 
 
-def experiment_forget_and_retrain(sfn, _flags, _policies):
+def experiment_forget_and_retrain(sfn, _flags):
     policy_params = load_params_of_policy(_flags.mtype)
-    for policy in _policies:
+    for policy in _flags.policies_for_expr:
         sfn.sequentially_selective_forget_and_predict(
             task_to_forget=_flags.task_to_forget,
             utype_to_one_step_units=get_one_step_unit_dict(_flags, is_one_shot=True),
@@ -261,15 +261,13 @@ if __name__ == '__main__':
     model.normalize_importance_matrix_about_task()
 
     if params.expr_type == "FORGET" or params.expr_type == "MASK":
-        policies_for_expr = params.policies_for_expr
         # noinspection PyTypeChecker
-        experiment_forget(model, params, policies_for_expr)
+        experiment_forget(model, params)
 
     elif params.expr_type == "MULTIPLE_FORGET":
         # noinspection PyTypeChecker
         experiment_multiple_forget(model, params)
 
     elif params.expr_type == "RETRAIN":
-        policies_for_expr = ["MEAN+DEV"]
         # noinspection PyTypeChecker
-        experiment_forget_and_retrain(model, params, policies_for_expr)
+        experiment_forget_and_retrain(model, params)
