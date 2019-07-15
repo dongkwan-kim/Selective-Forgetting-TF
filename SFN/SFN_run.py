@@ -29,7 +29,7 @@ def load_experiment_and_model_params(experiment_name, model_name) -> MyParams:
                 "SFLCL": SFLCL,
             }[p.model],
             "checkpoint_dir": lambda p: os.path.join(
-                get_project_dir(), p.checkpoint_dir, p.model, p.mtype,
+                get_project_dir(), p.checkpoint_dir, "{}_{}".format(p.model, p.expr_type), p.mtype,
             ),
             "fig_dir": lambda p: os.path.join(
                 get_project_dir(), p.fig_dir, "{}_{}".format(p.model, p.expr_type), p.mtype,
