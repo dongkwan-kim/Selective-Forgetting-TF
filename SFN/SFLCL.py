@@ -306,10 +306,10 @@ class SFLCL(SFN):
                 else:
                     raise ValueError
 
-        self.yhat = tf.nn.sigmoid(h_fc)
-        self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=h_fc, labels=Y))
+        self.yhat = tf.nn.softmax(h_fc)
+        self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=h_fc, labels=Y))
         if self.use_set_based_mask:
-            self.excl_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=excl_h_fc, labels=excl_Y))
+            self.excl_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=excl_h_fc, labels=excl_Y))
 
         return X, Y, excl_X, excl_Y, keep_prob, is_training
 
@@ -447,7 +447,7 @@ class SFLCL(SFN):
                 print(' [*] class %d, shape of fc %d : %s' % (task_id, i, h_fc.get_shape().as_list()))
                 hidden_layer_list.append(h_fc)  # e.g. shape = (128,)
 
-        loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=h_fc, labels=Y))
+        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=h_fc, labels=Y))
         _ = tf.train.GradientDescentOptimizer(self.init_lr).minimize(loss)
 
         gradient_list = [tf.gradients(loss, h) for h in hidden_layer_list]
@@ -553,8 +553,8 @@ class SFLCL(SFN):
                 else:
                     raise ValueError
 
-        loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=h_fc, labels=Y))
-        excl_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=excl_h_fc, labels=excl_Y))
+        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=h_fc, labels=Y))
+        excl_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=excl_h_fc, labels=excl_Y))
 
         l1_l2_regularizer = tf.contrib.layers.l1_l2_regularizer(scale_l1=self.l1_lambda, scale_l2=self.l2_lambda)
         regularization_loss = tf.contrib.layers.apply_regularization(
