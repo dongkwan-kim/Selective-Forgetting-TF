@@ -206,6 +206,7 @@ class SFN:
         with open(config_path, "w") as f:
             for k in self.config.values():
                 f.write("{}: {}\n".format(k, self.config.get(k)))
+        cprint("Complete: {}".format(self.config_hash), "blue")
 
     def restore(self, model_name=None, model_middle_path=None, build_model=False) -> bool:
         model_name = model_name or str(self)
