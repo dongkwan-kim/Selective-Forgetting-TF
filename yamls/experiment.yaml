@@ -113,7 +113,7 @@ SFLCL10_FORGET: &SFLCL10_FORGET
 SFLCL10_MASK: &SFLCL10_MASK
   <<: *SFLCL10_FORGET
   max_iter: 3500
-  l1_lambda: 2e-06
+  l1_lambda: 3e-06
   l2_lambda: 0.0
   use_set_based_mask: True
   mask_type: ADAPTIVE

@@ -482,17 +482,19 @@ class SFLCL(SFN):
         self.yhat = None
         self.build_model()
 
-    def build_model_for_retraining(self, flags):
+    def build_model_for_retraining(self, retrain_flags):
 
         xn_filters, xsize = self.conv_dims[0], self.conv_dims[1]
 
+        n_forget = self.n_tasks - len(retrain_flags.task_to_forget)
+
         X = tf.get_default_graph().get_tensor_by_name("X:0")
-        Y = tf.get_default_graph().get_tensor_by_name("Y:0")
+        Y = tf.placeholder(tf.float32, [None, self.n_classes - n_forget], name="Y")
         keep_prob = tf.get_default_graph().get_tensor_by_name("keep_prob:0")
         is_training = tf.get_default_graph().get_tensor_by_name("is_training:0")
 
         excl_X = tf.placeholder(tf.float32, [None, xsize, xsize, xn_filters], name="excl_X")
-        excl_Y = tf.placeholder(tf.float32, [None, self.n_classes], name="excl_Y")
+        excl_Y = tf.placeholder(tf.float32, [None, self.n_classes - n_forget], name="excl_Y")
 
         h_conv = X
         excl_h_conv = excl_X if self.use_set_based_mask else None
@@ -541,7 +543,7 @@ class SFLCL(SFN):
             if self.use_set_based_mask:
                 excl_h_fc = tf.matmul(excl_h_fc, w_fc) + b_fc
 
-            if i < len(self.dims) - 1:  # Do not activate the last layer.
+            if i < len(self.dims) - 1:  # Apply non-linear activation to non-final layers
                 h_fc = tf.nn.relu(h_fc)
                 if self.use_set_based_mask:
                     excl_h_fc = tf.nn.relu(excl_h_fc)
@@ -552,6 +554,20 @@ class SFLCL(SFN):
                         excl_h_fc = tf.nn.dropout(excl_h_fc, keep_prob)
                 else:
                     raise ValueError
+            else:
+                """
+                softmax layer transformation, (N, n_classes) -> (N, n_classes - n_forget)
+                e.g. n_tasks=3, task_to_forget=[2]
+                     [[1, 0, 0],
+                      [0, 0, 1]]
+                """
+                transformation_matrix = np.delete(
+                    np.eye(self.n_tasks),
+                    [task_id - 1 for task_id in retrain_flags.task_to_forget],
+                    axis=1)
+                transformation_tensor = tf.constant(transformation_matrix, dtype=tf.float32)
+                h_fc = tf.matmul(h_fc, transformation_tensor)
+                excl_h_fc = tf.matmul(excl_h_fc, transformation_tensor)
 
         loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=h_fc, labels=Y))
         excl_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=excl_h_fc, labels=excl_Y))
@@ -581,7 +597,7 @@ class SFLCL(SFN):
             target_t = target_task_id - 1
 
             xs_wo_target, labels_wo_target = _get_xs_and_labels_wo_target(
-                [target_t] + [t - 1 for t in retrain_flags.task_to_forget],
+                [target_t] + [task_id - 1 for task_id in retrain_flags.task_to_forget],
                 xs_queues, labels_queues,
             )
 

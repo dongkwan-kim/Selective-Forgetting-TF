@@ -257,6 +257,7 @@ if __name__ == '__main__':
         if not model.online_importance:
             model.get_importance_matrix(use_coreset=params.need_coreset)
         model.save()
+        exit()
 
     model.normalize_importance_matrix_about_task()
 
